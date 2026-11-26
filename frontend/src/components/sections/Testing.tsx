@@ -43,7 +43,7 @@ import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { usePerformanceTier } from "@/lib/network";
 import { formatDate } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
-import type { LabTestRecord } from "@/types/testing";
+import type { LabTestRecord, LabTestSummary } from "@/types/testing";
 
 const PAGE_SIZE = 25;
 const RESULT_OPTIONS = optionsOf(LAB_RESULT);
@@ -77,7 +77,7 @@ export default function Testing() {
     };
   }, [perfTier]);
 
-  const list = useApiList<LabTestRecord>("testing", {
+  const list = useApiList<LabTestRecord, { summary?: LabTestSummary }>("testing", {
     q: debouncedSearch || undefined,
     result: resultFilter || undefined,
     page,
@@ -115,18 +115,25 @@ export default function Testing() {
     return base;
   }, [list.rows]);
 
-  const { passData, passRate } = useMemo(() => {
-    const passCount = list.rows.filter((r) => r.result === "pass").length;
-    const failCount = list.rows.filter((r) => r.result === "fail").length;
+  const summary = list.raw?.summary;
+  const { passData, passRate, summaryTotal } = useMemo(() => {
+    const passCount = summary
+      ? Number(summary.passCount) || 0
+      : list.rows.filter((r) => r.result === "pass").length;
+    const failCount = summary
+      ? Number(summary.failCount) || 0
+      : list.rows.filter((r) => r.result === "fail").length;
+    const denom = summary ? Number(summary.total) || 0 : list.rows.length;
     const items: DonutItem[] = [
       { name: "Đạt chuẩn", value: passCount, color: "#10b981" },
       { name: "Không đạt", value: failCount, color: "#ef4444" },
     ];
     return {
       passData: items,
-      passRate: percent(passCount, list.rows.length),
+      passRate: percent(passCount, denom),
+      summaryTotal: denom,
     };
-  }, [list.rows]);
+  }, [summary, list.rows]);
 
   const maxResidue = useMemo(
     () =>
@@ -257,10 +264,10 @@ export default function Testing() {
                 height={190}
                 caption={
                   maxResidue.val > 0
-                    ? `Mức cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
-                    : ""
+                    ? `Mẫu hiển thị gần nhất, cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
+                    : `Theo ${Math.min(8, list.rows.length)} mẫu hiển thị trên trang hiện tại`
                 }
-                ariaLabel="Dư lượng thuốc BVTV theo mẫu"
+                ariaLabel="Dư lượng thuốc BVTV theo mẫu hiển thị"
               />
             ) : (
               <div style={{ height: 190 }} aria-hidden="true" />
@@ -274,8 +281,19 @@ export default function Testing() {
             ) : (
               <div style={{ height: 156 }} aria-hidden="true" />
             )}
-            <div style={{ fontSize: 12, color: "#15803d", textAlign: "center", fontWeight: 600, marginTop: 8 }}>
-              {formatVn(passRate, 1)}% mẫu đạt tiêu chuẩn xuất khẩu
+            <div
+              style={{
+                fontSize: 12,
+                color: summaryTotal > 0 ? "#15803d" : "var(--text-muted)",
+                textAlign: "center",
+                fontWeight: 600,
+                marginTop: 8,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {summaryTotal > 0
+                ? `${formatVn(passRate, 1)}% mẫu đạt tiêu chuẩn xuất khẩu (${summaryTotal} mẫu xác thực)`
+                : "Chưa có mẫu kiểm nghiệm đã xác thực"}
             </div>
           </div>
         </div>

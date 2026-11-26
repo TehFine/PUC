@@ -19,15 +19,64 @@ interface Props {
   plots?: PortalPlot[];
 }
 
+function formatNoticeDateVn(value: string | null | undefined): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return formatDate(trimmed);
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return formatDate(trimmed);
+  try {
+    const vnIso = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(parsed);
+    return formatDate(vnIso);
+  } catch {
+    return formatDate(trimmed);
+  }
+}
+
 export default function StampsTab({ overview, plots = [] }: Props) {
   const plotsData = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
   const noticesQuery = usePortal<PortalList<PortalHarvestNotice>>("harvest-notices");
 
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
-  const resolvedPucCode =
-    effectivePlots[0]?.zoneCode ||
-    (overview?.household?.code ? overview.household.code.replace(/-(?:H|T)\d+$/i, "") : "66-PUC-SR0001-00728");
+  const householdZoneCode =
+    overview?.household?.zoneCode?.trim() ||
+    Array.from(
+      new Set(
+        effectivePlots
+          .map((p) => p.zoneCode?.trim())
+          .filter((z): z is string => Boolean(z)),
+      ),
+    ).join(", ") ||
+    null;
+
+  const resolveLotZoneCode = (lot: PortalHarvest): string | null => {
+    if (lot.plotCode) {
+      const lotCodes = new Set(
+        lot.plotCode
+          .split(",")
+          .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
+      );
+      const matchedZones = Array.from(
+        new Set(
+          effectivePlots
+            .filter((p) => lotCodes.has(p.code.trim().toUpperCase()))
+            .map((p) => p.zoneCode?.trim())
+            .filter((z): z is string => Boolean(z)),
+        ),
+      );
+      if (matchedZones.length > 0) {
+        return matchedZones.join(", ");
+      }
+    }
+    return householdZoneCode;
+  };
 
   const notices = noticesQuery.data?.data ?? [];
   const [selectedLotForQr, setSelectedLotForQr] = usePersistedRecordSelection(
@@ -56,7 +105,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
                     <div className="pt-harvest-notice-top">
                       <h3 className="pt-harvest-notice-title">{item.title}</h3>
                       <span className="pt-harvest-notice-date">
-                        {item.createdAt ? formatDate(item.createdAt.slice(0, 10)) : ""}
+                        {formatNoticeDateVn(item.createdAt)}
                       </span>
                     </div>
                     {item.body && <p className="pt-harvest-notice-desc">{item.body}</p>}
@@ -92,9 +141,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
             <div className="pt-asset-card-grid">
               {harvest.data.data.map((lot) => (
                 <HarvestAssetTagCard
-                  key={lot.id}
+                  key={lot.lotId ?? lot.id}
                   lot={lot}
-                  pucCode={resolvedPucCode}
+                  pucCode={resolveLotZoneCode(lot)}
                   onOpenModal={() => setSelectedLotForQr(lot)}
                 />
               ))}
@@ -107,7 +156,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
       {selectedLotForQr && (
         <HarvestLotQrModal
           lot={selectedLotForQr}
-          pucCode={resolvedPucCode}
+          pucCode={resolveLotZoneCode(selectedLotForQr)}
           onClose={() => setSelectedLotForQr(null)}
         />
       )}

@@ -170,6 +170,8 @@ export default function PlotsTab() {
           key={mapViewPlot.id || mapViewPlot.code}
           plot={mapViewPlot}
           householdName={overview.data?.household?.name || "Hộ nông dân HTX Cư Né"}
+          householdVillageName={overview.data?.household?.villageName ?? null}
+          householdCommuneLocation={overview.data?.household?.communeLocation ?? null}
           onClose={() => setMapViewPlot(null)}
           onOpenSignboard={(p) => {
             setMapViewPlot(null);

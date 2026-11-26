@@ -230,6 +230,18 @@ export interface ContractRecord {
   createdAt?: string;
 }
 
+export interface StampAllocationSummary {
+  activeAllocations: number;
+  issuedStamps: number;
+  activatedStamps: number;
+}
+
+export interface ContractSummary {
+  totalCount: number;
+  activeCount: number;
+  activeTargetTons: number;
+}
+
 /** Bản ghi hộ dùng cho ô chọn hộ (GET /households). */
 export interface HouseholdOption {
   id: number;

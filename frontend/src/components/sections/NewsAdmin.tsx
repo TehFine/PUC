@@ -30,23 +30,27 @@ export default function NewsAdmin() {
   const [selectedStatus, setSelectedStatus] = usePersistedState<string>("admin:news:status", "");
   const debouncedSearch = useDebounced(search);
 
-  const newsList = useApiList<NewsRecord>("news", {
+  const hasFilter = Boolean(debouncedSearch || selectedCat || selectedStatus);
+  const allNews = useApiList<NewsRecord>("news", { pageSize: 200 });
+  const filteredNews = useApiList<NewsRecord>(hasFilter ? "news" : null, {
     q: debouncedSearch,
     category: selectedCat,
     status: selectedStatus,
+    pageSize: 200,
   });
+  const newsList = hasFilter ? filteredNews : allNews;
 
   const [editingArticle, setEditingArticle] = usePersistedEditableSelection(
     "admin:news:edit",
-    newsList.rows,
+    allNews.rows,
     (r) => r.id,
-    newsList.loading,
+    allNews.loading,
   );
   const [previewArticle, setPreviewArticle] = usePersistedRecordSelection(
     "admin:news:preview",
-    newsList.rows,
+    allNews.rows,
     (r) => r.id,
-    newsList.loading,
+    allNews.loading,
   );
   const [deletingArticle, setDeletingArticle] = useState<NewsRecord | null>(null);
 
@@ -56,18 +60,24 @@ export default function NewsAdmin() {
     return action;
   });
 
+  const refreshAllNews = () => {
+    void allNews.refresh();
+    if (hasFilter) void filteredNews.refresh();
+  };
+
   const handleTogglePublish = async (article: NewsRecord) => {
     const res = await togglePublish.run(article);
     if (res) {
       toast.success(res === "publish" ? "Đã xuất bản bài viết lên trang chủ." : "Đã gỡ bài viết về bản nháp.");
-      void newsList.refresh();
+      refreshAllNews();
     } else if (togglePublish.error) {
       toast.error(togglePublish.error);
     }
   };
 
-  const publishedCount = newsList.rows.filter((a) => a.status === "published").length;
-  const draftCount = newsList.rows.filter((a) => a.status === "draft").length;
+  const publishedCount = allNews.rows.filter((a) => a.status === "published").length;
+  const draftCount = allNews.rows.filter((a) => a.status === "draft").length;
+  const categoryCount = NEWS_CATEGORIES.filter((c) => c.id !== "all").length;
 
   return (
     <>
@@ -89,7 +99,7 @@ export default function NewsAdmin() {
             <span className="news-summary-sub">Trong hệ thống</span>
           </div>
           <strong className="news-summary-val">
-            <span className="news-summary-num">{newsList.total}</span>
+            <span className="news-summary-num">{allNews.total}</span>
           </strong>
         </div>
         <div className="news-summary-row">
@@ -113,10 +123,10 @@ export default function NewsAdmin() {
         <div className="news-summary-row">
           <div className="news-summary-meta">
             <span className="news-summary-label">Chuyên mục tin</span>
-            <span className="news-summary-sub">4 nhóm chủ đề</span>
+            <span className="news-summary-sub">{categoryCount} nhóm chủ đề</span>
           </div>
           <strong className="news-summary-val">
-            <span className="news-summary-num">4</span>
+            <span className="news-summary-num">{categoryCount}</span>
           </strong>
         </div>
       </section>
@@ -281,7 +291,7 @@ export default function NewsAdmin() {
           onClose={() => setEditingArticle(null)}
           onSaved={() => {
             setEditingArticle(null);
-            void newsList.refresh();
+            refreshAllNews();
           }}
         />
       )}
@@ -307,7 +317,7 @@ export default function NewsAdmin() {
           onClose={() => setDeletingArticle(null)}
           onDone={() => {
             setDeletingArticle(null);
-            void newsList.refresh();
+            refreshAllNews();
           }}
         />
       )}

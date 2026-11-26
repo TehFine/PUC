@@ -385,7 +385,7 @@ export default function AccountsTab({
             <div className="account-detail-sec-actions">
               <button
                 type="button"
-                className={`btn ${viewing.status === "active" ? "btn-gold" : "btn-outline"} account-detail-sec-btn`}
+                className={`btn ${viewing.status === "active" ? "btn-danger is-lock-danger" : "btn-outline"} account-detail-sec-btn`}
                 disabled={toggleStatus.pending}
                 onClick={() => void handleToggleLock(viewing)}
               >

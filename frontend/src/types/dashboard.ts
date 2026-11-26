@@ -3,12 +3,15 @@ import type { HouseholdStatus } from "./households";
 
 export interface DashboardCounts {
   households?: number;
+  registeredHouseholds?: number;
   plots?: number;
   areaHa?: number;
   qualifiedHouseholds?: number;
   openViolations?: number;
   pendingApprovals?: number;
   pendingRegistrations?: number;
+  pendingSignups?: number;
+  pendingPasswordResets?: number;
   pendingDeclarations?: number;
   pendingDeletions?: number;
   pendingTraceRequests?: number;
@@ -17,6 +20,7 @@ export interface DashboardCounts {
   journalLast30Days?: number;
   harvestTons?: number;
   trainingCourses?: number;
+  upcomingScheduleCount?: number;
 }
 
 export interface DashboardHouseholdStatus {

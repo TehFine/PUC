@@ -23,7 +23,7 @@ export function EnterpriseFormModal({
   const [taxCode, setTaxCode] = useState(initial?.taxCode ?? "");
   const [representative, setRepresentative] = useState(initial?.representative ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
-  const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "VN-DLPH-0089");
+  const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "");
   const [gaccCode, setGaccCode] = useState(initial?.gaccCode ?? "");
   const [mardApprovedOn, setMardApprovedOn] = useState(dateInput(initial?.mardApprovedOn));
   const [gaccApprovedOn, setGaccApprovedOn] = useState(dateInput(initial?.gaccApprovedOn));
@@ -71,7 +71,7 @@ export function EnterpriseFormModal({
 
   return (
     <FormModal
-      title={initial ? `Sửa doanh nghiệp: ${initial.name}` : "Thêm doanh nghiệp & Nhà đóng gói"}
+      title={initial ? `Sửa doanh nghiệp: ${initial.name}` : "Thêm doanh nghiệp và Nhà đóng gói"}
       onClose={onClose}
       onSubmit={() => void submit()}
       pending={pending}
@@ -84,7 +84,13 @@ export function EnterpriseFormModal({
         <TextField label="Mã số thuế" value={taxCode} onChange={setTaxCode} maxLength={40} />
         <TextField label="Người đại diện" value={representative} onChange={setRepresentative} maxLength={100} />
         <TextField label="Điện thoại" type="tel" value={phone} onChange={setPhone} maxLength={30} />
-        <TextField label="Mã cơ sở đóng gói (PHC)" value={packhouseCode} onChange={setPackhouseCode} maxLength={50} />
+        <TextField
+          label="Mã cơ sở đóng gói (PHC)"
+          value={packhouseCode}
+          onChange={setPackhouseCode}
+          maxLength={50}
+          placeholder="VD: VN-DLPH-..."
+        />
         <TextField
           label="Mã Hải quan Trung Quốc (GACC)"
           value={gaccCode}
@@ -177,8 +183,8 @@ export function ContractFormModal({
           required
           value={enterpriseId}
           onChange={setEnterpriseId}
-          placeholder="— Chọn doanh nghiệp —"
-          options={enterprises.map((e) => ({ value: String(e.id), label: `${e.code} – ${e.name}` }))}
+          placeholder="Chọn doanh nghiệp"
+          options={enterprises.map((e) => ({ value: String(e.id), label: `${e.code} - ${e.name}` }))}
         />
         <TextField label="Ngày ký" type="date" required value={signedOn} onChange={setSignedOn} />
         <TextField label="Hiệu lực đến" type="date" required value={validUntil} onChange={setValidUntil} />
@@ -196,7 +202,7 @@ export function ContractFormModal({
           ]}
         />
       </FormGrid>
-      <TextField label="Tên hợp đồng & Nội dung chính" required value={title} onChange={setTitle} maxLength={250} />
+      <TextField label="Tên hợp đồng và Nội dung chính" required value={title} onChange={setTitle} maxLength={250} />
       <TextAreaField label="Ghi chú điều khoản" value={notes} onChange={setNotes} rows={2} maxLength={500} />
     </FormModal>
   );

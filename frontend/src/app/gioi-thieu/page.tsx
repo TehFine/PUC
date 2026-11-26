@@ -5,7 +5,7 @@ import { buildHomeStructuredDataJson } from "@/lib/seo";
 import { fetchServerPublicOverview } from "@/lib/server-public";
 
 export const metadata: Metadata = {
-  title: "Giới thiệu vùng trồng sầu riêng Cư Né, Krông Búk",
+  title: "Giới thiệu Hợp tác xã Cư Né tại xã Krông Búk",
   description:
     "Giới thiệu Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune) và hệ thống quản lý mã vùng trồng sầu riêng tại xã Krông Búk, tỉnh Đắk Lắk.",
   alternates: { canonical: "/" },

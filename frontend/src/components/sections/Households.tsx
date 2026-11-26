@@ -55,9 +55,9 @@ export default function Households() {
   const [page, setPage] = usePersistedState("admin:households:page", 1);
 
   const { villages, options: villageOptions } = useVillageOptions();
-  const effectiveQuery = [debouncedSearch.trim(), zoneFilter].filter(Boolean).join(" ") || undefined;
   const list = useApiList<HouseholdRecord>("households", {
-    q: effectiveQuery,
+    q: debouncedSearch.trim() || undefined,
+    zone: zoneFilter || undefined,
     villageId: villageId || undefined,
     status: status || undefined,
     page,
@@ -197,6 +197,7 @@ export default function Households() {
           {KNOWN_ZONES.map((z) => {
             const zc = getZoneColor(z.code);
             const active = zoneFilter === z.code;
+            const cleanZoneLabel = z.label.replace(/\s*[—–]\s*/g, ", ");
             return (
               <button
                 key={z.code}
@@ -206,14 +207,14 @@ export default function Households() {
                   setZoneFilter(active ? "" : z.code);
                   setPage(1);
                 }}
-                title={`Lọc các hộ thuộc vùng ${z.code} (${z.label})`}
+                title={`Lọc các hộ thuộc vùng ${z.code} (${cleanZoneLabel})`}
                 style={{
                   background: zc.bg,
                   color: zc.text,
                 }}
               >
                 <span className="zone-legend-code">{z.code}</span>
-                <span className="zone-legend-sub">{z.label}</span>
+                <span className="zone-legend-sub">{cleanZoneLabel}</span>
               </button>
             );
           })}

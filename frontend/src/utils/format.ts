@@ -19,6 +19,84 @@ export function formatDateTime(value: string | null | undefined): string {
   return `${formatDate(value)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** ISO timestamp → "16:45" (giờ địa phương); chuỗi chỉ có ngày hoặc rỗng → "". */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return "";
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toLocalDayKey(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function getNotificationDayKey(value: string | null | undefined): string {
+  if (!value) return "unknown";
+  const trimmed = value.trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return toLocalDayKey(date);
+}
+
+export function formatNotificationDayHeading(
+  dayKey: string,
+  lang: "vi" | "en" | "zh" = "vi",
+): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  if (!m) {
+    return lang === "zh" ? "其他日期" : lang === "en" ? "Other dates" : "Khác";
+  }
+  const formatted = `${m[3]}/${m[2]}/${m[1]}`;
+  const now = new Date();
+  const todayKey = toLocalDayKey(now);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yesterdayKey = toLocalDayKey(yesterday);
+
+  if (dayKey === todayKey) {
+    if (lang === "zh") return `今天, ${formatted}`;
+    if (lang === "en") return `Today, ${formatted}`;
+    return `Hôm nay, ${formatted}`;
+  }
+  if (dayKey === yesterdayKey) {
+    if (lang === "zh") return `昨天, ${formatted}`;
+    if (lang === "en") return `Yesterday, ${formatted}`;
+    return `Hôm qua, ${formatted}`;
+  }
+  return formatted;
+}
+
+export interface NotificationDayGroup<T> {
+  dayKey: string;
+  heading: string;
+  items: T[];
+}
+
+export function groupNotificationsByDay<T extends { createdAt: string | null | undefined }>(
+  items: readonly T[],
+  lang: "vi" | "en" | "zh" = "vi",
+): NotificationDayGroup<T>[] {
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = getNotificationDayKey(item.createdAt);
+    const list = buckets.get(key);
+    if (list) {
+      list.push(item);
+    } else {
+      buckets.set(key, [item]);
+    }
+  }
+  return Array.from(buckets.entries()).map(([dayKey, groupItems]) => ({
+    dayKey,
+    heading: formatNotificationDayHeading(dayKey, lang),
+    items: groupItems,
+  }));
+}
+
 export const formatNumber = (value: number | null | undefined, fractionDigits: number) =>
   value === null || value === undefined ? "—" : value.toFixed(fractionDigits);
 

@@ -15,6 +15,7 @@ import {
   loadOfflineReadSnapshot,
   registerOfflinePortalInvalidator,
   saveOfflineReadSnapshot,
+  saveServerTimeAnchor,
 } from "@/lib/offline-sync";
 import type { ListResponse } from "@/types/api";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
@@ -97,6 +98,12 @@ function fetchShared<T>(key: string): Promise<T> {
       ) {
         setCacheEntry(cacheKey, result);
         void saveOfflineReadSnapshot(key, result);
+        if (key === "/portal/overview" && result && typeof result === "object") {
+          const maybeAnchor = (result as { timeAnchor?: { token?: string; serverTimeMs?: number } }).timeAnchor;
+          if (maybeAnchor?.token) {
+            saveServerTimeAnchor(maybeAnchor);
+          }
+        }
       }
       return result;
     })
@@ -216,13 +223,23 @@ export function optimisticMarkNotificationRead(id?: number): void {
   bumpKeyEpoch(cacheKey);
   inflight.delete(cacheKey);
   const nowIso = new Date().toISOString();
+  let newlyMarkedCount = 0;
   const nextData = current.data.map((n) => {
     if (id === undefined || Number(n.id) === Number(id)) {
-      return n.readAt ? n : { ...n, readAt: nowIso };
+      if (!n.readAt) {
+        newlyMarkedCount += 1;
+        return { ...n, readAt: nowIso };
+      }
+      return n;
     }
     return n;
   });
-  const nextUnread = id === undefined ? 0 : nextData.filter((n) => !n.readAt).length;
+  const prevUnread =
+    typeof current.unread === "number" ? current.unread : current.data.filter((n) => !n.readAt).length;
+  const nextUnread =
+    id === undefined
+      ? 0
+      : Math.max(nextData.filter((n) => !n.readAt).length, Math.max(0, prevUnread - newlyMarkedCount));
   setCacheEntry(cacheKey, { data: nextData, unread: nextUnread } satisfies NotificationList, 0);
   emitCacheSync(NOTIFICATIONS_PATH);
 }
@@ -426,6 +443,7 @@ export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizer
 }
 
 const ESSENTIAL_ORCHARD_PATHS = [
+  "/portal/overview",
   "/portal/plots",
   "/pesticides?pageSize=500",
   "/fertilizers?pageSize=500",
@@ -437,8 +455,8 @@ let lastWarmUserId: number | null = null;
 let lastWarmAt = 0;
 
 /**
- * Làm ấm êm ái dữ liệu thiết yếu cho nông hộ đi rẫy (danh sách thửa đất, danh mục thuốc BVTV kèm ngày cách ly PHI,
- * nhật ký canh tác và phun thuốc) xuống IndexedDB để khi vào vùng rẫy mất sóng vẫn chọn thửa và chọn thuốc đầy đủ.
+ * Làm ấm êm ái dữ liệu thiết yếu cho nông hộ đi rẫy (vé neo thời gian máy chủ, danh sách thửa đất kèm mã QR biển vườn,
+ * danh mục thuốc BVTV kèm ngày cách ly PHI, phân bón và nhật ký) xuống IndexedDB để khi vào vùng rẫy mất sóng dài ngày vẫn ghi chép đầy đủ.
  */
 export async function warmPortalEssentialOfflineCache(): Promise<void> {
   const uid = getAuthScopeUserId();
@@ -446,6 +464,15 @@ export async function warmPortalEssentialOfflineCache(): Promise<void> {
   if (lastWarmUserId === uid && Date.now() - lastWarmAt < 10 * 60_000) return;
   lastWarmUserId = uid;
   lastWarmAt = Date.now();
+
+  try {
+    const anchor = await api.get<{ token?: string; serverTimeMs?: number }>("/portal/time-anchor");
+    if (anchor?.token) {
+      saveServerTimeAnchor(anchor);
+    }
+  } catch {
+    // Bỏ qua nếu mạng chập chờn hoặc tài khoản không thuộc cổng nông hộ.
+  }
 
   for (const path of ESSENTIAL_ORCHARD_PATHS) {
     if (getAuthScopeUserId() !== uid || isDeviceOfflineNow()) return;

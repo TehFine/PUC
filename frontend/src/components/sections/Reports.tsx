@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { todayIso } from "@/components/admin/catalog/form-utils";
+import { formatVn, todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
@@ -22,8 +22,6 @@ import {
 
 interface ReportSpec {
   id: string;
-  index: string;
-  category: string;
   type: ReportBackendType;
   title: string;
   docTitle: string;
@@ -35,8 +33,6 @@ interface ReportSpec {
 const REPORTS: ReportSpec[] = [
   {
     id: "household-logbook",
-    index: "01",
-    category: "Hồ sơ hộ dân",
     type: "household-logbook",
     title: "Sổ nhật ký hộ dân",
     docTitle: "Sổ nhật ký canh tác điện tử nông hộ (VietGAP / GACC)",
@@ -46,8 +42,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "households",
-    index: "02",
-    category: "Vùng trồng",
     type: "households",
     title: "Hộ vùng trồng",
     docTitle: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
@@ -56,8 +50,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "journal",
-    index: "03",
-    category: "Canh tác",
     type: "journal",
     title: "Nhật ký canh tác",
     docTitle: "Báo cáo nhật ký canh tác điện tử",
@@ -67,8 +59,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "spray",
-    index: "04",
-    category: "Bảo vệ thực vật",
     type: "spray",
     title: "Nhật ký phun thuốc",
     docTitle: "Báo cáo nhật ký phun thuốc BVTV",
@@ -78,8 +68,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "lab-tests",
-    index: "05",
-    category: "An toàn mẫu",
     type: "lab-tests",
     title: "Kiểm nghiệm mẫu",
     docTitle: "Báo cáo kết quả kiểm nghiệm an toàn thực phẩm",
@@ -88,8 +76,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "violations",
-    index: "06",
-    category: "Giám sát",
     type: "violations",
     title: "Vi phạm quy trình",
     docTitle: "Báo cáo vi phạm và kết quả khắc phục",
@@ -99,8 +85,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "harvest",
-    index: "07",
-    category: "Truy xuất",
     type: "harvest",
     title: "Lô hàng xuất khẩu",
     docTitle: "Báo cáo thống kê lô thu hoạch và xuất khẩu",
@@ -109,8 +93,6 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "training-registrations",
-    index: "08",
-    category: "Đào tạo",
     type: "training-registrations",
     title: "Điểm danh tập huấn",
     docTitle: "Báo cáo đăng ký và điểm danh lớp tập huấn",
@@ -293,14 +275,16 @@ export default function Reports() {
           (done, total) => setPhotoProgress({ done, total }),
         );
         const photoNote = totalPhotos > 0 ? `, kèm ${totalPhotos} ảnh minh chứng` : "";
-        toast.success(`Đã mở bản in PDF "${report.title}" (${data.total} bản ghi${photoNote}).`);
+        toast.success(
+          `Đã mở bản in PDF "${report.title}" (${formatVn(data.total, 0)} bản ghi${photoNote}).`,
+        );
         setSelectedReport(null);
       } else {
         const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
         const blob = buildUtf8CsvBlob(data.headers, data.rows);
         triggerBlobDownload(blob, `bao-cao-${report.type}${hhSuffix}-${to || todayIso()}.csv`);
 
-        toast.success(`Đã tải xuống CSV "${report.title}" (${data.total} bản ghi).`);
+        toast.success(`Đã tải xuống CSV "${report.title}" (${formatVn(data.total, 0)} bản ghi).`);
         setSelectedReport(null);
       }
     } catch (err) {
@@ -321,12 +305,12 @@ export default function Reports() {
       selectedReport?.type === "spray";
     const ordered = isDiaryReport
       ? [...filteredHouseholds].sort((a, b) => {
-          const aCnt = a.diaryCount ?? 0;
-          const bCnt = b.diaryCount ?? 0;
-          if ((aCnt > 0) !== (bCnt > 0)) return bCnt > 0 ? 1 : -1;
-          if (bCnt !== aCnt) return bCnt - aCnt;
-          return a.id - b.id;
-        })
+        const aCnt = a.diaryCount ?? 0;
+        const bCnt = b.diaryCount ?? 0;
+        if ((aCnt > 0) !== (bCnt > 0)) return bCnt > 0 ? 1 : -1;
+        if (bCnt !== aCnt) return bCnt - aCnt;
+        return a.id - b.id;
+      })
       : filteredHouseholds;
     return ordered.map((h) => {
       const plotPart = h.plotCodesSummary ? `, Thửa ${h.plotCodesSummary}` : "";
@@ -443,10 +427,6 @@ export default function Reports() {
               }
             }}
           >
-            <div className="report-card-eyebrow">
-              <span className="report-card-index">{r.index}</span>
-              <span className="report-card-cat">{r.category}</span>
-            </div>
             <div className="report-card-body">
               <div className="report-title">{r.title}</div>
               <div className="report-desc">{r.desc}</div>
@@ -639,7 +619,9 @@ export default function Reports() {
                   : "Xem trước dữ liệu báo cáo"}
               </span>
               <span>
-                {previewLoading ? "Đang tải..." : `Tổng cộng: ${previewData?.total ?? 0} bản ghi`}
+                {previewLoading
+                  ? "Đang tải..."
+                  : `Tổng cộng: ${formatVn(previewData?.total ?? 0, 0)} bản ghi`}
               </span>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -729,7 +711,9 @@ export default function Reports() {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                Hiển thị 8 dòng đầu tiên trên tổng số {previewData.total} bản ghi sẽ được xuất.
+                {previewData.total > 10_000
+                  ? `Hiển thị ${Math.min(8, previewData.rows.length)} dòng đầu tiên trên tổng số ${formatVn(previewData.total, 0)} bản ghi (tối đa 10.000 bản ghi mỗi lần xuất).`
+                  : `Hiển thị ${Math.min(8, previewData.rows.length)} dòng đầu tiên trên tổng số ${formatVn(previewData.total, 0)} bản ghi sẽ được xuất.`}
               </div>
             )}
           </div>

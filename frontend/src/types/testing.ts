@@ -27,6 +27,12 @@ export interface LabTestRow {
 
 export type LabTestRecord = LabTestRow;
 
+export interface LabTestSummary {
+  total: number;
+  passCount: number;
+  failCount: number;
+}
+
 export interface LabTestInput {
   code: string;
   householdId: number;

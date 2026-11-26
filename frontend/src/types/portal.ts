@@ -2,6 +2,14 @@
 
 export type HouseholdStatus = "qualified" | "improve" | "pending" | "violation";
 export type PlotStatus = "approved" | "improve" | "violation" | "pending";
+export type FieldCaptureSource = "in_app_camera" | "camera" | "upload" | "system";
+export type FieldTrustLevel = 1 | 2 | 3;
+
+export interface PortalTimeAnchor {
+  token: string;
+  serverTimeMs: number;
+  maxAgeDays: number;
+}
 
 /** Nhắc việc do server tính (chưa ghi nhật ký, vi phạm mở, cách ly thuốc, lịch kiểm tra, tập huấn, khai báo bị từ chối…). */
 export interface PortalReminder {
@@ -24,6 +32,8 @@ export interface PortalOverview {
     status: HouseholdStatus;
     villageName: string;
     villageLeader: string | null;
+    communeLocation?: string | null;
+    zoneCode?: string | null;
     avatarUrl?: string | null;
   };
   stats: {
@@ -36,6 +46,7 @@ export interface PortalOverview {
   };
   lastTest: { code: string; plotCode: string; sampledOn: string; result: "pass" | "fail" } | null;
   reminders?: PortalReminder[];
+  timeAnchor?: PortalTimeAnchor;
 }
 
 export interface PortalProfile {
@@ -47,6 +58,7 @@ export interface PortalProfile {
     cccdMasked: string | null;
     villageName: string | null;
     villageLeader: string | null;
+    communeLocation?: string | null;
     plotCount: number;
     areaHa: number;
     status: HouseholdStatus;
@@ -61,6 +73,7 @@ export interface PortalPlot {
   sheet?: string | null;
   parcel?: string | null;
   village: string | null;
+  communeLocation?: string | null;
   zoneCode: string | null;
   variety: string | null;
   plantedYear: number | null;
@@ -93,6 +106,7 @@ export interface PortalJournalEntry {
   photoUrls?: string[];
   latitude?: number | string | null;
   longitude?: number | string | null;
+  gpsAccuracyM?: number | null;
   serverRecordedAt?: string | null;
   declaredOn?: string | null;
   lateDeclarationDays?: number;
@@ -102,6 +116,12 @@ export interface PortalJournalEntry {
   recordHash?: string | null;
   gpsVerified?: boolean;
   gpsDistanceM?: number | null;
+  captureSource?: FieldCaptureSource | string | null;
+  clientCapturedAt?: string | null;
+  offlineQueued?: boolean;
+  signboardQrVerified?: boolean;
+  trustLevel?: FieldTrustLevel | number | null;
+  trustFlags?: string[];
   /** Thời điểm tạo bản ghi (để biết còn trong 24 giờ được phép xóa). */
   createdAt?: string | null;
   /** Server có thể trả sẵn cờ cho phép xóa. */
@@ -121,6 +141,13 @@ export interface CreateJournalBody {
   photoIds?: number[];
   latitude?: number;
   longitude?: number;
+  gpsAccuracyM?: number;
+  captureSource?: FieldCaptureSource;
+  clientCapturedAt?: string;
+  timeAnchorToken?: string;
+  monotonicElapsedMs?: number;
+  offlineQueued?: boolean;
+  signboardQrToken?: string;
   lateReason?: string;
 }
 
@@ -139,6 +166,17 @@ export interface PortalSprayRecord {
   note?: string | null;
   photoUrl?: string | null;
   photoUrls?: string[];
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  gpsAccuracyM?: number | null;
+  gpsVerified?: boolean;
+  gpsDistanceM?: number | null;
+  captureSource?: FieldCaptureSource | string | null;
+  clientCapturedAt?: string | null;
+  offlineQueued?: boolean;
+  signboardQrVerified?: boolean;
+  trustLevel?: FieldTrustLevel | number | null;
+  trustFlags?: string[];
   serverRecordedAt?: string | null;
   declaredOn?: string | null;
   lateDeclarationDays?: number;
@@ -165,6 +203,15 @@ export interface CreateSprayBody {
   note?: string;
   photoId?: number;
   photoIds?: number[];
+  latitude?: number;
+  longitude?: number;
+  gpsAccuracyM?: number;
+  captureSource?: FieldCaptureSource;
+  clientCapturedAt?: string;
+  timeAnchorToken?: string;
+  monotonicElapsedMs?: number;
+  offlineQueued?: boolean;
+  signboardQrToken?: string;
   lateReason?: string;
 }
 
@@ -218,15 +265,18 @@ export interface PortalViolation {
 
 export interface PortalHarvest {
   id: number;
+  lotId?: number;
   lotCode: string;
   qrCode?: string | null;
   qrToken?: string | null;
   plotCode?: string | null;
   harvestedOn: string;
   weightKg: number;
+  lotWeightKg?: number | null;
   buyer: string;
   market: string;
   status: "exported" | "delivered" | "in_transit" | "sampling" | "revoked";
+  revokedReason?: string | null;
 }
 
 export interface PortalHarvestNotice {

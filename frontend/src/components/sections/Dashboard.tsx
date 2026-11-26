@@ -142,6 +142,26 @@ export default function Dashboard() {
   const { can } = useAuth();
   const canViewActivityChart = can("journal", "read") || can("spray", "read");
   const canBroadcastNotice = can("system-alerts", "create");
+  const canReadHouseholds = can("households", "read");
+  const canReadPlots = can("plots", "read");
+  const canReadHarvest = can("harvest", "read");
+  const canReadTesting = can("testing", "read");
+  const canReadViolations = can("violations", "read");
+  const canReadSchedule = can("schedule", "read");
+  const canReadApprovals = can("approvals", "read");
+  const canReadRegistrations = can("registrations", "read");
+  const canReadDeclarations = can("harvest-declarations", "read");
+  const canReadDeletionRequests = can("deletion-requests", "read");
+  const canReadTraceRequests = can("trace-requests", "read");
+  const canViewActionCard =
+    canReadApprovals ||
+    canReadRegistrations ||
+    canReadViolations ||
+    canReadDeclarations ||
+    canReadDeletionRequests ||
+    canReadTraceRequests;
+  const canViewHarvestCard = canReadHarvest || canReadTesting;
+
   const [rangeDays, setRangeDays] = useState<ActivityRangeDays>(7);
   const [dateStr, setDateStr] = useState("");
   const [fullDateStr, setFullDateStr] = useState("");
@@ -195,6 +215,10 @@ export default function Dashboard() {
   const qualifiedHouseholds = counts.qualifiedHouseholds ?? 0;
   const openViolations = counts.openViolations ?? 0;
   const pendingRegistrations = counts.pendingRegistrations ?? 0;
+  const hasSplitRegCounts =
+    counts.pendingSignups !== undefined || counts.pendingPasswordResets !== undefined;
+  const pendingSignups = hasSplitRegCounts ? (counts.pendingSignups ?? 0) : pendingRegistrations;
+  const pendingPasswordResets = hasSplitRegCounts ? (counts.pendingPasswordResets ?? 0) : 0;
   const pendingDeclarations = counts.pendingDeclarations ?? 0;
   const pendingDeletions = counts.pendingDeletions ?? 0;
   const pendingTraceRequests = counts.pendingTraceRequests ?? 0;
@@ -203,7 +227,16 @@ export default function Dashboard() {
   const labTotal = counts.labTests ?? summary?.labTests?.total ?? 0;
   const labPassed = counts.labTestsPassed ?? summary?.labTests?.pass ?? 0;
 
-  const qualifiedPct = totalHouseholds > 0 ? Math.round(percent(qualifiedHouseholds, totalHouseholds)) : 0;
+  const statusCounts = useMemo(
+    () => readStatusCounts(summary?.householdStatus, qualifiedHouseholds),
+    [summary?.householdStatus, qualifiedHouseholds],
+  );
+  const statusTotal =
+    statusCounts.qualified + statusCounts.improve + statusCounts.pending + statusCounts.violation;
+  const registeredHouseholds = counts.registeredHouseholds ?? statusTotal;
+
+  const qualifiedPct =
+    registeredHouseholds > 0 ? Math.round(percent(qualifiedHouseholds, registeredHouseholds)) : 0;
   const labPassPct = labTotal > 0 ? Math.round(percent(labPassed, labTotal)) : null;
 
   const smoothAreaHa = useSmoothNumber(totalAreaHa, 1);
@@ -211,11 +244,6 @@ export default function Dashboard() {
   const smoothPlots = useSmoothNumber(totalPlots, 0);
   const smoothQualifiedPct = useSmoothNumber(qualifiedPct, 0);
   const smoothHarvestTons = useSmoothNumber(harvestTons, 1);
-
-  const statusCounts = useMemo(
-    () => readStatusCounts(summary?.householdStatus, qualifiedHouseholds),
-    [summary?.householdStatus, qualifiedHouseholds],
-  );
 
   const activitySeries = useMemo<InsightPoint[]>(() => {
     const raw = summary?.dailyActivity;
@@ -257,12 +285,15 @@ export default function Dashboard() {
   }, [summary?.villages]);
 
   const upcomingSchedule = summary?.upcomingSchedule ?? [];
+  const upcomingScheduleCount = counts.upcomingScheduleCount ?? upcomingSchedule.length;
 
   const actionQueue = useMemo<ActionQueueItem[]>(() => {
-    const recentOpenViolations = (summary?.recentViolations ?? []).filter((v) => v.status !== "resolved");
-    const pendingApprovals = summary?.pendingApprovals ?? [];
+    const recentOpenViolations = canReadViolations
+      ? (summary?.recentViolations ?? []).filter((v) => v.status !== "resolved")
+      : [];
+    const pendingApprovals = canReadApprovals ? (summary?.pendingApprovals ?? []) : [];
     const items: ActionQueueItem[] = [];
-    if (pendingDeletions > 0) {
+    if (canReadDeletionRequests && pendingDeletions > 0) {
       items.push({
         key: "del",
         title: "Yêu cầu duyệt xóa thành viên",
@@ -270,7 +301,7 @@ export default function Dashboard() {
         tone: "danger",
       });
     }
-    if (pendingTraceRequests > 0) {
+    if (canReadTraceRequests && pendingTraceRequests > 0) {
       items.push({
         key: "trace",
         title: "Yêu cầu cấp quyền truy xuất QR",
@@ -278,15 +309,23 @@ export default function Dashboard() {
         tone: "warn",
       });
     }
-    if (pendingRegistrations > 0) {
+    if (canReadRegistrations && pendingSignups > 0) {
       items.push({
-        key: "reg",
+        key: "reg-signup",
         title: "Tài khoản nông dân chờ kích hoạt",
-        subtitle: `${formatVn(pendingRegistrations)} đăng ký mới cần xác nhận`,
+        subtitle: `${formatVn(pendingSignups)} đăng ký mới cần xác nhận`,
         tone: "warn",
       });
     }
-    if (pendingDeclarations > 0) {
+    if (canReadRegistrations && pendingPasswordResets > 0) {
+      items.push({
+        key: "reg-reset",
+        title: "Yêu cầu cấp lại mật khẩu",
+        subtitle: `${formatVn(pendingPasswordResets)} yêu cầu chờ cấp mật khẩu tạm`,
+        tone: "warn",
+      });
+    }
+    if (canReadDeclarations && pendingDeclarations > 0) {
       items.push({
         key: "decl",
         title: "Khai báo thu hái chờ xác nhận",
@@ -312,9 +351,16 @@ export default function Dashboard() {
     }
     return items.slice(0, 4);
   }, [
+    canReadApprovals,
+    canReadDeclarations,
+    canReadDeletionRequests,
+    canReadRegistrations,
+    canReadTraceRequests,
+    canReadViolations,
     pendingDeletions,
     pendingTraceRequests,
-    pendingRegistrations,
+    pendingSignups,
+    pendingPasswordResets,
     pendingDeclarations,
     summary?.pendingApprovals,
     summary?.recentViolations,
@@ -394,301 +440,413 @@ export default function Dashboard() {
             </section>
           )}
 
-          {/* HÀNG 1: 3 THẺ TRỌNG TÂM (HÀNH ĐỘNG CẦN XỬ LÝ - QUY MÔ VÙNG TRỒNG - CHUẨN XUẤT KHẨU) */}
-          <div className="dash-bento-top">
-            {/* 1. Hạng mục cần xử lý ngay */}
-            <section className="dash-bento-card">
-              <div className="dash-bento-body">
-                <header className="dash-bento-head">
-                  <h2 className="dash-bento-title">Cần xử lý</h2>
-                </header>
+          {/* CÁC THẺ CHỈ SỐ THEO QUYỀN TRUY CẬP THỰC TẾ */}
+          {(() => {
+            const actionCard = canViewActionCard ? (
+              <section key="action" className="dash-bento-card">
+                <div className="dash-bento-body">
+                  <header className="dash-bento-head">
+                    <h2 className="dash-bento-title">Cần xử lý</h2>
+                  </header>
 
-                {actionQueue.length === 0 ? (
-                  <div className="dash-bento-clean-list">
-                    <div className="dash-bento-clean-row">
-                      <span>Hồ sơ chờ xét duyệt</span>
-                      <strong>0</strong>
-                    </div>
-                    <div className="dash-bento-clean-row">
-                      <span>Tài khoản chờ kích hoạt</span>
-                      <strong>0</strong>
-                    </div>
-                    <div className="dash-bento-clean-row">
-                      <span>Cảnh báo vi phạm mở</span>
-                      <strong>0</strong>
-                    </div>
-                    <p className="dash-bento-footnote">Toàn bộ hồ sơ và nhật ký đang ở trạng thái ổn định.</p>
-                  </div>
-                ) : (
-                  <div className="dash-bento-alert-list">
-                    {actionQueue.map((item) => (
-                      <div key={item.key} className="dash-bento-alert-row">
-                        <div className="dash-bento-alert-copy">
-                          <strong className={item.tone === "danger" ? "is-danger" : item.tone === "warn" ? "is-warn" : ""}>
-                            {item.title}
-                          </strong>
-                          <span>{item.subtitle}</span>
+                  {actionQueue.length === 0 ? (
+                    <div className="dash-bento-clean-list">
+                      {canReadApprovals && (
+                        <div className="dash-bento-clean-row">
+                          <span>Hồ sơ chờ xét duyệt</span>
+                          <strong>0</strong>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <footer className="dash-bento-footer">
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn"
-                  onClick={() =>
-                    pendingRegistrations > 0 && (counts.pendingApprovals ?? 0) === 0
-                      ? requestApprovalTab("registrations")
-                      : requestAdminNavigate("approval")
-                  }
-                >
-                  Hồ sơ
-                </button>
-                {pendingDeletions > 0 && (
-                  <button
-                    type="button"
-                    className="dash-bento-footer-btn"
-                    onClick={() => requestSystemTab("deletions")}
-                  >
-                    Duyệt xóa
-                  </button>
-                )}
-                {pendingTraceRequests > 0 && (
-                  <button
-                    type="button"
-                    className="dash-bento-footer-btn"
-                    onClick={() => requestSystemTab("trace-requests")}
-                  >
-                    Cấp quyền QR
-                  </button>
-                )}
-                {pendingDeclarations > 0 && (
-                  <button
-                    type="button"
-                    className="dash-bento-footer-btn"
-                    onClick={() => requestAdminNavigate("harvest")}
-                  >
-                    Thu hoạch
-                  </button>
-                )}
-                {openViolations > 0 && (
-                  <button
-                    type="button"
-                    className="dash-bento-footer-btn"
-                    onClick={() => requestJournalTab("violations")}
-                  >
-                    Vi phạm
-                  </button>
-                )}
-              </footer>
-            </section>
-
-            {/* 2. Quy mô vùng trồng & phân bổ thôn */}
-            <section className="dash-bento-card">
-              <div className="dash-bento-body">
-                <header className="dash-bento-head">
-                  <h2 className="dash-bento-title">Quy mô vùng trồng</h2>
-                </header>
-
-                <div className="dash-bento-hero is-centered">
-                  <div className="dash-bento-figure">
-                    <span className="dash-bento-num">{formatVn(smoothAreaHa, 1)}</span>
-                    <span className="dash-bento-unit">ha</span>
-                  </div>
-                </div>
-
-                <div className="dash-bento-inline-specs is-centered">
-                  <span>Hộ <strong>{formatVn(smoothHouseholds)}</strong></span>
-                  <span>Thửa <strong>{formatVn(smoothPlots)}</strong></span>
-                  <span>Thôn <strong>{formatVn((summary?.villages ?? []).length)}</strong></span>
-                </div>
-
-                <div className="dash-bento-clean-list">
-                  {topVillages.length === 0 ? (
-                    <p className="dash-bento-footnote">Chưa có dữ liệu phân bổ theo thôn.</p>
+                      )}
+                      {canReadRegistrations && (
+                        <div className="dash-bento-clean-row">
+                          <span>Tài khoản chờ kích hoạt</span>
+                          <strong>0</strong>
+                        </div>
+                      )}
+                      {canReadViolations && (
+                        <div className="dash-bento-clean-row">
+                          <span>Cảnh báo vi phạm mở</span>
+                          <strong>0</strong>
+                        </div>
+                      )}
+                      <p className="dash-bento-footnote">Toàn bộ hồ sơ và nhật ký đang ở trạng thái ổn định.</p>
+                    </div>
                   ) : (
-                    topVillages.map((v) => (
-                      <div key={v.id} className="dash-bento-clean-row">
-                        <span>{v.name}</span>
-                        <strong>{v.metricLabel}</strong>
-                      </div>
-                    ))
+                    <div className="dash-bento-alert-list">
+                      {actionQueue.map((item) => (
+                        <div key={item.key} className="dash-bento-alert-row">
+                          <div className="dash-bento-alert-copy">
+                            <strong className={item.tone === "danger" ? "is-danger" : item.tone === "warn" ? "is-warn" : ""}>
+                              {item.title}
+                            </strong>
+                            <span>{item.subtitle}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
 
-              <footer className="dash-bento-footer">
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn"
-                  onClick={() => requestAdminNavigate("zones")}
-                >
-                  Bản đồ vùng trồng
-                </button>
-              </footer>
-            </section>
+                {(canReadApprovals ||
+                  canReadRegistrations ||
+                  (canReadDeletionRequests && pendingDeletions > 0) ||
+                  (canReadTraceRequests && pendingTraceRequests > 0) ||
+                  (canReadDeclarations && canReadHarvest && pendingDeclarations > 0) ||
+                  (canReadViolations && openViolations > 0)) && (
+                  <footer className="dash-bento-footer">
+                    {(canReadApprovals || canReadRegistrations) && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() =>
+                          !canReadApprovals || (pendingRegistrations > 0 && (counts.pendingApprovals ?? 0) === 0)
+                            ? requestApprovalTab("registrations")
+                            : requestAdminNavigate("approval")
+                        }
+                      >
+                        Hồ sơ
+                      </button>
+                    )}
+                    {canReadDeletionRequests && pendingDeletions > 0 && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() => requestSystemTab("deletions")}
+                      >
+                        Duyệt xóa
+                      </button>
+                    )}
+                    {canReadTraceRequests && pendingTraceRequests > 0 && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() => requestSystemTab("trace-requests")}
+                      >
+                        Cấp quyền QR
+                      </button>
+                    )}
+                    {canReadDeclarations && canReadHarvest && pendingDeclarations > 0 && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() => requestAdminNavigate("harvest")}
+                      >
+                        Thu hoạch
+                      </button>
+                    )}
+                    {canReadViolations && openViolations > 0 && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() => requestJournalTab("violations")}
+                      >
+                        Vi phạm
+                      </button>
+                    )}
+                  </footer>
+                )}
+              </section>
+            ) : null;
 
-            {/* 3. Hồ sơ đủ điều kiện xuất khẩu */}
-            <section className="dash-bento-card">
-              <div className="dash-bento-body">
-                <header className="dash-bento-head">
-                  <h2 className="dash-bento-title">Chuẩn xuất khẩu</h2>
-                  <span className={`dash-bento-tag ${qualifiedPct >= 75 ? "is-ok" : "is-warn"}`}>
-                    {formatVn(qualifiedHouseholds)}/{formatVn(totalHouseholds)} hộ
-                  </span>
-                </header>
+            const scaleCard = canReadHouseholds ? (
+              <section key="scale" className="dash-bento-card">
+                <div className="dash-bento-body">
+                  <header className="dash-bento-head">
+                    <h2 className="dash-bento-title">Quy mô vùng trồng</h2>
+                  </header>
 
-                <div className="dash-bento-hero is-centered">
-                  <div className="dash-bento-figure">
-                    <span className="dash-bento-num">{smoothQualifiedPct}</span>
-                    <span className="dash-bento-unit">%</span>
+                  <div className="dash-bento-hero is-centered">
+                    <div className="dash-bento-figure">
+                      <span className="dash-bento-num">{formatVn(smoothAreaHa, 1)}</span>
+                      <span className="dash-bento-unit">ha</span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="dash-bento-clean-list" aria-label="Phân bổ trạng thái nông hộ">
-                  <div className="dash-bento-clean-row">
-                    <span>Đủ chuẩn</span>
-                    <strong>{formatVn(statusCounts.qualified)}</strong>
+                  <div className="dash-bento-inline-specs is-centered">
+                    <span>Hộ <strong>{formatVn(smoothHouseholds)}</strong></span>
+                    <span>Thửa <strong>{formatVn(smoothPlots)}</strong></span>
+                    <span>Thôn <strong>{formatVn((summary?.villages ?? []).length)}</strong></span>
                   </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Chờ duyệt</span>
-                    <strong>{formatVn(statusCounts.pending)}</strong>
-                  </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Khắc phục</span>
-                    <strong>{formatVn(statusCounts.improve)}</strong>
-                  </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Vi phạm</span>
-                    <strong className={statusCounts.violation > 0 ? "is-danger" : ""}>
-                      {formatVn(statusCounts.violation)}
-                    </strong>
-                  </div>
-                </div>
-              </div>
 
-              <footer className="dash-bento-footer">
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn"
-                  onClick={() => requestAdminNavigate("households")}
-                >
-                  Danh sách nông hộ
-                </button>
-              </footer>
-            </section>
-          </div>
-
-          {/* HÀNG 2: 2 THẺ BẤT ĐỐI XỨNG (SẢN LƯỢNG & KIỂM NGHIỆM - LỊCH KIỂM TRA THỰC ĐỊA) */}
-          <div className="dash-bento-bottom">
-            {/* 4. Sản lượng thu hoạch & an toàn tồn dư MRL */}
-            <section className="dash-bento-card">
-              <div className="dash-bento-body">
-                <header className="dash-bento-head">
-                  <h2 className="dash-bento-title">Sản lượng và kiểm nghiệm</h2>
-                </header>
-
-                <div className="dash-bento-hero is-centered">
-                  <div className="dash-bento-figure">
-                    <span className="dash-bento-num">{formatVn(smoothHarvestTons, 1)}</span>
-                    <span className="dash-bento-unit">tấn</span>
-                  </div>
-                </div>
-
-                <div className="dash-bento-clean-list">
-                  <div className="dash-bento-clean-row">
-                    <span>Lô thu hoạch</span>
-                    <strong>{formatVn(harvestLots)} lô</strong>
-                  </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Tỷ lệ mẫu đạt MRL</span>
-                    <strong>{labPassPct !== null ? `${labPassPct}%` : "Chưa có phiếu"}</strong>
-                  </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Phiếu kiểm nghiệm đạt</span>
-                    <strong>{labTotal > 0 ? `${formatVn(labPassed)}/${formatVn(labTotal)}` : "0"}</strong>
-                  </div>
-                  <div className="dash-bento-clean-row">
-                    <span>Vi phạm mở</span>
-                    <strong className={openViolations > 0 ? "is-danger" : ""}>{formatVn(openViolations)}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <footer className="dash-bento-footer">
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn"
-                  onClick={() => requestAdminNavigate("testing")}
-                >
-                  Kiểm nghiệm
-                </button>
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn is-primary"
-                  onClick={() => requestAdminNavigate("harvest")}
-                >
-                  Lô hàng
-                </button>
-              </footer>
-            </section>
-
-            {/* 5. Lịch kiểm tra sắp tới */}
-            <section className="dash-bento-card">
-              <div className="dash-bento-body">
-                <header className="dash-bento-head">
-                  <h2 className="dash-bento-title">Lịch kiểm tra thực địa</h2>
-                  <span className={`dash-bento-tag ${openViolations === 0 ? "is-ok" : "is-danger"}`}>
-                    {openViolations === 0 ? "Không vi phạm mở" : `${formatVn(openViolations)} vi phạm mở`}
-                  </span>
-                </header>
-
-                <div className="dash-bento-hero is-centered">
-                  <div className="dash-bento-figure">
-                    <span className="dash-bento-num">{formatVn(upcomingSchedule.length)}</span>
-                    <span className="dash-bento-unit">đợt</span>
-                  </div>
-                </div>
-
-                {upcomingSchedule.length === 0 ? (
-                  <div className="dash-bento-empty">
-                    Chưa có đợt kiểm tra thực địa mới trong danh sách sắp tới.
-                  </div>
-                ) : (
-                  <div className="dash-bento-schedule-list">
-                    {upcomingSchedule.slice(0, 4).map((s) => {
-                      const kind = badgeOf(SCHEDULE_KIND, s.kind);
-                      return (
-                        <div key={s.id} className="dash-bento-schedule-row">
-                          <div className="dash-bento-schedule-main">
-                            <strong>{s.title}</strong>
-                            <span>
-                              {s.officer ? `${s.officer}, ` : ""}
-                              {s.plotCount ? `${formatVn(s.plotCount)} thửa` : kind.label}
-                            </span>
-                          </div>
-                          <span className="dash-bento-schedule-date">{formatDate(s.scheduledOn)}</span>
+                  <div className="dash-bento-clean-list">
+                    {topVillages.length === 0 ? (
+                      <p className="dash-bento-footnote">Chưa có dữ liệu phân bổ theo thôn.</p>
+                    ) : (
+                      topVillages.map((v) => (
+                        <div key={v.id} className="dash-bento-clean-row">
+                          <span>{v.name}</span>
+                          <strong>{v.metricLabel}</strong>
                         </div>
-                      );
-                    })}
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {canReadPlots && (
+                  <footer className="dash-bento-footer">
+                    <button
+                      type="button"
+                      className="dash-bento-footer-btn"
+                      onClick={() => requestAdminNavigate("zones")}
+                    >
+                      Bản đồ vùng trồng
+                    </button>
+                  </footer>
+                )}
+              </section>
+            ) : null;
+
+            const exportStandardCard = canReadHouseholds ? (
+              <section key="standard" className="dash-bento-card">
+                <div className="dash-bento-body">
+                  <header className="dash-bento-head">
+                    <h2 className="dash-bento-title">Chuẩn xuất khẩu</h2>
+                    <span
+                      className={`dash-bento-tag${
+                        registeredHouseholds === 0 ? "" : qualifiedPct >= 75 ? " is-ok" : " is-warn"
+                      }`}
+                    >
+                      {formatVn(qualifiedHouseholds)}/{formatVn(registeredHouseholds)} hộ
+                    </span>
+                  </header>
+
+                  <div className="dash-bento-hero is-centered">
+                    <div className="dash-bento-figure">
+                      <span className="dash-bento-num">{smoothQualifiedPct}</span>
+                      <span className="dash-bento-unit">%</span>
+                    </div>
+                  </div>
+
+                  <div className="dash-bento-clean-list" aria-label="Phân bổ trạng thái nông hộ">
+                    <div className="dash-bento-clean-row">
+                      <span>Đủ chuẩn</span>
+                      <strong>{formatVn(statusCounts.qualified)}</strong>
+                    </div>
+                    <div className="dash-bento-clean-row">
+                      <span>Chờ duyệt</span>
+                      <strong>{formatVn(statusCounts.pending)}</strong>
+                    </div>
+                    <div className="dash-bento-clean-row">
+                      <span>Khắc phục</span>
+                      <strong>{formatVn(statusCounts.improve)}</strong>
+                    </div>
+                    <div className="dash-bento-clean-row">
+                      <span>Vi phạm</span>
+                      <strong className={statusCounts.violation > 0 ? "is-danger" : ""}>
+                        {formatVn(statusCounts.violation)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <footer className="dash-bento-footer">
+                  <button
+                    type="button"
+                    className="dash-bento-footer-btn"
+                    onClick={() => requestAdminNavigate("households")}
+                  >
+                    Danh sách nông hộ
+                  </button>
+                </footer>
+              </section>
+            ) : null;
+
+            const harvestCard = (fullSpan: boolean) =>
+              canViewHarvestCard ? (
+                <section
+                  key="harvest"
+                  className="dash-bento-card"
+                  style={fullSpan ? { gridColumn: "1 / -1" } : undefined}
+                >
+                  <div className="dash-bento-body">
+                    <header className="dash-bento-head">
+                      <h2 className="dash-bento-title">
+                        {canReadHarvest && canReadTesting
+                          ? "Sản lượng và kiểm nghiệm"
+                          : canReadHarvest
+                            ? "Sản lượng thu hoạch"
+                            : "Kiểm nghiệm an toàn"}
+                      </h2>
+                    </header>
+
+                    <div className="dash-bento-hero is-centered">
+                      <div className="dash-bento-figure">
+                        {canReadHarvest ? (
+                          <>
+                            <span className="dash-bento-num">{formatVn(smoothHarvestTons, 1)}</span>
+                            <span className="dash-bento-unit">tấn</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="dash-bento-num">{labPassPct ?? 0}</span>
+                            <span className="dash-bento-unit">%</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="dash-bento-clean-list">
+                      {canReadHarvest && (
+                        <div className="dash-bento-clean-row">
+                          <span>Lô thu hoạch</span>
+                          <strong>{formatVn(harvestLots)} lô</strong>
+                        </div>
+                      )}
+                      {canReadTesting && (
+                        <div className="dash-bento-clean-row">
+                          <span>Tỷ lệ mẫu đạt MRL</span>
+                          <strong>{labPassPct !== null ? `${labPassPct}%` : "Chưa có phiếu"}</strong>
+                        </div>
+                      )}
+                      {canReadTesting && (
+                        <div className="dash-bento-clean-row">
+                          <span>Phiếu kiểm nghiệm đạt</span>
+                          <strong>{labTotal > 0 ? `${formatVn(labPassed)}/${formatVn(labTotal)}` : "0"}</strong>
+                        </div>
+                      )}
+                      {canReadViolations && (
+                        <div className="dash-bento-clean-row">
+                          <span>Vi phạm mở</span>
+                          <strong className={openViolations > 0 ? "is-danger" : ""}>{formatVn(openViolations)}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <footer className="dash-bento-footer">
+                    {canReadTesting && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn"
+                        onClick={() => requestAdminNavigate("testing")}
+                      >
+                        Kiểm nghiệm
+                      </button>
+                    )}
+                    {canReadHarvest && (
+                      <button
+                        type="button"
+                        className="dash-bento-footer-btn is-primary"
+                        onClick={() => requestAdminNavigate("harvest")}
+                      >
+                        Lô hàng
+                      </button>
+                    )}
+                  </footer>
+                </section>
+              ) : null;
+
+            const scheduleCard = (fullSpan: boolean) =>
+              canReadSchedule ? (
+                <section
+                  key="schedule"
+                  className="dash-bento-card"
+                  style={fullSpan ? { gridColumn: "1 / -1" } : undefined}
+                >
+                  <div className="dash-bento-body">
+                    <header className="dash-bento-head">
+                      <h2 className="dash-bento-title">Lịch kiểm tra thực địa</h2>
+                      {canReadViolations && (
+                        <span className={`dash-bento-tag ${openViolations === 0 ? "is-ok" : "is-danger"}`}>
+                          {openViolations === 0 ? "Không vi phạm mở" : `${formatVn(openViolations)} vi phạm mở`}
+                        </span>
+                      )}
+                    </header>
+
+                    <div className="dash-bento-hero is-centered">
+                      <div className="dash-bento-figure">
+                        <span className="dash-bento-num">{formatVn(upcomingScheduleCount)}</span>
+                        <span className="dash-bento-unit">đợt</span>
+                      </div>
+                    </div>
+
+                    {upcomingSchedule.length === 0 ? (
+                      <div className="dash-bento-empty">
+                        Chưa có đợt kiểm tra thực địa mới trong danh sách sắp tới.
+                      </div>
+                    ) : (
+                      <div className="dash-bento-schedule-list">
+                        {upcomingSchedule.slice(0, 4).map((s) => {
+                          const kind = badgeOf(SCHEDULE_KIND, s.kind);
+                          return (
+                            <div key={s.id} className="dash-bento-schedule-row">
+                              <div className="dash-bento-schedule-main">
+                                <strong>{s.title}</strong>
+                                <span>
+                                  {s.officer ? `${s.officer}, ` : ""}
+                                  {s.plotCount ? `${formatVn(s.plotCount)} thửa` : kind.label}
+                                </span>
+                              </div>
+                              <span className="dash-bento-schedule-date">{formatDate(s.scheduledOn)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <footer className="dash-bento-footer">
+                    <button
+                      type="button"
+                      className="dash-bento-footer-btn"
+                      onClick={() => requestApprovalTab("schedule")}
+                    >
+                      Xem lịch kiểm tra
+                    </button>
+                  </footer>
+                </section>
+              ) : null;
+
+            const topRowCards = [actionCard, scaleCard, exportStandardCard].filter(Boolean);
+            const bottomRowCount = (canViewHarvestCard ? 1 : 0) + (canReadSchedule ? 1 : 0);
+            const totalVisible = topRowCards.length + bottomRowCount;
+
+            if (totalVisible === 3) {
+              const allThree = [
+                ...topRowCards,
+                harvestCard(false),
+                scheduleCard(false),
+              ].filter(Boolean);
+              return <div className="dash-bento-top">{allThree}</div>;
+            }
+
+            if (totalVisible <= 2) {
+              const single = totalVisible === 1;
+              const compactCards = [
+                ...topRowCards,
+                harvestCard(single),
+                scheduleCard(single),
+              ].filter(Boolean);
+              return compactCards.length > 0 ? (
+                <div className="dash-bento-bottom">{compactCards}</div>
+              ) : null;
+            }
+
+            if (topRowCards.length === 2 && bottomRowCount === 2) {
+              return (
+                <>
+                  <div className="dash-bento-bottom">{topRowCards}</div>
+                  <div className="dash-bento-bottom">
+                    {harvestCard(false)}
+                    {scheduleCard(false)}
+                  </div>
+                </>
+              );
+            }
+
+            const bottomSingle = bottomRowCount === 1;
+            return (
+              <>
+                {topRowCards.length > 0 && <div className="dash-bento-top">{topRowCards}</div>}
+                {bottomRowCount > 0 && (
+                  <div className="dash-bento-bottom">
+                    {harvestCard(bottomSingle)}
+                    {scheduleCard(bottomSingle)}
                   </div>
                 )}
-              </div>
-
-              <footer className="dash-bento-footer">
-                <button
-                  type="button"
-                  className="dash-bento-footer-btn"
-                  onClick={() => requestApprovalTab("schedule")}
-                >
-                  Xem lịch kiểm tra
-                </button>
-              </footer>
-            </section>
-          </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

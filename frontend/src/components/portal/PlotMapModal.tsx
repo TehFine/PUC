@@ -34,9 +34,37 @@ import { lockRootScroll } from "@/lib/scroll-lock";
 interface Props {
   plot: PortalPlot;
   householdName: string;
+  householdVillageName?: string | null;
+  householdCommuneLocation?: string | null;
   onClose: () => void;
   onOpenSignboard?: (plot: PortalPlot) => void;
   chinaSafe?: boolean;
+}
+
+function resolvePlotLocationText(
+  plot: PortalPlot,
+  householdVillageName?: string | null,
+  householdCommuneLocation?: string | null,
+): string {
+  const v = (plot.village ?? householdVillageName ?? "").trim();
+  const z = (plot.zoneCode ?? plot.code ?? "").trim();
+  const fallbackCommune =
+    /ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(z)
+      ? "Xã Ea Khăl, Tỉnh Đắk Lắk"
+      : "Xã Krông Búk, Tỉnh Đắk Lắk";
+  const c =
+    (plot.communeLocation ?? "").trim() ||
+    (!plot.village && householdCommuneLocation ? householdCommuneLocation.trim() : "") ||
+    fallbackCommune;
+  if (v && c) {
+    const vNorm = v.toLowerCase();
+    const cNorm = c.toLowerCase();
+    const cFirst = cNorm.split(",")[0]?.trim() ?? "";
+    if (cNorm.startsWith(vNorm) || vNorm === cFirst) return c;
+    if (vNorm.includes(cNorm)) return v;
+    return [v, c].join(", ");
+  }
+  return [v, c].filter(Boolean).join(", ") || "Chưa cập nhật";
 }
 
 type LayerMode = "satellite" | "satellite-google" | "streets";
@@ -66,7 +94,15 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
-export default function PlotMapModal({ plot, householdName, onClose, onOpenSignboard, chinaSafe = false }: Props) {
+export default function PlotMapModal({
+  plot,
+  householdName,
+  householdVillageName,
+  householdCommuneLocation,
+  onClose,
+  onOpenSignboard,
+  chinaSafe = false,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const streetLayerRef = useRef<Leaflet.Layer | null>(null);
@@ -488,7 +524,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div class="pt-leaflet-card-rows">
                   <div class="pt-leaflet-card-row"><span>Chủ hộ</span><strong>${escapeHtml(householdName)}</strong></div>
                   <div class="pt-leaflet-card-row"><span>Diện tích</span><strong>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 4 }))} ha</strong></div>
-                  <div class="pt-leaflet-card-row"><span>Giống</span><strong>${escapeHtml(plot.variety || "Sầu riêng")}</strong></div>
+                  <div class="pt-leaflet-card-row"><span>Giống</span><strong>${escapeHtml(plot.variety || "Chưa cập nhật")}</strong></div>
                 </div>
               </div>
             `,
@@ -785,9 +821,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               </div>
               <div className="pt-mapmodal-popup-owner">
                 <span>
-                  {plot.village && plot.village !== "Xã Ea Khăl"
-                    ? `${plot.village}, Xã Ea Khăl, Đắk Lắk`
-                    : "Xã Ea Khăl, Đắk Lắk"}
+                  {resolvePlotLocationText(plot, householdVillageName, householdCommuneLocation)}
                 </span>
               </div>
             </div>
@@ -860,10 +894,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                   <span className="pt-mapmodal-stat-label">Mã vùng trồng</span>
                   <div className="pt-mapmodal-stat-right">
                     <strong className="pt-mapmodal-stat-val">
-                      {plot.zoneCode || "-"}
+                      {plot.zoneCode || "Chưa có mã vùng"}
                     </strong>
                     <span className="pt-mapmodal-stat-sub">
-                      {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
+                      {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Năm trồng: Chưa cập nhật"}
                     </span>
                   </div>
                 </div>

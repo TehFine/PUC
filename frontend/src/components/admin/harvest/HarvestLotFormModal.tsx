@@ -34,7 +34,7 @@ export default function HarvestLotFormModal({
   onSaved: () => void;
 }) {
   const [code, setCode] = useState(initial?.code ?? "");
-  const [variety, setVariety] = useState(initial?.variety ?? "Ri6 & Monthong (Dona)");
+  const [variety, setVariety] = useState(initial?.variety ?? "");
   const [harvestedOn, setHarvestedOn] = useState(dateInput(initial?.harvestedOn) || todayIso());
   const [packedOn, setPackedOn] = useState(dateInput(initial?.packedOn));
   const [exportedOn, setExportedOn] = useState(dateInput(initial?.exportedOn));
@@ -45,7 +45,7 @@ export default function HarvestLotFormModal({
   const [market, setMarket] = useState(initial?.market ?? "Trung Quốc");
   const [status, setStatus] = useState<HarvestLotStatus>(initial?.status ?? "sampling");
   const [revokedReason, setRevokedReason] = useState(initial?.revokedReason ?? "");
-  const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "VN-DLPH-0089");
+  const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "");
   const [packhouseName, setPackhouseName] = useState(initial?.packhouseName ?? "");
   const [packhouseAddress, setPackhouseAddress] = useState(initial?.packhouseAddress ?? "");
   const [phytosanitaryCertNo, setPhytosanitaryCertNo] = useState(initial?.phytosanitaryCertNo ?? "");
@@ -172,15 +172,15 @@ export default function HarvestLotFormModal({
           label="Doanh nghiệp / Cơ sở đóng gói liên kết"
           value={enterpriseId}
           onChange={handleEnterpriseChange}
-          placeholder="— Chọn doanh nghiệp (tùy chọn) —"
-          options={enterprises.map((e) => ({ value: String(e.id), label: `${e.code} – ${e.name}` }))}
+          placeholder="Chọn doanh nghiệp (tùy chọn)"
+          options={enterprises.map((e) => ({ value: String(e.id), label: `${e.code} - ${e.name}` }))}
         />
         <SelectField
           label="Hợp đồng bao tiêu (chỉ lưu nội bộ)"
           value={contractId}
           onChange={setContractId}
-          placeholder="— Chọn hợp đồng (tùy chọn) —"
-          options={contracts.map((c) => ({ value: String(c.id), label: `${c.code} – ${c.title}` }))}
+          placeholder="Chọn hợp đồng (tùy chọn)"
+          options={contracts.map((c) => ({ value: String(c.id), label: `${c.code} - ${c.title}` }))}
         />
         <TextField label="Đơn vị thu mua thương mại (ẩn khỏi QR công khai)" required value={buyer} onChange={setBuyer} maxLength={200} />
         <SelectField
@@ -190,7 +190,13 @@ export default function HarvestLotFormModal({
           onChange={setMarket}
           options={MARKET_SUGGESTIONS.map((m) => ({ value: m, label: m }))}
         />
-        <TextField label="Mã số cơ sở đóng gói (PHC)" value={packhouseCode} onChange={setPackhouseCode} maxLength={50} />
+        <TextField
+          label="Mã số cơ sở đóng gói (PHC)"
+          value={packhouseCode}
+          onChange={setPackhouseCode}
+          maxLength={50}
+          placeholder="VD: VN-DLPH-..."
+        />
         <TextField label="Tên cơ sở đóng gói hiển thị QR" value={packhouseName} onChange={setPackhouseName} maxLength={200} placeholder="Mặc định theo CSĐG liên kết" />
         <TextField label="Địa chỉ cơ sở đóng gói" value={packhouseAddress} onChange={setPackhouseAddress} maxLength={250} placeholder="Xã, tỉnh" />
         <TextField label="Số giấy chứng nhận kiểm dịch thực vật" value={phytosanitaryCertNo} onChange={setPhytosanitaryCertNo} maxLength={80} placeholder="VD: KDTV-VN-2026-0128" />

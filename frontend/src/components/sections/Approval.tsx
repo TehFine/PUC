@@ -49,30 +49,41 @@ const MINUTE_RESULT_OPTIONS = optionsOf(MINUTE_RESULT);
 
 export default function Approval() {
   const { can } = useAuth();
+  const canReadApprovals = can("approvals", "read");
   const canCreateApproval = can("approvals", "create");
   const canUpdateApproval = can("approvals", "update");
   const canDeleteApproval = can("approvals", "delete");
   const canReadRegistrations = can("registrations", "read");
 
+  const canReadSchedule = can("schedule", "read");
   const canCreateSchedule = can("schedule", "create");
   const canUpdateSchedule = can("schedule", "update");
   const canDeleteSchedule = can("schedule", "delete");
 
+  const canReadMinutes = can("minutes", "read");
   const canCreateMinute = can("minutes", "create");
   const canUpdateMinute = can("minutes", "update");
   const canDeleteMinute = can("minutes", "delete");
+
+  const defaultTab: Tab = canReadApprovals
+    ? "pending"
+    : canReadRegistrations
+      ? "registrations"
+      : canReadSchedule
+        ? "schedule"
+        : "minutes";
 
   const isApprovalTab = (raw: string): raw is Tab =>
     raw === "pending" || raw === "registrations" || raw === "schedule" || raw === "minutes";
 
   const [tab, setTab] = useState<Tab>(
-    () => consumePendingApprovalTab() ?? readInitialUrlSubTab("sub", "pending", isApprovalTab, ADMIN_LAST_URL_KEY),
+    () => consumePendingApprovalTab() ?? readInitialUrlSubTab("sub", defaultTab, isApprovalTab, ADMIN_LAST_URL_KEY),
   );
   const selectTab = useUrlSubTab<Tab>(
     "sub",
     tab,
     setTab,
-    "pending",
+    defaultTab,
     isApprovalTab,
   );
   const registrationsSummary = useApi<{
@@ -126,7 +137,7 @@ export default function Approval() {
   const [minResult, setMinResult] = usePersistedState("admin:minutes:result", "");
   const [minPage, setMinPage] = usePersistedState("admin:minutes:page", 1);
 
-  const approvals = useApiList<ApprovalRow>("approvals", {
+  const approvals = useApiList<ApprovalRow>(canReadApprovals ? "approvals" : null, {
     q: debouncedAppSearch || undefined,
     status: appStatus || undefined,
     priority: appPriority || undefined,
@@ -134,14 +145,14 @@ export default function Approval() {
     pageSize: PAGE_SIZE,
   });
 
-  const schedules = useApiList<ScheduleRow>("schedule", {
+  const schedules = useApiList<ScheduleRow>(canReadSchedule ? "schedule" : null, {
     q: debouncedSchedSearch || undefined,
     kind: schedKind || undefined,
     page: schedPage,
     pageSize: PAGE_SIZE,
   });
 
-  const minutes = useApiList<MinuteRow>("minutes", {
+  const minutes = useApiList<MinuteRow>(canReadMinutes ? "minutes" : null, {
     q: debouncedMinSearch || undefined,
     result: minResult || undefined,
     page: minPage,
@@ -189,7 +200,9 @@ export default function Approval() {
   const [deletingMinute, setDeletingMinute] = useState<MinuteRow | null>(null);
 
   const tabs: TabItem<Tab>[] = [
-    { id: "pending", label: "Hồ sơ chờ duyệt", badge: approvals.total, pendingBadge: pendingApprovalCount },
+    ...(canReadApprovals
+      ? [{ id: "pending" as const, label: "Hồ sơ chờ duyệt", badge: approvals.total, pendingBadge: pendingApprovalCount }]
+      : []),
     ...(canReadRegistrations
       ? [
           {
@@ -200,9 +213,17 @@ export default function Approval() {
           },
         ]
       : []),
-    { id: "schedule", label: "Lịch kiểm tra", badge: schedules.total },
-    { id: "minutes", label: "Biên bản kiểm tra", badge: minutes.total },
+    ...(canReadSchedule ? [{ id: "schedule" as const, label: "Lịch kiểm tra", badge: schedules.total }] : []),
+    ...(canReadMinutes ? [{ id: "minutes" as const, label: "Biên bản kiểm tra", badge: minutes.total }] : []),
   ];
+
+  const activeTab: Tab =
+    (tab === "pending" && !canReadApprovals) ||
+    (tab === "registrations" && !canReadRegistrations) ||
+    (tab === "schedule" && !canReadSchedule) ||
+    (tab === "minutes" && !canReadMinutes)
+      ? defaultTab
+      : tab;
 
   return (
     <>
@@ -228,9 +249,9 @@ export default function Approval() {
         </div>
       )}
 
-      <TabBar tabs={tabs} active={tab} onChange={selectTab} />
+      <TabBar tabs={tabs} active={activeTab} onChange={selectTab} />
 
-      {tab === "pending" && (
+      {activeTab === "pending" && canReadApprovals && (
         <>
           <div className="filter-bar">
             <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
@@ -367,9 +388,9 @@ export default function Approval() {
         </>
       )}
 
-      {tab === "registrations" && canReadRegistrations && <Registrations />}
+      {activeTab === "registrations" && canReadRegistrations && <Registrations />}
 
-      {tab === "schedule" && (
+      {activeTab === "schedule" && canReadSchedule && (
         <>
           <div className="filter-bar">
             <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
@@ -416,56 +437,67 @@ export default function Approval() {
           />
 
           {schedules.rows.length > 0 && (
-            <div className="schedule-grid">
-              {schedules.rows.map((s) => {
-                const kindBadge = badgeOf(SCHEDULE_KIND, s.kind);
-                return (
-                  <div key={s.id} className="schedule-card">
-                    <div className="schedule-card-body">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <div className="schedule-card-date" style={{ marginBottom: 0 }}>
-                          {formatDate(s.scheduledOn)}
+            <>
+              <div className="schedule-grid">
+                {schedules.rows.map((s) => {
+                  const kindBadge = badgeOf(SCHEDULE_KIND, s.kind);
+                  return (
+                    <div key={s.id} className="schedule-card">
+                      <div className="schedule-card-body">
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <div className="schedule-card-date" style={{ marginBottom: 0 }}>
+                            {formatDate(s.scheduledOn)}
+                          </div>
+                          <span className={`badge ${kindBadge.badge}`}>{kindBadge.label}</span>
                         </div>
-                        <span className={`badge ${kindBadge.badge}`}>{kindBadge.label}</span>
+                        <div className="schedule-card-title">{s.title}</div>
+                        <div className="schedule-card-meta">
+                          Cán bộ: <strong>{s.officer}</strong>
+                          <br />
+                          Quy mô: <strong>{s.plotCount} thửa</strong> cần kiểm tra
+                        </div>
                       </div>
-                      <div className="schedule-card-title">{s.title}</div>
-                      <div className="schedule-card-meta">
-                        Cán bộ: <strong>{s.officer}</strong>
-                        <br />
-                        Quy mô: <strong>{s.plotCount} thửa</strong> cần kiểm tra
-                      </div>
+                      {(canUpdateSchedule || canDeleteSchedule) && (
+                        <footer className="dash-bento-footer schedule-card-footer">
+                          {canUpdateSchedule && (
+                            <button
+                              type="button"
+                              className="dash-bento-footer-btn"
+                              onClick={() => setEditingSchedule(s)}
+                            >
+                              Sửa
+                            </button>
+                          )}
+                          {canDeleteSchedule && (
+                            <button
+                              type="button"
+                              className="dash-bento-footer-btn is-danger"
+                              onClick={() => setDeletingSchedule(s)}
+                            >
+                              Xóa
+                            </button>
+                          )}
+                        </footer>
+                      )}
                     </div>
-                    {(canUpdateSchedule || canDeleteSchedule) && (
-                      <footer className="dash-bento-footer schedule-card-footer">
-                        {canUpdateSchedule && (
-                          <button
-                            type="button"
-                            className="dash-bento-footer-btn"
-                            onClick={() => setEditingSchedule(s)}
-                          >
-                            Sửa
-                          </button>
-                        )}
-                        {canDeleteSchedule && (
-                          <button
-                            type="button"
-                            className="dash-bento-footer-btn is-danger"
-                            onClick={() => setDeletingSchedule(s)}
-                          >
-                            Xóa
-                          </button>
-                        )}
-                      </footer>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              <div className="admin-diary-pagination">
+                <Pagination
+                  page={schedPage}
+                  pageSize={PAGE_SIZE}
+                  total={schedules.total}
+                  unit="lịch kiểm tra"
+                  onChange={setSchedPage}
+                />
+              </div>
+            </>
           )}
         </>
       )}
 
-      {tab === "minutes" && (
+      {activeTab === "minutes" && canReadMinutes && (
         <>
           <div className="filter-bar">
             <div style={{ position: "relative", flex: 1, minWidth: 220 }}>

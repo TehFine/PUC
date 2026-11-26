@@ -292,6 +292,8 @@ function handleStreamData(raw: string): void {
     if (tagSet.has("plots")) {
       refreshMountedApiQueries("/plots");
       refreshMountedApiQueries("/households");
+      refreshMountedApiQueries("/harvest");
+      refreshMountedApiQueries("/contracts");
       invalidateQueries(portalPath("plots"), portalPath("overview"), portalPath("profile"));
     }
     if (tagSet.has("catalog")) {
