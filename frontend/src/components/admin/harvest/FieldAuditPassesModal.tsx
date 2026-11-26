@@ -94,7 +94,7 @@ export default function FieldAuditPassesModal({
     if (secretToken) {
       setCreatedSecret({ ...created, passToken: secretToken });
     }
-    toast.success(`Đã cấp mã thẻ thẩm định thực địa ${created.code}.`);
+    toast.success(`Đã cấp thẻ thẩm định ${created.code}`);
     setDelegationName("");
     setOrganization("");
     setPassNote("");
@@ -136,8 +136,8 @@ export default function FieldAuditPassesModal({
       setCopiedId(pass.id);
       toast.success(
         secretToken
-          ? `Đã sao chép đường dẫn mời một lần của thẻ ${pass.code} (tự xóa bộ nhớ tạm sau 45 giây).`
-          : `Đã sao chép mã định danh thẻ ${pass.code}.`,
+          ? `Đã sao chép liên kết thẻ ${pass.code} (tự xóa sau 45s)`
+          : `Đã sao chép mã thẻ ${pass.code}`,
       );
       setTimeout(() => setCopiedId(null), 2200);
     } else {
@@ -233,7 +233,7 @@ export default function FieldAuditPassesModal({
       coopAddress: coopAddress.trim() || null,
     });
     if (!updated) return;
-    toast.success("Đã cập nhật thông tin bảo chứng Cổng thông tin Tỉnh và UBND Xã trên toàn bộ mã QR.");
+    toast.success("Đã lưu thông tin bảo chứng trên mã QR");
     await endorseApi.refresh();
     setEndorseDraft({});
   };

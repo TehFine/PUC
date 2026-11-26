@@ -102,8 +102,8 @@ export default function HouseholdAccountModal({
       });
       toast.success(
         hasExisting
-          ? `Đã cấp lại thông tin tài khoản cho hộ ${household.name}.`
-          : `Đã ban hành tài khoản cho hộ ${household.name}.`,
+          ? `Đã cấp lại tài khoản hộ ${household.name}`
+          : `Đã cấp tài khoản hộ ${household.name}`,
       );
       setIssuedResult({
         username: res.username,
@@ -134,7 +134,7 @@ export default function HouseholdAccountModal({
       .join("\n");
 
     if (await copySensitiveWithAutoClear(text)) {
-      toast.success("Đã sao chép thông tin bàn giao (tự xóa bộ nhớ tạm sau 45 giây).");
+      toast.success("Đã sao chép phiếu bàn giao (tự xóa sau 45s)");
     } else {
       toast.error("Không sao chép tự động được.");
     }

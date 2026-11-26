@@ -324,7 +324,7 @@ export function ViolationFormModal({
     const res = await save.run(payload);
     if (!res) return;
     if (res.mode === "queued") {
-      toast.success("Mạng hiện trường yếu: đã lưu cảnh báo vi phạm vào máy để tự động đồng bộ khi có sóng.");
+      toast.success("Đã lưu cảnh báo vào máy, tự gửi khi có sóng");
       onClose();
       return;
     }

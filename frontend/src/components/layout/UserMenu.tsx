@@ -12,6 +12,7 @@ import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import { toast } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/constants/roles";
 import { errorMessage } from "@/lib/api-client";
 import { resetOverlayHistoryOnRouteLeave, usePersistedState } from "@/lib/back-navigation";
@@ -114,6 +115,7 @@ export default function UserMenu({
       });
       setProfilePasswordInput("");
       setEditingProfile(false);
+      toast.success("Đã lưu thông tin tài khoản");
     } catch (err) {
       setProfileError(errorMessage(err, "Không thể cập nhật thông tin tài khoản."));
     } finally {
@@ -331,6 +333,7 @@ export default function UserMenu({
                 className="pt-profile-logout-btn"
                 onClick={() => {
                   setOpen(false);
+                  toast.success("Đã đăng xuất");
                   void logout();
                 }}
               >

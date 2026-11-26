@@ -39,11 +39,13 @@ const FieldAuditPassesModal = dynamic(() => import("@/components/admin/harvest/F
 import { useApi, useApiList } from "@/hooks/use-api";
 import type {
   ContractRecord,
+  ContractSummary,
   EnterpriseRecord,
   HarvestLotRecord,
   HarvestPlanRecord,
   HarvestPlanStatus,
   StampAllocationRecord,
+  StampAllocationSummary,
 } from "@/types/harvest";
 
 interface GrowingZoneRow {
@@ -139,11 +141,12 @@ export default function Harvest() {
   const [lotStatus, setLotStatus] = usePersistedState("admin:harvest:status", "");
   const debouncedLotQ = useDebounced(lotQ);
   const hasLotFilter = Boolean(debouncedLotQ || lotMarket || lotStatus);
-  const allLots = useApiList<HarvestLotRecord>("harvest");
+  const allLots = useApiList<HarvestLotRecord>("harvest", { pageSize: 500 });
   const filteredLots = useApiList<HarvestLotRecord>(hasLotFilter ? "harvest" : null, {
     q: debouncedLotQ,
     market: lotMarket,
     status: lotStatus,
+    pageSize: 500,
   });
   const lots = hasLotFilter ? filteredLots : allLots;
   const [editingLot, setEditingLot] = usePersistedEditableSelection(
@@ -193,40 +196,72 @@ export default function Harvest() {
   // 3. Cấp phát tem nông hộ
   const [stampQ, setStampQ] = useState("");
   const debouncedStampQ = useDebounced(stampQ);
-  const stampAllocations = useApiList<StampAllocationRecord>(canReadStamps ? "stamp-allocations" : null, { q: debouncedStampQ });
+  const hasStampFilter = Boolean(debouncedStampQ);
+  const allStampAllocations = useApiList<
+    StampAllocationRecord,
+    { summary?: StampAllocationSummary }
+  >(canReadStamps ? "stamp-allocations" : null, { pageSize: 500 });
+  const filteredStampAllocations = useApiList<
+    StampAllocationRecord,
+    { summary?: StampAllocationSummary }
+  >(canReadStamps && hasStampFilter ? "stamp-allocations" : null, {
+    q: debouncedStampQ,
+    pageSize: 500,
+  });
+  const stampAllocations = hasStampFilter ? filteredStampAllocations : allStampAllocations;
   const [creatingStampAllocation, setCreatingStampAllocation] = usePersistedState("admin:harvest:create-stamp", false);
   const [revokingAllocation, setRevokingAllocation] = useState<StampAllocationRecord | null>(null);
   const [viewingStampsAllocation, setViewingStampsAllocation] = usePersistedRecordSelection(
     "admin:harvest:view-stamp",
-    stampAllocations.rows,
+    allStampAllocations.rows,
     (r) => r.id,
-    stampAllocations.loading,
+    allStampAllocations.loading,
   );
 
   // 4. Hợp đồng & Doanh nghiệp
   const [contractQ, setContractQ] = useState("");
   const debouncedContractQ = useDebounced(contractQ);
-  const contracts = useApiList<ContractRecord>(canReadContracts ? "contracts" : null, {
-    q: debouncedContractQ,
-  });
+  const hasContractFilter = Boolean(debouncedContractQ);
+  const allContracts = useApiList<ContractRecord, { summary?: ContractSummary }>(
+    canReadContracts ? "contracts" : null,
+    { pageSize: 500 },
+  );
+  const filteredContracts = useApiList<ContractRecord, { summary?: ContractSummary }>(
+    canReadContracts && hasContractFilter ? "contracts" : null,
+    {
+      q: debouncedContractQ,
+      pageSize: 500,
+    },
+  );
+  const contracts = hasContractFilter ? filteredContracts : allContracts;
   const [editingContract, setEditingContract] = usePersistedEditableSelection(
     "admin:harvest:edit-contract",
-    contracts.rows,
+    allContracts.rows,
     (r) => r.id,
-    contracts.loading,
+    allContracts.loading,
   );
   const [deletingContract, setDeletingContract] = useState<ContractRecord | null>(null);
 
   const [entQ, setEntQ] = useState("");
   const debouncedEntQ = useDebounced(entQ);
-  const enterprises = useApiList<EnterpriseRecord>(canReadEnterprises ? "enterprises" : null, {
-    q: debouncedEntQ,
-  });
+  const hasEntFilter = Boolean(debouncedEntQ);
+  const allEnterprises = useApiList<EnterpriseRecord>(
+    canReadEnterprises ? "enterprises" : null,
+    { pageSize: 500 },
+  );
+  const filteredEnterprises = useApiList<EnterpriseRecord>(
+    canReadEnterprises && hasEntFilter ? "enterprises" : null,
+    {
+      q: debouncedEntQ,
+      pageSize: 500,
+    },
+  );
+  const enterprises = hasEntFilter ? filteredEnterprises : allEnterprises;
   const [editingEnterprise, setEditingEnterprise] = usePersistedEditableSelection(
     "admin:harvest:edit-enterprise",
-    enterprises.rows,
+    allEnterprises.rows,
     (r) => r.id,
-    enterprises.loading,
+    allEnterprises.loading,
   );
   const [deletingEnterprise, setDeletingEnterprise] = useState<EnterpriseRecord | null>(null);
   const growingZones = useApi<{ data?: GrowingZoneRow[] }>(
@@ -239,7 +274,7 @@ export default function Harvest() {
   const handleZoneStatusChange = async (code: string, nextStatus: GrowingZoneRow["status"]) => {
     try {
       await api.patch(`/growing-zones/${encodeURIComponent(code)}`, { status: nextStatus });
-      toast.success(`Đã cập nhật trạng thái thời gian thực cho mã vùng ${code}.`);
+      toast.success(`Đã cập nhật trạng thái mã vùng ${code}`);
       await growingZones.refresh();
     } catch (err) {
       toast.error(errorMessage(err, "Không thể cập nhật trạng thái mã vùng trồng."));
@@ -265,7 +300,7 @@ export default function Harvest() {
         gaccApprovedOn: payload.gaccApprovedOn,
         validUntil: payload.validUntil,
       });
-      toast.success(`Đã cập nhật hồ sơ mã vùng trồng ${payload.code}.`);
+      toast.success(`Đã lưu hồ sơ mã vùng ${payload.code}`);
       setEditingZone(null);
       await growingZones.refresh();
     } catch (err) {
@@ -275,34 +310,48 @@ export default function Harvest() {
     }
   };
 
-  // Tính KPI thực từ dữ liệu backend
+  // Tính KPI thực từ dữ liệu backend (không bị biến dạng bởi ô tìm kiếm và loại trừ các lô/tem đã thu hồi, hợp đồng hết hạn)
+  const stampSummary = allStampAllocations.raw?.summary ?? stampAllocations.raw?.summary;
+  const contractSummary = allContracts.raw?.summary ?? contracts.raw?.summary;
   const kpis = useMemo(() => {
-    const lotRows = allLots.rows;
-    const totalTons = lotRows.reduce((sum, l) => sum + Number(l.weightTons || 0), 0);
-    const exportedCount = lotRows.filter((l) => l.status === "exported" || l.status === "delivered").length;
-    const contractRows = contracts.rows;
-    const totalContractTons = contractRows.reduce((sum, c) => sum + Number(c.targetTons || 0), 0);
-    const totalStamps = stampAllocations.rows.reduce((sum, s) => sum + Number(s.quantityAllocated || 0), 0);
-    const activatedStamps = stampAllocations.rows.reduce((sum, s) => sum + Number(s.activatedCount || 0), 0);
+    const validLots = allLots.rows.filter((l) => l.status !== "revoked");
+    const totalTons = validLots.reduce((sum, l) => sum + Number(l.weightTons || 0), 0);
+    const exportedCount = validLots.filter(
+      (l) => l.status === "exported" || l.status === "delivered",
+    ).length;
+    const activeContracts = allContracts.rows.filter((c) => c.status === "active");
+    const activeContractCount = contractSummary
+      ? Number(contractSummary.activeCount) || 0
+      : activeContracts.length;
+    const activeContractTons = contractSummary
+      ? Number(contractSummary.activeTargetTons) || 0
+      : activeContracts.reduce((sum, c) => sum + Number(c.targetTons || 0), 0);
+    const validStampRows = allStampAllocations.rows.filter((s) => s.status !== "revoked");
+    const totalStamps = stampSummary
+      ? Number(stampSummary.issuedStamps) || 0
+      : validStampRows.reduce((sum, s) => sum + Number(s.quantityAllocated || 0), 0);
+    const activatedStamps = stampSummary
+      ? Number(stampSummary.activatedStamps) || 0
+      : validStampRows.reduce((sum, s) => sum + Number(s.activatedCount || 0), 0);
 
     return [
       {
         num: formatVn(totalTons, 1),
         unit: "tấn",
         label: "Tổng sản lượng lô",
-        sub: `${lotRows.length} lô thu hoạch`,
+        sub: `${validLots.length} lô hợp lệ`,
       },
       {
-        num: String(lotRows.length),
+        num: String(validLots.length),
         unit: "lô",
         label: "Lô hàng tạo ra",
         sub: `${exportedCount} lô đã xuất hoặc giao`,
       },
       {
-        num: String(contractRows.length),
+        num: String(activeContractCount),
         unit: "HĐ",
         label: "Hợp đồng bao tiêu",
-        sub: `${formatVn(totalContractTons, 0)} tấn cam kết`,
+        sub: `${formatVn(activeContractTons, 0)} tấn cam kết hiệu lực`,
       },
       {
         num: formatVn(totalStamps, 0),
@@ -311,7 +360,13 @@ export default function Harvest() {
         sub: `${formatVn(activatedStamps, 0)} tem đã kích hoạt`,
       },
     ];
-  }, [allLots.rows, contracts.rows, stampAllocations.rows]);
+  }, [
+    allLots.rows,
+    allContracts.rows,
+    allStampAllocations.rows,
+    contractSummary,
+    stampSummary,
+  ]);
 
   const handlePrimaryAction = () => {
     if (tab === "lots") setEditingLot("new");
@@ -1093,8 +1148,8 @@ export default function Harvest() {
       {editingLot && (
         <HarvestLotFormModal
           initial={editingLot === "new" ? null : editingLot}
-          enterprises={enterprises.rows}
-          contracts={contracts.rows}
+          enterprises={allEnterprises.rows}
+          contracts={allContracts.rows}
           onClose={() => setEditingLot(null)}
           onSaved={() => {
             setEditingLot(null);
@@ -1157,7 +1212,8 @@ export default function Harvest() {
           onClose={() => setCreatingStampAllocation(false)}
           onSaved={() => {
             setCreatingStampAllocation(false);
-            void stampAllocations.refresh();
+            void allStampAllocations.refresh();
+            if (hasStampFilter) void filteredStampAllocations.refresh();
           }}
         />
       )}
@@ -1177,7 +1233,8 @@ export default function Harvest() {
           onClose={() => setRevokingAllocation(null)}
           onDone={() => {
             setRevokingAllocation(null);
-            void stampAllocations.refresh();
+            void allStampAllocations.refresh();
+            if (hasStampFilter) void filteredStampAllocations.refresh();
           }}
         />
       )}
@@ -1189,11 +1246,12 @@ export default function Harvest() {
       {editingContract && (
         <ContractFormModal
           initial={editingContract === "new" ? null : editingContract}
-          enterprises={enterprises.rows}
+          enterprises={allEnterprises.rows}
           onClose={() => setEditingContract(null)}
           onSaved={() => {
             setEditingContract(null);
-            void contracts.refresh();
+            void allContracts.refresh();
+            if (hasContractFilter) void filteredContracts.refresh();
           }}
         />
       )}
@@ -1210,7 +1268,8 @@ export default function Harvest() {
           onClose={() => setDeletingContract(null)}
           onDone={() => {
             setDeletingContract(null);
-            void contracts.refresh();
+            void allContracts.refresh();
+            if (hasContractFilter) void filteredContracts.refresh();
           }}
         />
       )}
@@ -1222,7 +1281,8 @@ export default function Harvest() {
           onClose={() => setEditingEnterprise(null)}
           onSaved={() => {
             setEditingEnterprise(null);
-            void enterprises.refresh();
+            void allEnterprises.refresh();
+            if (hasEntFilter) void filteredEnterprises.refresh();
           }}
         />
       )}
@@ -1239,7 +1299,8 @@ export default function Harvest() {
           onClose={() => setDeletingEnterprise(null)}
           onDone={() => {
             setDeletingEnterprise(null);
-            void enterprises.refresh();
+            void allEnterprises.refresh();
+            if (hasEntFilter) void filteredEnterprises.refresh();
           }}
         />
       )}

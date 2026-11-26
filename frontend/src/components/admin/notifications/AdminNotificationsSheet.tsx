@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Bell } from "@/components/ui/PublicIcon";
+import { toast } from "@/components/ui/Toast";
 import {
   notifyCountsChanged,
   requestAdminNavigate,
@@ -26,22 +27,20 @@ import { lazyChunk } from "@/lib/lazy-chunk";
 import type { Tone } from "@/lib/portal-labels";
 import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
-import { formatDate, formatDateTime } from "@/utils/format";
+import { formatDate, formatTime, groupNotificationsByDay } from "@/utils/format";
 
-function enrichDiaryNotificationBody(item: NotificationItem): string | null {
+function formatDiaryNotificationBody(item: NotificationItem): string | null {
   if (!item.body) return null;
   if (item.kind !== "protocol" && !item.title.includes("nhật ký")) {
     return item.body;
   }
-  const trailingDateOnly = /^(.*)\((\d{2}\/\d{2}\/\d{4})\)$/.exec(item.body.trim());
+  const trailingDateOnly = /^(.*?)\s*\((\d{2}\/\d{2}\/\d{4})\)$/.exec(item.body.trim());
   if (!trailingDateOnly) return item.body;
-  const dt = formatDateTime(item.createdAt);
-  if (!/\d{2}:\d{2}$/.test(dt)) return item.body;
   const createdDate = formatDate(item.createdAt);
   const [, prefix, workDate] = trailingDateOnly;
   return workDate === createdDate
-    ? `${prefix}(${dt})`
-    : `${prefix}(làm ${workDate}, cập nhật ${dt})`;
+    ? prefix.trim()
+    : `${prefix.trim()} (ngày thực hiện ${workDate})`;
 }
 
 const BroadcastNoticeModal = dynamic(
@@ -249,6 +248,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
       await api.post("/notifications/read-all");
       invalidateQueries(NOTIFICATIONS_PATH);
       notifyCountsChanged();
+      toast.success("Đã đánh dấu đã đọc tất cả");
     } catch {
       invalidateQueries(NOTIFICATIONS_PATH);
     } finally {
@@ -343,50 +343,58 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                     : "Chưa có thông báo nào đã đọc."}
               </EmptyState>
             ) : (
-              <div className="admin-notif-card-list">
-                {visibleItems.map((item) => {
-                  const meta = kindMeta(item);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`admin-notif-card ${item.readAt ? "is-read" : "is-unread"}`}
-                      onClick={() => void handleSelect(item)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color:
-                              meta.tone === "red"
-                                ? "#b91c1c"
-                                : meta.tone === "gold"
-                                  ? "#9a6712"
-                                  : meta.tone === "green"
-                                    ? "#15803d"
-                                    : meta.tone === "blue"
-                                      ? "#007aff"
-                                      : "#5f6d66",
-                          }}
-                        >
-                          {meta.label}
-                        </span>
-                        <span style={{ fontSize: 11.5, color: "#60736c", fontVariantNumeric: "tabular-nums" }}>
-                          {formatDateTime(item.createdAt)}
-                        </span>
-                      </div>
-                      <strong style={{ fontSize: 13.5, color: "#14372f", lineHeight: 1.4 }}>
-                        {item.title}
-                      </strong>
-                      {item.body && (
-                        <p style={{ margin: 0, fontSize: 12.5, color: "#435951", lineHeight: 1.45, fontVariantNumeric: "tabular-nums" }}>
-                          {enrichDiaryNotificationBody(item)}
-                        </p>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="admin-notif-day-list">
+                {groupNotificationsByDay(visibleItems).map((group) => (
+                  <section key={group.dayKey} className="admin-notif-day-group" aria-label={group.heading}>
+                    <div className="admin-notif-day-heading">{group.heading}</div>
+                    <div className="admin-notif-card-list">
+                      {group.items.map((item) => {
+                        const meta = kindMeta(item);
+                        const timeLabel = formatTime(item.createdAt);
+                        const bodyText = formatDiaryNotificationBody(item);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`admin-notif-card ${item.readAt ? "is-read" : "is-unread"}`}
+                            onClick={() => void handleSelect(item)}
+                          >
+                            <div className="admin-notif-card-top">
+                              <span
+                                className="admin-notif-card-kind"
+                                style={{
+                                  color:
+                                    meta.tone === "red"
+                                      ? "#b91c1c"
+                                      : meta.tone === "gold"
+                                        ? "#9a6712"
+                                        : meta.tone === "green"
+                                          ? "#15803d"
+                                          : meta.tone === "blue"
+                                            ? "#007aff"
+                                            : "#5f6d66",
+                                }}
+                              >
+                                {meta.label}
+                              </span>
+                              {timeLabel && (
+                                <span className="admin-notif-card-time">{timeLabel}</span>
+                              )}
+                            </div>
+                            <strong className="admin-notif-card-title">
+                              {item.title}
+                            </strong>
+                            {bodyText && (
+                              <p className="admin-notif-card-body">
+                                {bodyText}
+                              </p>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </div>

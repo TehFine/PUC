@@ -62,7 +62,7 @@ export default function BroadcastNoticeModal({
 
     setTitle("");
     setMessage("");
-    toast.success("Đã gửi thông báo đến toàn thể nông hộ và Ban điều hành HTX.");
+    toast.success("Đã gửi thông báo toàn Hợp tác xã");
     refreshMountedApiQueries("/system-alerts");
     invalidateQueries(NOTIFICATIONS_PATH);
     notifySystemAlertsChanged();

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useTr
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { toast } from "@/components/ui/Toast";
 import { useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import type { HarvestItem } from "@/types/entities";
@@ -235,6 +236,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         });
         const updated = await fetchItemsWithQr(lotId, eccLevel);
         setItems(updated);
+        toast.success(`Đã tạo ${count} mã tem ${itemType === "fruit" ? "trái" : "thùng"}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Không thể sinh tem mới.");
       }
@@ -268,8 +270,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         lot.code,
         item.serialCode,
         tokenOrSerial,
-        item.pucCode || "VN-DLOR-0086",
-        lot.packhouseCode || "VN-DLPH-0089",
+        item.pucCode?.trim() || "",
+        lot.packhouseCode?.trim() || "",
         item.itemType === "fruit" ? "Quả" : "Thùng",
         item.grade ?? "A",
         item.weightKg ?? "",
@@ -279,6 +281,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     });
     const blob = buildUtf8CsvBlob(headers, rows);
     triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.csv`);
+    toast.success("Đã tải tệp CSV danh sách tem");
   };
 
   const handlePrint = () => {
@@ -296,6 +299,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const copyCode = (code: string) => {
     void navigator.clipboard.writeText(code);
     setCopiedCode(code);
+    toast.success(`Đã sao chép mã ${code}`);
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
@@ -483,8 +487,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             ) : (
               <div className={`print-sheet print-sheet-${itemType}`}>
                 {filteredItems.map((item) => {
-                  const itemPucCode = item.pucCode || "VN-DLOR-0086";
-                  const itemPhcCode = lot.packhouseCode || "VN-DLPH-0089";
+                  const itemPucCode = item.pucCode?.trim() || "Chưa cập nhật";
+                  const itemPhcCode = lot.packhouseCode?.trim() || "Chưa cập nhật";
                   return (
                     <div key={item.id} className={`stamp-card stamp-${itemType}`}>
                       {itemType === "fruit" ? (
@@ -515,7 +519,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                               </div>
                               <div className="fruit-field">
                                 <span className="fruit-lbl">KL:</span>
-                                <strong className="fruit-val">{item.weightKg ? `${item.weightKg} kg` : "3.5 kg"}</strong>
+                                <strong className="fruit-val">{item.weightKg ? `${item.weightKg} kg` : "Chưa cập nhật"}</strong>
                               </div>
                             </div>
                           </div>
@@ -600,7 +604,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                               <div className="box-field">
                                 <span className="lbl">Quy cách tịnh:</span>
                                 <strong className="val">
-                                  {item.weightKg ? `${item.weightKg} kg / Thùng` : "18.0 kg / Thùng"}
+                                  {item.weightKg ? `${item.weightKg} kg / Thùng` : "Chưa cập nhật"}
                                 </strong>
                               </div>
                               <div className="box-field">

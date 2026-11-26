@@ -12,6 +12,7 @@ import {
   PasswordInput,
   ShowPasswordCheck,
 } from "@/components/auth/auth-fields";
+import { toast } from "@/components/ui/Toast";
 import { api, ApiError } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 
@@ -123,6 +124,7 @@ function ForgotPasswordContent() {
           newPassword: form.newPassword,
         });
         setForm((prev) => ({ ...prev, cccd: "", newPassword: "", confirm: "" }));
+        toast.success("Đã đặt lại mật khẩu mới");
         setDoneMode("cccd");
       } else {
         await api.post("/auth/forgot-password/request", {
@@ -130,6 +132,7 @@ function ForgotPasswordContent() {
           fullName: form.fullName.trim(),
           note: form.note.trim() || undefined,
         });
+        toast.success("Đã gửi yêu cầu cấp lại mật khẩu");
         setDoneMode("request");
       }
     } catch (err) {

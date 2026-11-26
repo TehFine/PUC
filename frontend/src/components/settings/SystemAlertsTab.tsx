@@ -146,8 +146,8 @@ export default function SystemAlertsTab() {
         if (manual) {
           toast.success(
             dbMs !== null
-              ? `Máy chủ (${roundTripMs} ms) và cơ sở dữ liệu (${dbMs} ms) hoạt động ổn định.`
-              : `Máy chủ và cơ sở dữ liệu phản hồi ổn định (${roundTripMs} ms).`,
+              ? `Máy chủ (${roundTripMs} ms) và CSDL (${dbMs} ms) ổn định`
+              : `Máy chủ phản hồi ổn định (${roundTripMs} ms)`,
           );
         }
         return;
@@ -234,7 +234,7 @@ export default function SystemAlertsTab() {
       });
       setTitle("");
       setMessage("");
-      toast.success("Đã phát thông báo tới người dùng theo thời gian thực.");
+      toast.success("Đã phát thông báo hệ thống");
       await refresh();
       notifySystemAlertsChanged();
       notifyCountsChanged();
@@ -249,7 +249,7 @@ export default function SystemAlertsTab() {
     setResolvingId(id);
     try {
       await api.post(`/system-alerts/${id}/resolve`);
-      toast.success("Đã đóng hiển thị dải thông báo trên đầu màn hình.");
+      toast.success("Đã đóng dải thông báo đầu trang");
       await refresh();
       notifySystemAlertsChanged();
       notifyCountsChanged();

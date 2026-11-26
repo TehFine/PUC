@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalSto
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
+import { toast } from "@/components/ui/Toast";
 import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { useBackLayer } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
@@ -266,6 +267,7 @@ export default function LoginPage() {
         setSubmitting(false);
         return;
       }
+      toast.success("Đăng nhập thành công");
       setRedirecting(true);
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Không đăng nhập được.");
@@ -284,6 +286,7 @@ export default function LoginPage() {
     setOtpSubmitting(true);
     try {
       await verifyOtp(mfaChallenge.challengeToken, cleanCode);
+      toast.success("Đăng nhập thành công");
       setRedirecting(true);
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Mã xác thực OTP không hợp lệ.");
@@ -305,6 +308,7 @@ export default function LoginPage() {
         setGoogleSubmitting(false);
         return;
       }
+      toast.success("Đăng nhập thành công");
       setRedirecting(true);
     } catch (err) {
       const msg = err instanceof ApiError || err instanceof Error ? err.message : "Không đăng nhập bằng Google được.";

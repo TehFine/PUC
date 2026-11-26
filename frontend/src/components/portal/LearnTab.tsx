@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import { toast } from "@/components/ui/Toast";
 import {
   DURIAN_PROTOCOL_2026_2027,
   SENPRO_SHOOT_PROTOCOL,
@@ -203,6 +204,7 @@ export function TrainingDetailModal({
       setMyStatus("registered");
       if (item.myStatus !== "registered") setEnrolledDelta(1);
       invalidatePortal("training", "overview");
+      toast.success("Đã đăng ký lớp tập huấn");
     } catch (err) {
       setActionError(errorMessage(err, "Không đăng ký được lớp tập huấn."));
     } finally {
@@ -218,6 +220,7 @@ export function TrainingDetailModal({
       setMyStatus("cancelled");
       setEnrolledDelta(item.myStatus === "registered" ? -1 : 0);
       invalidatePortal("training", "overview");
+      toast.success("Đã hủy đăng ký tập huấn");
     } catch (err) {
       setActionError(errorMessage(err, "Không hủy được đăng ký tập huấn."));
     } finally {

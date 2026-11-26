@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "@/components/ui/Toast";
 import type { PortalPlot } from "@/types/portal";
 import { triggerBlobDownload } from "@/utils/download";
 import { Sheet } from "./ui";
@@ -46,9 +47,9 @@ function collectSelfHostedFontCss(): string {
 
 function buildSignboardRows(plot: PortalPlot, householdName: string) {
   const treePart =
-    plot.treeCount && plot.treeCount > 0
+    plot.treeCount != null && plot.treeCount > 0
       ? ` (${Number(plot.treeCount).toLocaleString("vi-VN")} cây / 株)`
-      : "";
+      : " (Số cây: Chưa cập nhật)";
   const quotaText =
     plot.maxQuotaKg && plot.maxQuotaKg > 0
       ? `${Number(plot.maxQuotaKg).toLocaleString("vi-VN")} kg / vụ`
@@ -56,14 +57,16 @@ function buildSignboardRows(plot: PortalPlot, householdName: string) {
   const parcelInfo =
     plot.parcel || plot.sheet
       ? `Thửa ${plot.parcel || "-"}, Tờ ${plot.sheet || "-"}`
-      : `Năm trồng ${plot.plantedYear || "2020"}`;
+      : plot.plantedYear
+        ? `Năm trồng ${plot.plantedYear}`
+        : "Chưa cập nhật";
 
   return [
-    { label: "Mã vùng PUC / 果园编码:", value: plot.zoneCode || "VN-DLOR-0086", strong: true },
+    { label: "Mã vùng PUC / 果园编码:", value: plot.zoneCode?.trim() || "Chưa có mã vùng", strong: true },
     { label: "Chủ hộ / 农户代表:", value: householdName, strong: true },
     { label: "Quy mô / 面积与株数:", value: `${plot.areaHa} ha${treePart}`, strong: false },
     { label: "Trần sản lượng / 核定配额:", value: quotaText, strong: true },
-    { label: "Giống / 榴莲品种:", value: plot.variety || "Monthong (Dona) và Ri6", strong: false },
+    { label: "Giống / 榴莲品种:", value: plot.variety?.trim() || "Chưa cập nhật", strong: false },
     { label: "Địa chính / 地籍档案:", value: parcelInfo, strong: false },
     { label: "Quy chuẩn / 执行标准:", value: "VietGAP và Nghị định thư GACC", strong: false },
   ];
@@ -648,6 +651,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
   const handlePrint = () => {
     if (!qrDataUrl) return;
     printSignboardViaIsolatedSheet(enrichedPlot, householdName, qrDataUrl, safeCode);
+    toast.success("Đã mở bản in biển cắm vườn");
   };
 
   const handleDownloadPng = async () => {
@@ -660,6 +664,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         qrDataUrl,
       );
       triggerBlobDownload(blob, `Bien-cam-vuon-${safeCode}.png`);
+      toast.success("Đã tải ảnh biển cắm vườn");
     } catch {
       handlePrint();
     } finally {
@@ -727,7 +732,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
                 <div className="plate-row">
                   <span className="plate-lbl">Mã vùng PUC / 果园编码:</span>
-                  <strong className="plate-val">{plot.zoneCode || "VN-DLOR-0086"}</strong>
+                  <strong className="plate-val">{plot.zoneCode?.trim() || "Chưa có mã vùng"}</strong>
                 </div>
 
                 <div className="plate-row">
@@ -739,9 +744,9 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                   <span className="plate-lbl">Quy mô / 面积与株数:</span>
                   <span className="plate-val">
                     {plot.areaHa} ha
-                    {resolvedTreeCount && resolvedTreeCount > 0
-                      ? ` (${resolvedTreeCount} cây / 株)`
-                      : ""}
+                    {resolvedTreeCount != null && resolvedTreeCount > 0
+                      ? ` (${Number(resolvedTreeCount).toLocaleString("vi-VN")} cây / 株)`
+                      : " (Số cây: Chưa cập nhật)"}
                   </span>
                 </div>
 
@@ -756,7 +761,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
                 <div className="plate-row">
                   <span className="plate-lbl">Giống / 榴莲品种:</span>
-                  <span className="plate-val">{plot.variety || "Monthong (Dona) và Ri6"}</span>
+                  <span className="plate-val">{plot.variety?.trim() || "Chưa cập nhật"}</span>
                 </div>
 
                 <div className="plate-row">
@@ -764,7 +769,9 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                   <span className="plate-val">
                     {plot.parcel || plot.sheet
                       ? `Thửa ${plot.parcel || "-"}, Tờ ${plot.sheet || "-"}`
-                      : `Năm trồng ${plot.plantedYear || "2020"}`}
+                      : plot.plantedYear
+                        ? `Năm trồng ${plot.plantedYear}`
+                        : "Chưa cập nhật"}
                   </span>
                 </div>
 

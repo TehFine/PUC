@@ -10,6 +10,7 @@ import {
   getServerCalibratedDate,
 } from "@/lib/api-client";
 import { useBackLayer } from "@/lib/back-navigation";
+import { toast } from "@/components/ui/Toast";
 import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import type { TraceLang } from "./trace-i18n";
 
@@ -649,6 +650,13 @@ export default function TraceAccessRequestBanner({
       setWarningNotice(null);
       setPurpose("");
       setModalOpen(false);
+      toast.success(
+        lang === "en"
+          ? "Access request sent"
+          : lang === "zh"
+            ? "已提交查阅申请"
+            : "Đã gửi yêu cầu cấp quyền",
+      );
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(DATA_MUTATED_EVENT));
         if (typeof BroadcastChannel !== "undefined") {

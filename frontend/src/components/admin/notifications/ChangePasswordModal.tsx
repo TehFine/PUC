@@ -177,7 +177,7 @@ export default function ChangePasswordModal({
       <ChangePasswordFormContent
         onClose={onClose}
         onSuccess={() => {
-          toast.success("Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+          toast.success("Đã đổi mật khẩu, vui lòng đăng nhập lại");
           onClose();
           void onSuccessLogout();
         }}

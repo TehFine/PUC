@@ -519,6 +519,7 @@ export default function Registrations({
                   void copySensitiveWithAutoClear(issuedTempPassword.temporaryPassword).then((ok) => {
                     if (ok) {
                       setCopiedTempPassword(true);
+                      toast.success("Đã sao chép mật khẩu tạm (tự xóa sau 45s)");
                       window.setTimeout(() => setCopiedTempPassword(false), 2400);
                     }
                   });

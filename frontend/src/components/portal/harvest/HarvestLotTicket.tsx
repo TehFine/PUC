@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Download, QrCode } from "@/components/ui/PublicIcon";
+import { toast } from "@/components/ui/Toast";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
 import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";
@@ -35,16 +36,17 @@ function setQrCacheEntry(key: string, url: string) {
 
 interface HarvestAssetTagCardProps {
   lot: PortalHarvest;
-  pucCode?: string;
+  pucCode?: string | null;
   onOpenModal: () => void;
 }
 
 export function HarvestAssetTagCard({
   lot,
-  pucCode = "66-PUC-SR0001-00728",
+  pucCode,
   onOpenModal,
 }: HarvestAssetTagCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const displayPucCode = pucCode?.trim() || "Chưa có mã vùng";
   const tokenOrCode = lot.qrToken || lot.qrCode || lot.lotCode;
   const routePrefix = lot.qrToken ? "/t/" : "/trace/";
   const codeKey = `Q:${tokenOrCode}`;
@@ -58,20 +60,24 @@ export function HarvestAssetTagCard({
   const status = HARVEST_STATUS[lot.status] ?? HARVEST_STATUS.sampling;
 
   const watermarkTitle =
-    lot.status === "exported"
-      ? "ĐÃ XUẤT KHO"
-      : lot.status === "delivered"
-        ? "ĐÃ GIAO HÀNG"
-        : lot.status === "in_transit"
-          ? "ĐANG VẬN CHUYỂN"
-          : lot.status === "sampling"
-            ? "ĐANG LẤY MẪU"
-            : (status?.label || lot.status).toUpperCase();
+    lot.status === "revoked"
+      ? "ĐÃ THU HỒI"
+      : lot.status === "exported"
+        ? "ĐÃ XUẤT KHO"
+        : lot.status === "delivered"
+          ? "ĐÃ GIAO HÀNG"
+          : lot.status === "in_transit"
+            ? "ĐANG VẬN CHUYỂN"
+            : lot.status === "sampling"
+              ? "ĐANG LẤY MẪU"
+              : (status?.label || lot.status).toUpperCase();
 
   const watermarkBottom =
-    lot.status === "exported" || lot.status === "delivered"
-      ? "KIỂM ĐỊNH VIETGAP"
-      : "GIÁM SÁT VÙNG TRỒNG";
+    lot.status === "revoked"
+      ? "NGỪNG LƯU HÀNH"
+      : lot.status === "exported" || lot.status === "delivered"
+        ? "KIỂM ĐỊNH VIETGAP"
+        : "GIÁM SÁT VÙNG TRỒNG";
 
   useEffect(() => {
     if (nearView) return;
@@ -140,13 +146,15 @@ export function HarvestAssetTagCard({
           <span className="pt-asset-dot">-</span>
           <span className="pt-asset-hide-mobile">HTX CƯ NÉ</span>
           <span className="pt-asset-dot pt-asset-hide-mobile">-</span>
-          <span>{pucCode}</span>
+          <span data-no-translate={pucCode?.trim() ? "true" : undefined}>{displayPucCode}</span>
         </div>
 
         <div className="pt-asset-code-line">
           <span className="pt-asset-code-val">LÔ {lot.lotCode}</span>
           <span className="pt-asset-code-divider">-</span>
-          <span className="pt-asset-weight-val">KLT: {formatKg(lot.weightKg)}</span>
+          <span className="pt-asset-weight-val" style={{ fontVariantNumeric: "tabular-nums" }}>
+            Hộ góp: {formatKg(Number(lot.weightKg))}
+          </span>
         </div>
 
         <div className="pt-asset-id-group">
@@ -250,34 +258,51 @@ function TicketQrImage({
 
 export function HarvestLotQrModal({
   lot,
-  pucCode = "66-PUC-SR0001-00728",
+  pucCode,
   onClose,
 }: {
   lot: PortalHarvest;
-  pucCode?: string;
+  pucCode?: string | null;
   onClose: () => void;
 }) {
+  const isRevoked = lot.status === "revoked";
+  const cleanPucCode = pucCode?.trim() || "";
+
   return (
     <Sheet title="Tem điện tử lô hàng" onClose={onClose}>
       <div className="pt-qr-modal-body">
         <div className="pt-ticket-container">
           <div className="pt-ticket-card">
             <div className="pt-ticket-head">
-              <div className="pt-ticket-popper-wrap" aria-hidden="true">
-                <img
-                  src="/check-mark.png"
-                  alt="Tem hợp lệ"
-                  width={28}
-                  height={28}
-                  loading="lazy"
-                  decoding="async"
-                  className="pt-ticket-check-icon"
-                />
-              </div>
-              <h3 className="pt-ticket-title">Tem điện tử hợp lệ!</h3>
-              <p className="pt-ticket-sub">
-                Lô sầu riêng đã được cấp mã truy xuất nguồn gốc chính thức
-              </p>
+              {isRevoked ? (
+                <>
+                  <h3 className="pt-ticket-title" style={{ color: "#b91c1c" }}>
+                    Lô hàng đã bị thu hồi
+                  </h3>
+                  <p className="pt-ticket-sub">
+                    {lot.revokedReason?.trim() ||
+                      "Mã truy xuất của lô hàng này đã ngừng hiệu lực lưu hành"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="pt-ticket-popper-wrap" aria-hidden="true">
+                    <img
+                      src="/check-mark.png"
+                      alt="Tem hợp lệ"
+                      width={28}
+                      height={28}
+                      loading="lazy"
+                      decoding="async"
+                      className="pt-ticket-check-icon"
+                    />
+                  </div>
+                  <h3 className="pt-ticket-title">Tem điện tử hợp lệ!</h3>
+                  <p className="pt-ticket-sub">
+                    Lô sầu riêng đã được cấp mã truy xuất nguồn gốc chính thức
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="pt-ticket-sub-divider" aria-hidden="true" />
@@ -286,16 +311,40 @@ export function HarvestLotQrModal({
               <div className="pt-ticket-grid">
                 <div className="pt-ticket-col">
                   <span className="pt-ticket-label">MÃ LÔ HÀNG</span>
-                  <strong className="pt-ticket-val">{lot.lotCode}</strong>
+                  <strong className="pt-ticket-val" style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {lot.lotCode}
+                  </strong>
                 </div>
                 <div className="pt-ticket-col pt-ticket-col-right">
-                  <span className="pt-ticket-label">KHỐI LƯỢNG TỊNH (KLT)</span>
-                  <strong className="pt-ticket-val pt-ticket-val-accent">{formatKg(lot.weightKg)}</strong>
+                  <span className="pt-ticket-label">SẢN LƯỢNG HỘ GÓP</span>
+                  <strong
+                    className="pt-ticket-val pt-ticket-val-accent"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {formatKg(Number(lot.weightKg))}
+                  </strong>
                 </div>
+
+                {lot.lotWeightKg != null && lot.lotWeightKg > 0 && (
+                  <>
+                    <div className="pt-ticket-col">
+                      <span className="pt-ticket-label">TỔNG KHỐI LƯỢNG LÔ</span>
+                      <strong className="pt-ticket-val" style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {formatKg(Number(lot.lotWeightKg))}
+                      </strong>
+                    </div>
+                    <div className="pt-ticket-col pt-ticket-col-right">
+                      <span className="pt-ticket-label">THỬA GÓP LÔ</span>
+                      <strong className="pt-ticket-val">{lot.plotCode || "Chưa cập nhật"}</strong>
+                    </div>
+                  </>
+                )}
 
                 <div className="pt-ticket-col">
                   <span className="pt-ticket-label">NGÀY THU HOẠCH</span>
-                  <strong className="pt-ticket-val">{formatDate(lot.harvestedOn)}</strong>
+                  <strong className="pt-ticket-val" style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {formatDate(lot.harvestedOn)}
+                  </strong>
                 </div>
                 <div className="pt-ticket-col pt-ticket-col-right">
                   <span className="pt-ticket-label">THỊ TRƯỜNG</span>
@@ -310,7 +359,9 @@ export function HarvestLotQrModal({
                 </div>
                 <div className="pt-ticket-entity-info">
                   <div className="pt-ticket-entity-name">{lot.buyer}</div>
-                  <div className="pt-ticket-entity-meta">Vùng trồng {pucCode} - VietGAP</div>
+                  <div className="pt-ticket-entity-meta">
+                    {cleanPucCode ? `Vùng trồng ${cleanPucCode} - VietGAP` : "Chưa có mã vùng - VietGAP"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,7 +393,7 @@ export function HarvestLotQrModal({
                   <span>{lot.qrCode || lot.lotCode}</span>
                 </div>
                 <p className="pt-ticket-scan-hint">
-                  Quét hoặc chạm trực tiếp vào mã QR để kiểm tra nguồn gốc &amp; nhật ký canh tác
+                  Quét hoặc chạm trực tiếp vào mã QR để kiểm tra nguồn gốc và nhật ký canh tác
                 </p>
               </div>
             </div>
@@ -366,6 +417,7 @@ export function HarvestLotQrModal({
                 const dataUrl = qrDataUrlCache.get(codeKey);
                 if (dataUrl) {
                   triggerDataUrlDownload(dataUrl, `QR-lo-hang-${lot.lotCode}.png`);
+                  toast.success(`Đã tải mã QR lô ${lot.lotCode}`);
                 }
               }}
             >

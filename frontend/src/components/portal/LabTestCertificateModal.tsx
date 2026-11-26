@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { toast } from "@/components/ui/Toast";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
 import { useBackLayer } from "@/lib/back-navigation";
@@ -230,6 +231,9 @@ export interface LabTestCertificateItem {
   result: "pass" | "fail" | string;
   lab: string;
   householdName?: string;
+  zoneCode?: string | null;
+  pucCode?: string | null;
+  communeAddress?: string | null;
   labAccreditationCode?: string | null;
   externalVerifyCode?: string | null;
   externalVerifyUrl?: string | null;
@@ -289,6 +293,21 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Chưa cập nhật";
   const plotCode = test.plotCode || test.code || "-";
+  const derivedZoneFromPlot =
+    test.plotCode && /^(?:VN-|66-PUC-)/i.test(test.plotCode.trim())
+      ? test.plotCode.trim().replace(/-(?:H|T)\d+$/i, "")
+      : "";
+  const pucCodeDisplay =
+    test.zoneCode?.trim() ||
+    test.pucCode?.trim() ||
+    (derivedZoneFromPlot && derivedZoneFromPlot !== test.plotCode?.trim() ? derivedZoneFromPlot : "") ||
+    "Chưa cập nhật";
+  const hasRealPuc = pucCodeDisplay !== "Chưa cập nhật";
+  const cultivationAddress =
+    test.communeAddress?.trim() ||
+    (/^66-PUC-SR0001-/i.test(pucCodeDisplay) || /^EK-/i.test(plotCode)
+      ? "Xã Ea Khăl, Tỉnh Đắk Lắk"
+      : "Xã Krông Búk, Tỉnh Đắk Lắk");
   const safeScanUrl = isSafeMediaUrl(test.scanUrl) ? test.scanUrl : null;
 
   // Tạo URL QR Code truy xuất hồ sơ kiểm nghiệm gốc
@@ -380,6 +399,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     setDownloading(true);
     try {
       await exportCertPaperToPdf(paperRef.current, `Phieu-kiem-nghiem-${safeCode}.pdf`);
+      toast.success("Đã tải PDF phiếu kiểm nghiệm");
     } catch {
       handlePrint();
     } finally {
@@ -475,7 +495,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   <div className="cert-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
                   <div className="cert-center-name">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                   <div className="cert-lab-branch">
-                    Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
+                    Đơn vị thử nghiệm thực hiện: {test.lab}{test.labAccreditationCode ? `, ${test.labAccreditationCode}` : ""}
                   </div>
                 </div>
               </div>
@@ -487,7 +507,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 </div>
                 <div className="cert-puc-code">
                   <span>Mã PUC: </span>
-                  <strong>VN-DLOR-0086</strong>
+                  <strong>{pucCodeDisplay}</strong>
                 </div>
                 {qrDataUrl && (
                   <a
@@ -526,12 +546,14 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 </div>
                 <div className="cert-info-row">
                   <span className="cert-lbl">Mã số vùng trồng (PUC) và Thửa:</span>
-                  <span className="cert-val cert-bold">VN-DLOR-0086 - Thửa {plotCode}</span>
+                  <span className="cert-val cert-bold">
+                    {hasRealPuc ? `${pucCodeDisplay} - Thửa ${plotCode}` : `Thửa ${plotCode} (Mã PUC: Chưa cập nhật)`}
+                  </span>
                 </div>
 
                 <div className="cert-info-row">
                   <span className="cert-lbl">Địa chỉ canh tác:</span>
-                  <span className="cert-val">Xã Krông Búk, Tỉnh Đắk Lắk</span>
+                  <span className="cert-val">{cultivationAddress}</span>
                 </div>
                 <div className="cert-info-row">
                   <span className="cert-lbl">Đối tượng mẫu thử:</span>
@@ -698,7 +720,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 <div className="cert-verify-summary-item">
                   <span className="cert-verify-lbl">Đơn vị thử nghiệm thực hiện:</span>
                   <strong className="cert-verify-val">
-                    {test.lab}, {test.labAccreditationCode || "ISO/IEC 17025"}
+                    {test.lab}{test.labAccreditationCode ? `, ${test.labAccreditationCode}` : ""}
                   </strong>
                 </div>
                 <div className="cert-verify-summary-item">
@@ -775,7 +797,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                         <div className="cert-m-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
                         <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                         <div className="cert-m-branch">
-                          Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
+                          Đơn vị thử nghiệm thực hiện: {test.lab}{test.labAccreditationCode ? `, ${test.labAccreditationCode}` : ""}
                         </div>
                       </div>
                     </div>
@@ -787,7 +809,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                       </div>
                       <div className="cert-m-doc">
                         <span>Mã PUC: </span>
-                        <strong>VN-DLOR-0086</strong>
+                        <strong>{pucCodeDisplay}</strong>
                       </div>
                       {qrDataUrl && (
                         <a
@@ -825,12 +847,14 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   </div>
                   <div className="cert-m-info-item">
                     <span className="cert-m-lbl">Mã vùng trồng và Thửa:</span>
-                    <strong className="cert-m-val">VN-DLOR-0086 - Thửa {plotCode}</strong>
+                    <strong className="cert-m-val">
+                      {hasRealPuc ? `${pucCodeDisplay} - Thửa ${plotCode}` : `Thửa ${plotCode} (Mã PUC: Chưa cập nhật)`}
+                    </strong>
                   </div>
 
                   <div className="cert-m-info-item">
                     <span className="cert-m-lbl">Địa chỉ canh tác:</span>
-                    <span className="cert-m-val">Xã Krông Búk, Tỉnh Đắk Lắk</span>
+                    <span className="cert-m-val">{cultivationAddress}</span>
                   </div>
                   <div className="cert-m-info-item">
                     <span className="cert-m-lbl">Đối tượng mẫu thử:</span>
@@ -979,7 +1003,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                     PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM <em>(Tiếp theo Trang 01)</em>
                   </span>
                   <span className="cert-m-running-code">
-                    Số hồ sơ: <strong>LAB-{test.code}/PKN-{year}</strong> - Mã PUC: <strong>VN-DLOR-0086</strong>
+                    Số hồ sơ: <strong>LAB-{test.code}/PKN-{year}</strong> - Mã PUC: <strong>{pucCodeDisplay}</strong>
                   </span>
                 </div>
 

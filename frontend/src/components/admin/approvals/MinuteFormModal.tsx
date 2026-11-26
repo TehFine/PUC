@@ -266,11 +266,11 @@ export default function MinuteFormModal({
         });
         setUploadingMedia(false);
         if (outcome.mode === "queued") {
-          toast.success("Mạng hiện trường yếu: đã lưu biên bản kèm ảnh vào máy để tự động đồng bộ khi có sóng.");
+          toast.success("Đã lưu biên bản vào máy, tự gửi khi có sóng");
           onClose();
           return;
         }
-        toast.success("Đã tạo biên bản kiểm tra mới.");
+        toast.success("Đã tạo biên bản kiểm tra");
         notifyCountsChanged();
         onSaved();
         onClose();

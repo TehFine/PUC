@@ -119,7 +119,7 @@ export function TwoFactorSecuritySheet({
       setOtpInput("");
       setEnablePassword("");
       await onChanged();
-      toast.success("Đã bật xác thực 2 lớp (OTP) cho tài khoản.");
+      toast.success("Đã bật xác thực 2 lớp (OTP)");
     } catch (ex) {
       setErr(errorMessage(ex, "Không bật được xác thực 2 lớp. Vui lòng kiểm tra lại mật khẩu và mã OTP."));
     } finally {
@@ -160,6 +160,7 @@ export function TwoFactorSecuritySheet({
     if (!backupCodes?.length) return;
     if (await copySensitiveWithAutoClear(backupCodes.join("\n"))) {
       setCopiedCodes(true);
+      toast.success("Đã sao chép mã dự phòng (tự xóa sau 45s)");
       setTimeout(() => setCopiedCodes(false), 2500);
     }
   };
@@ -531,7 +532,7 @@ export function ActiveSessionsSheet({
         {otherCount > 0 && (
           <BusyButton
             type="button"
-            className="pt-btn pt-btn-danger"
+            className="pt-btn pt-btn-danger session-revoke-all-btn"
             busy={busyId === "others"}
             busyLabel="Đang thu hồi…"
             onClick={() => setConfirmRevoke("others")}
@@ -551,59 +552,32 @@ export function ActiveSessionsSheet({
             Không có phiên hoạt động nào được ghi nhận.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="session-device-list">
             {sessions.map((s) => (
               <div
                 key={s.id}
-                style={{
-                  borderRadius: 8,
-                  border: "1px solid #d4d4d2",
-                  background: s.isCurrent ? "#f0fdf4" : "#ffffff",
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                }}
+                className={`session-device-card ${s.isCurrent ? "is-current" : ""}`.trim()}
               >
-                <div style={{ padding: "12px 14px", fontSize: 12.5, lineHeight: 1.45, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                    {summarizeUserAgent(s.userAgent)}{" "}
+                <div className="session-device-body">
+                  <div className="session-device-head">
+                    <strong className="session-device-name">{summarizeUserAgent(s.userAgent)}</strong>
                     {s.isCurrent && (
-                      <span
-                        style={{
-                          marginLeft: 6,
-                          padding: "1px 7px",
-                          borderRadius: 4,
-                          background: "#166534",
-                          color: "#ffffff",
-                          fontSize: 11,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Thiết bị này
-                      </span>
+                      <span className="session-device-badge">Thiết bị này</span>
                     )}
                   </div>
-                  <div style={{ color: "#64748b", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>
+                  <div className="session-device-meta">
                     IP: {s.ip || "Không rõ"}, Hoạt động: {new Date(s.lastUsedAt || s.createdAt).toLocaleString("vi-VN")}
                   </div>
-                  <div style={{ color: "#94a3b8", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
+                  <div className="session-device-exp">
                     Hết hạn: {new Date(s.expiresAt).toLocaleString("vi-VN")}
                   </div>
                 </div>
 
                 {!s.isCurrent && (
-                  <div
-                    style={{
-                      padding: "9px 14px",
-                      borderTop: "1px solid #e2e5e3",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                    }}
-                  >
+                  <div className="session-device-foot">
                     <button
                       type="button"
-                      className="btn btn-danger btn-sm"
+                      className="btn btn-danger btn-sm session-revoke-btn"
                       disabled={busyId !== null}
                       onClick={() => setConfirmRevoke(s)}
                     >

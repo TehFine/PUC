@@ -56,7 +56,7 @@ import { resolveValidPortalRoute } from "@/lib/route-validation";
 import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
-import { formatDate } from "@/utils/format";
+import { formatTime, groupNotificationsByDay } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { AppNotification, NotificationList, PortalOverview, PortalProfile } from "@/types/portal";
 import dynamic from "next/dynamic";
@@ -90,6 +90,20 @@ function buildReadNotifsStorageKey(userId: number | null | undefined): string | 
   return typeof userId === "number" && Number.isInteger(userId) && userId > 0
     ? `${READ_NOTIFS_PREFIX}${userId}`
     : null;
+}
+
+function formatHouseholdLocation(villageName?: string | null, communeLocation?: string | null): string {
+  const v = (villageName ?? "").trim();
+  const c = (communeLocation ?? "").trim();
+  if (v && c) {
+    const vNorm = v.toLowerCase();
+    const cNorm = c.toLowerCase();
+    const cFirst = cNorm.split(",")[0]?.trim() ?? "";
+    if (cNorm.startsWith(vNorm) || vNorm === cFirst) return c;
+    if (vNorm.includes(cNorm)) return v;
+    return [v, c].join(", ");
+  }
+  return [v, c].filter(Boolean).join(", ") || "Chưa cập nhật";
 }
 
 /** Băm một chiều khóa nhắc nhở để không lưu nguyên văn tiêu đề vi phạm/nhắc việc trên thiết bị dùng chung. */
@@ -728,14 +742,19 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     };
   }, [status, session?.user.role]);
 
+  const rawApiNotifItems = notifications.data?.data;
+  const locallyMarkedUnreadCount = useMemo(() => {
+    if (!rawApiNotifItems) return 0;
+    return rawApiNotifItems.filter((n) => !n.readAt && localReadKeys.includes(`api:${n.id}`)).length;
+  }, [rawApiNotifItems, localReadKeys]);
   const apiNotifItems = useMemo<AppNotification[]>(() => {
-    const rawItems = notifications.data?.data ?? [];
+    const rawItems = rawApiNotifItems ?? [];
     return rawItems.map((n) =>
       n.readAt || !localReadKeys.includes(`api:${n.id}`)
         ? n
         : { ...n, readAt: new Date().toISOString() },
     );
-  }, [notifications.data?.data, localReadKeys]);
+  }, [rawApiNotifItems, localReadKeys]);
   const fallbackNotifItems = useMemo<Array<AppNotification & { _readKey: string }>>(() => {
     if (apiNotifItems.length > 0) return [];
     const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
@@ -815,6 +834,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       setLocalAvatarOverride(saved.avatarUrl);
       invalidateQueries(portalPath("profile"));
       invalidateQueries(portalPath("overview"));
+      toast.success(t("Đã cập nhật ảnh đại diện"));
     } catch (err) {
       setAvatarError(errorMessage(err, "Không thể tải ảnh đại diện lên. Vui lòng thử lại."));
     } finally {
@@ -832,6 +852,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       setConfirmRemoveAvatar(false);
       invalidateQueries(portalPath("profile"));
       invalidateQueries(portalPath("overview"));
+      toast.success(t("Đã gỡ ảnh đại diện"));
     } catch (err) {
       setAvatarError(errorMessage(err, "Không thể gỡ ảnh đại diện."));
     } finally {
@@ -849,6 +870,11 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       });
       setLocalConsentOverride(saved.publicTraceConsent);
       invalidateQueries(portalPath("profile"));
+      toast.success(
+        saved.publicTraceConsent
+          ? t("Đã bật hiển thị tên trên QR")
+          : t("Đã ẩn tên trên QR công khai"),
+      );
     } catch (err) {
       setConsentError(errorMessage(err, "Không thể cập nhật tùy chọn hiển thị tên trên QR."));
     } finally {
@@ -860,7 +886,12 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
   const unreadNotifItems = notifItems.filter((n) => !n.readAt);
   const readNotifItems = notifItems.filter((n) => Boolean(n.readAt));
-  const unreadCount = unreadNotifItems.length;
+  const unreadCount =
+    apiNotifItems.length > 0 && typeof notifications.data?.unread === "number"
+      ? Math.max(unreadNotifItems.length, notifications.data.unread - locallyMarkedUnreadCount)
+      : !notifications.data && typeof overview?.stats?.unreadNotifications === "number"
+        ? overview.stats.unreadNotifications
+        : unreadNotifItems.length;
   const readCount = readNotifItems.length;
   const visibleNotifItems = notifFilter === "unread" ? unreadNotifItems : readNotifItems;
 
@@ -898,6 +929,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       setAccountPasswordInput("");
       invalidateQueries(portalPath("profile"), portalPath("overview"));
       setEditAccountOpen(false);
+      toast.success(t("Đã lưu thông tin tài khoản"));
     } catch (err) {
       setAccountError(errorMessage(err, "Không thể cập nhật thông tin tài khoản."));
     } finally {
@@ -955,6 +987,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         await api.post("/notifications/read-all");
         invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
       }
+      toast.success(t("Đã đánh dấu đã đọc tất cả"));
     } catch {
       // Ignore
     } finally {
@@ -1295,7 +1328,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Địa bàn</span>
                   <strong className="pt-profile-val">
-                    {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Ea Khăl, Đắk Lắk` : "Xã Ea Khăl, Đắk Lắk"}
+                    {formatHouseholdLocation(profHousehold?.villageName, profHousehold?.communeLocation)}
                   </strong>
                 </div>
               </div>
@@ -1437,6 +1470,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 className="pt-profile-logout-btn"
                 onClick={() => {
                   closeProfile();
+                  toast.success(t("Đã đăng xuất"));
                   void logout();
                 }}
               >
@@ -1535,34 +1569,48 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
             )}
 
             {visibleNotifItems.length > 0 && (
-              <ul className="pt-notif-list">
-                {visibleNotifItems.map((item) => {
-                  const isUnread = !item.readAt;
-                  return (
-                    <li
-                      key={item.id}
-                      className={`pt-notif-item ${isUnread ? "is-unread" : ""} ${item.kind === "system" ? "is-system" : ""}`.trim()}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => void handleMarkRead(item)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          void handleMarkRead(item);
-                        }
-                      }}
-                    >
-                      <div className="pt-notif-content">
-                        <div className="pt-notif-head">
-                          <strong>{item.title}</strong>
-                          <span className="pt-notif-time">{formatDate(item.createdAt)}</span>
-                        </div>
-                        {item.body && <p className="pt-notif-body">{item.body}</p>}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="pt-notif-day-list">
+                {groupNotificationsByDay(visibleNotifItems, lang).map((group) => (
+                  <section key={group.dayKey} className="pt-notif-day-group" aria-label={group.heading}>
+                    <div className="pt-notif-day-heading" data-no-translate="true">
+                      {group.heading}
+                    </div>
+                    <ul className="pt-notif-list">
+                      {group.items.map((item) => {
+                        const isUnread = !item.readAt;
+                        const timeLabel = formatTime(item.createdAt);
+                        return (
+                          <li
+                            key={item.id}
+                            className={`pt-notif-item ${isUnread ? "is-unread" : "is-read"} ${item.kind === "system" ? "is-system" : ""}`.trim()}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => void handleMarkRead(item)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                void handleMarkRead(item);
+                              }
+                            }}
+                          >
+                            <div className="pt-notif-content">
+                              <div className="pt-notif-head">
+                                <strong>{item.title}</strong>
+                                {timeLabel && (
+                                  <span className="pt-notif-time" data-no-translate="true">
+                                    {timeLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {item.body && <p className="pt-notif-body">{item.body}</p>}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
             )}
           </div>
         </Sheet>
@@ -1670,7 +1718,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         >
           <ChangePasswordForm
             onSuccess={() => {
-              toast.success(t("Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại."));
+              toast.success(t("Đã đổi mật khẩu, vui lòng đăng nhập lại"));
               setPasswordOpen(false);
               void logout();
             }}

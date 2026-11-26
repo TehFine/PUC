@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import { animatePopupExit } from "@/lib/popup-motion";
+import { toast } from "@/components/ui/Toast";
 import { usePersistedState } from "@/lib/back-navigation";
 import {
   ADMIN_EDIT_PLOT_EVENT,
@@ -928,6 +929,7 @@ export default function MapView({
             tone: "ok",
             text: `Đã cập nhật ranh giới (${cleaned.length} đỉnh) cho thửa ${res.feature.properties.code}.`,
           });
+          toast.success(`Đã cập nhật ranh giới thửa ${res.feature.properties.code}`);
           notifyCountsChanged();
           onChanged?.();
         })
@@ -1990,6 +1992,7 @@ export default function MapView({
           ? "Đã lưu thông tin ranh giới thửa đất."
           : "Đã lưu tạm ranh giới thửa đất trong phiên hiện tại.",
       });
+      toast.success(`Đã lưu thửa đất ${data.feature.properties.code}`);
       onChanged?.();
     } catch (error) {
       setMessage({
@@ -2019,6 +2022,7 @@ export default function MapView({
           ? "Đã lưu kết quả đo đạc thực địa."
           : "Đã lưu tạm kết quả đo đạc trong phiên hiện tại.",
       });
+      toast.success("Đã lưu kết quả đo đạc thực địa");
       onChanged?.();
     } catch (error) {
       setMessage({
@@ -2057,6 +2061,7 @@ export default function MapView({
         text: `Đã nhập ${data.imported ?? 0} thửa từ ${file.name}${data.persisted ? " thành công." : " (lưu tạm trong phiên hiện tại)."
           }`,
       });
+      toast.success(`Đã nhập ${data.imported ?? 0} thửa đất`);
       onChanged?.();
     } catch (error) {
       setMessage({
