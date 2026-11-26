@@ -81,6 +81,9 @@ $$;
 
 DO $$
 BEGIN
+  PERFORM set_config('puc.seeding', 'on', true);
+  PERFORM set_config('puc.rechaining', 'on', true);
+
   -- 1. Vùng trồng định danh (growing_zones)
   IF to_regclass('public.growing_zones') IS NOT NULL THEN
     ALTER TABLE growing_zones ALTER COLUMN commune SET DEFAULT 'Xã Krông Búk';
