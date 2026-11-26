@@ -326,8 +326,8 @@ export class PlotsService {
                   ''::text AS parcel,
                   COALESCE(h.name, '') AS owner,
                   COALESCE(pst.village_name, v_hh.name, '') AS village,
-                  COALESCE(pst.zone_code, 'VN-DLOR-0086') AS zone,
-                  COALESCE(pst.variety, 'Ri6 & Monthong (Dona)') AS variety,
+                  NULLIF(btrim(pst.zone_code), '') AS zone,
+                  NULLIF(btrim(pst.variety), '') AS variety,
                   pst.planted_year AS year,
                   pst.area_ha,
                   'declared'::text AS source,
@@ -337,7 +337,7 @@ export class PlotsService {
                   h.village_id AS hh_village_id,
                   v_hh.name AS hh_village_name,
                   pst.qr_token,
-                  COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
+                  COALESCE(NULLIF(psq.tree_count, 0), NULLIF(pst.tree_count, 0)) AS tree_count,
                   psq.max_quota_kg AS season_quota_kg,
                   pst.center_lat AS lat,
                   pst.center_lng AS lng,
@@ -345,7 +345,14 @@ export class PlotsService {
            FROM plot_signboard_tokens pst
            LEFT JOIN households h ON h.id = pst.household_id
            LEFT JOIN villages v_hh ON v_hh.id = h.village_id
-           LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
+           LEFT JOIN LATERAL (
+             SELECT psq0.tree_count, psq0.max_quota_kg
+             FROM plot_season_quotas psq0
+             WHERE psq0.season_year = EXTRACT(YEAR FROM (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)::int
+               AND upper(btrim(psq0.plot_code)) = upper(btrim(pst.plot_code))
+             ORDER BY (psq0.household_id = pst.household_id) DESC NULLS LAST, psq0.updated_at DESC, psq0.id DESC
+             LIMIT 1
+           ) psq ON true
            WHERE pst.geometry_json IS NOT NULL ${whereFb}
            ORDER BY pst.zone_code, pst.plot_code`,
           paramsFb,
@@ -379,15 +386,28 @@ export class PlotsService {
                  h.village_id AS hh_village_id,
                  v_hh.name AS hh_village_name,
                  COALESCE(p.qr_token, pst.qr_token) AS qr_token,
-                 COALESCE(psq.tree_count, p.tree_count, pst.tree_count) AS tree_count,
+                 COALESCE(NULLIF(psq.tree_count, 0), NULLIF(p.tree_count, 0), NULLIF(pst.tree_count, 0)) AS tree_count,
                  COALESCE(psq.max_quota_kg, p.season_quota_kg) AS season_quota_kg,
                  ST_Y(ST_Centroid(p.geom)) AS lat, ST_X(ST_Centroid(p.geom)) AS lng,
                  ST_AsGeoJSON(p.geom) AS geometry_json
           FROM plots p
           LEFT JOIN households h ON h.id = p.household_id
           LEFT JOIN villages v_hh ON v_hh.id = h.village_id
-          LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
-          LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(p.code)
+          LEFT JOIN LATERAL (
+            SELECT pst0.qr_token, pst0.tree_count
+            FROM plot_signboard_tokens pst0
+            WHERE upper(btrim(pst0.plot_code)) = upper(btrim(p.code))
+            ORDER BY (pst0.household_id = p.household_id) DESC NULLS LAST, pst0.created_at DESC
+            LIMIT 1
+          ) pst ON true
+          LEFT JOIN LATERAL (
+            SELECT psq0.tree_count, psq0.max_quota_kg
+            FROM plot_season_quotas psq0
+            WHERE psq0.season_year = EXTRACT(YEAR FROM (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)::int
+              AND upper(btrim(psq0.plot_code)) = upper(btrim(p.code))
+            ORDER BY (psq0.household_id = p.household_id) DESC NULLS LAST, psq0.updated_at DESC, psq0.id DESC
+            LIMIT 1
+          ) psq ON true
           ${where}
           ORDER BY p.zone_code, p.code
         `,
@@ -591,10 +611,12 @@ export class PlotsService {
         .query(
           `INSERT INTO plot_signboard_tokens
              (plot_code, qr_token, household_id, zone_code, village_name, variety, planted_year, area_ha, tree_count, center_lat, center_lng, geometry_json)
-           VALUES ($1, COALESCE($2, puc_random_qr_token(14)), $3, COALESCE(NULLIF($4, ''), 'VN-DLOR-0086'), $5, $6, $7, $8, GREATEST(30, ROUND($8 * 150)::int), $9, $10, $11)
+           VALUES ($1, COALESCE($2, puc_random_qr_token(14)), $3, COALESCE($4, ''), $5, $6, $7, $8, 0, $9, $10, $11)
            ON CONFLICT (plot_code) DO UPDATE
              SET household_id = COALESCE(EXCLUDED.household_id, plot_signboard_tokens.household_id),
-                 zone_code = EXCLUDED.zone_code,
+                 zone_code = CASE WHEN EXCLUDED.zone_code <> '' THEN EXCLUDED.zone_code ELSE plot_signboard_tokens.zone_code END,
+                 variety = COALESCE(EXCLUDED.variety, plot_signboard_tokens.variety),
+                 planted_year = COALESCE(EXCLUDED.planted_year, plot_signboard_tokens.planted_year),
                  area_ha = EXCLUDED.area_ha,
                  center_lat = EXCLUDED.center_lat,
                  center_lng = EXCLUDED.center_lng,
@@ -606,10 +628,10 @@ export class PlotsService {
             rows[0].code,
             rows[0].qr_token ?? null,
             linkedHouseholdId ?? null,
-            properties.zone,
-            properties.village,
-            properties.variety || "Ri6 & Monthong (Dona)",
-            properties.year ?? 2018,
+            properties.zone || "",
+            properties.village || null,
+            properties.variety || null,
+            properties.year ?? null,
             properties.areaHa,
             rows[0].lat ?? null,
             rows[0].lng ?? null,

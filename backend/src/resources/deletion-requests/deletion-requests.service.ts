@@ -3,7 +3,15 @@ import type { PoolClient } from "pg";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { ADMIN_PRIVILEGED_ROLES, isAdminPrivilegedRole } from "../../auth/permissions";
-import { assertHouseholdInScope, isStaffInCuneCoopScope } from "../../common/crud/village-scope";
+import {
+  assertHouseholdInScope,
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  EAKHAL_VILLAGE_SQL_REGEX,
+  isStaffInCuneCoopScope,
+  matchesJurisdiction,
+  resolveParcelAdminLocation,
+} from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRows } from "../../common/sql/rows";
 import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
@@ -72,7 +80,132 @@ export class DeletionRequestsService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
-  ) {}
+  ) { }
+
+  private buildReviewerCommuneSqlFilter(alias: string, user: AuthUser): string | null {
+    const commune = user.assignedCommune?.trim() || "";
+    if (!commune) return null;
+    const inCune = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    const inEaKhal = matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+    if (!inCune && !inEaKhal) return "1 = 0";
+    if (inCune && inEaKhal) return null;
+
+    const hhEaKhalExpr = `(
+      ${alias}.target_type = 'household' AND (
+        ${alias}.target_code ~* '^66-PUC-SR0001-'
+        OR EXISTS (
+          SELECT 1
+            FROM households h_sc
+            JOIN villages v_sc ON v_sc.id = h_sc.village_id
+           WHERE h_sc.id = ${alias}.target_id
+             AND v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'
+        )
+      )
+    )`;
+
+    const accEaKhalExpr = `(
+      ${alias}.target_type = 'account' AND (
+        EXISTS (
+          SELECT 1
+            FROM users u_sc
+            LEFT JOIN households uh_sc ON uh_sc.id = u_sc.household_id
+            LEFT JOIN villages uv_sc ON uv_sc.id = COALESCE(uh_sc.village_id, u_sc.village_id)
+           WHERE u_sc.id = ${alias}.target_id
+             AND (
+               uv_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'
+               OR (
+                 uv_sc.id IS NULL
+                 AND COALESCE(u_sc.assigned_commune, '') ~* '(ea\\s*kh[aă]l|ea\\s*h''?leo)'
+               )
+             )
+        )
+        OR (
+          NOT EXISTS (SELECT 1 FROM users u_ex WHERE u_ex.id = ${alias}.target_id)
+          AND EXISTS (
+            SELECT 1
+              FROM users actor_sc
+             WHERE actor_sc.id IN (${alias}.requested_by, ${alias}.reviewed_by)
+               AND COALESCE(actor_sc.assigned_commune, '') ~* '(ea\\s*kh[aă]l|ea\\s*h''?leo)'
+          )
+        )
+      )
+    )`;
+
+    const eaKhalExpr = `(${hhEaKhalExpr} OR ${accEaKhalExpr})`;
+    if (inEaKhal && !inCune) return eaKhalExpr;
+    if (inCune && !inEaKhal) return `NOT ${eaKhalExpr}`;
+    return null;
+  }
+
+  private async assertRequestTargetInCommuneScope(
+    reqRow: Pick<RawDeletionRequestRow, "target_type" | "target_id" | "target_code">,
+    user: AuthUser,
+    runner?: PoolClient,
+  ): Promise<void> {
+    const commune = user.assignedCommune?.trim() || "";
+    if (!commune) return;
+    const inCune = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    const inEaKhal = matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+    if (!inCune && !inEaKhal) {
+      throw forbidden("Yêu cầu xóa này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
+    }
+    if (inCune && inEaKhal) return;
+
+    const q = runner ? runner.query.bind(runner) : this.db.query.bind(this.db);
+
+    if (reqRow.target_type === "household") {
+      const hhRes = await q<{ code: string; village_name: string | null }>(
+        `SELECT h.code, v.name AS village_name
+           FROM households h
+           LEFT JOIN villages v ON v.id = h.village_id
+          WHERE h.id = $1`,
+        [reqRow.target_id],
+      );
+      const hh = hhRes.rows[0];
+      const targetLoc = hh
+        ? resolveParcelAdminLocation(hh.village_name, hh.code)
+        : resolveParcelAdminLocation(null, reqRow.target_code);
+      if (!matchesJurisdiction(commune, [targetLoc])) {
+        throw forbidden("Yêu cầu xóa này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
+      }
+      return;
+    }
+
+    const accRes = await q<{
+      assigned_commune: string | null;
+      village_name: string | null;
+      hh_code: string | null;
+      has_village: boolean;
+    }>(
+      `SELECT u.assigned_commune,
+              uv.name AS village_name,
+              uh.code AS hh_code,
+              (COALESCE(uh.village_id, u.village_id) IS NOT NULL) AS has_village
+         FROM users u
+         LEFT JOIN households uh ON uh.id = u.household_id
+         LEFT JOIN villages uv ON uv.id = COALESCE(uh.village_id, u.village_id)
+        WHERE u.id = $1`,
+      [reqRow.target_id],
+    );
+    const acc = accRes.rows[0];
+    if (!acc) return;
+
+    let allowed: boolean;
+    if (acc.has_village || acc.hh_code) {
+      const targetLoc = resolveParcelAdminLocation(acc.village_name, acc.hh_code);
+      allowed = matchesJurisdiction(commune, [targetLoc]);
+    } else if (acc.assigned_commune && acc.assigned_commune.trim()) {
+      const targetLocs = [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION].filter((loc) =>
+        matchesJurisdiction(acc.assigned_commune!, [loc]),
+      );
+      allowed = targetLocs.length > 0 ? matchesJurisdiction(commune, targetLocs) : false;
+    } else {
+      allowed = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    }
+    if (!allowed) {
+      throw forbidden("Yêu cầu xóa này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
+    }
+  }
 
   async list(query: ListDeletionRequestsQueryDto, user: AuthUser) {
     const safePage = Math.max(1, Number(query.page) || 1);
@@ -84,6 +217,10 @@ export class DeletionRequestsService {
 
     const params: unknown[] = [];
     const conds: string[] = [];
+    const communeCond = this.buildReviewerCommuneSqlFilter("d", user);
+    if (communeCond) {
+      conds.push(communeCond);
+    }
 
     if (query.status) {
       params.push(query.status);
@@ -102,6 +239,9 @@ export class DeletionRequestsService {
     }
 
     const whereSql = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+    const pendingWhereSql = communeCond
+      ? `WHERE d.status = 'pending' AND (${communeCond})`
+      : `WHERE d.status = 'pending'`;
     const limitIdx = params.length + 1;
     const offsetIdx = params.length + 2;
 
@@ -121,7 +261,7 @@ export class DeletionRequestsService {
         params,
       ),
       this.db.query<{ pending_count: number }>(
-        `SELECT count(*)::int AS pending_count FROM member_deletion_requests WHERE status = 'pending'`,
+        `SELECT count(*)::int AS pending_count FROM member_deletion_requests d ${pendingWhereSql}`,
       ),
     ]);
 
@@ -214,6 +354,9 @@ export class DeletionRequestsService {
     let targetRole: string | null = null;
 
     if (dto.targetType === "account") {
+      if (!isStaffInCuneCoopScope(user, true)) {
+        throw forbidden("Bạn không có quyền yêu cầu xóa tài khoản ngoài phạm vi quản lý.");
+      }
       if (targetId === Number(user.id)) {
         throw forbidden("Không thể xóa chính tài khoản đang đăng nhập.");
       }
@@ -227,6 +370,10 @@ export class DeletionRequestsService {
       const target = targetRes.rows[0];
       if (!target) throw notFound("Không tìm thấy tài khoản.");
 
+      await this.assertRequestTargetInCommuneScope(
+        { target_type: "account", target_id: targetId, target_code: target.username },
+        user,
+      );
       assertAccountDeleteHierarchy(user.role, target.role);
       await this.assertRemainingLeadershipGuards(targetId);
 
@@ -392,6 +539,7 @@ export class DeletionRequestsService {
         );
         reqRow = lockRes.rows[0];
         if (!reqRow) throw notFound("Không tìm thấy yêu cầu xóa.");
+        await this.assertRequestTargetInCommuneScope(reqRow, user, client);
         if (reqRow.status !== "pending") {
           throw badRequest("Yêu cầu xóa này đã được xử lý trước đó.");
         }
@@ -589,6 +737,7 @@ export class DeletionRequestsService {
     );
     const reqRow = existing.rows[0];
     if (!reqRow) throw notFound("Không tìm thấy yêu cầu xóa.");
+    await this.assertRequestTargetInCommuneScope(reqRow, user);
     if (reqRow.status !== "pending") {
       throw badRequest("Yêu cầu xóa này đã được xử lý trước đó.");
     }
@@ -645,6 +794,7 @@ export class DeletionRequestsService {
     );
     const reqRow = existing.rows[0];
     if (!reqRow) throw notFound("Không tìm thấy yêu cầu xóa.");
+    await this.assertRequestTargetInCommuneScope(reqRow, user);
     if (reqRow.status !== "pending") {
       throw badRequest("Chỉ có thể thu hồi yêu cầu đang chờ duyệt.");
     }

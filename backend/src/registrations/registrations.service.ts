@@ -59,7 +59,7 @@ export class RegistrationsService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
-  ) {}
+  ) { }
 
   private async resolveOfficerVillageName(user?: AuthUser): Promise<string | null> {
     if (!user || user.role !== "village_officer" || !user.villageId) return null;
@@ -92,8 +92,20 @@ export class RegistrationsService {
                 h.id AS suggested_household_id, h.code AS suggested_household_code, h.name AS suggested_household_name
          FROM users u
          LEFT JOIN villages v ON v.id = u.village_id
-         LEFT JOIN households h ON h.phone = u.username
-           AND NOT EXISTS (SELECT 1 FROM users x WHERE x.household_id = h.id)
+         LEFT JOIN LATERAL (
+           SELECT h0.id, h0.code, h0.name, h0.village_id
+           FROM households h0
+           WHERE h0.phone = u.username
+             AND NOT EXISTS (SELECT 1 FROM users x WHERE x.household_id = h0.id AND x.id <> u.id)
+           ORDER BY
+             CASE
+               WHEN h0.id = u.household_id THEN 0
+               WHEN u.village_id IS NOT NULL AND h0.village_id = u.village_id THEN 1
+               ELSE 2
+             END,
+             h0.id ASC
+           LIMIT 1
+         ) h ON true
          WHERE u.status = 'pending' AND u.role = 'farmer'
          ORDER BY u.created_at`,
       ),

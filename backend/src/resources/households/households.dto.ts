@@ -15,7 +15,36 @@ import {
   MinLength,
 } from "class-validator";
 import { MaxPasswordUtf8Bytes, NormalizePassword } from "../../auth/dto/auth.dto";
+import { ListQueryDto } from "../../common/crud/list-query.dto";
 import { Count, NonNegative, OptionalField, RecordId, Text } from "../../common/validation/fields";
+
+export class ListHouseholdsQueryDto extends ListQueryDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(80)
+  zone?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(20)
+  villageId?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(40)
+  status?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "boolean" ? String(value) : typeof value === "string" ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(10)
+  full?: string;
+}
 
 export class CreateHouseholdDto {
   @Text(40)

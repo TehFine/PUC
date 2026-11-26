@@ -4,7 +4,7 @@ import { DatabaseService } from "../../database/database.service";
 import { badRequest, forbidden } from "../errors/app.exception";
 
 export const CUNE_ADMIN_LOCATION = "Xã Krông Búk, Tỉnh Đắk Lắk";
-export const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
+export const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Tỉnh Đắk Lắk";
 
 export const EAKHAL_VILLAGE_SQL_REGEX = "ea\\s*kh[aă]l|ea\\s*k''?s[oô]";
 
@@ -19,10 +19,11 @@ function normGeoText(val: string): string {
     .trim();
 }
 
+const COMMUNE_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran)\s+/;
+const DISTRICT_LEVEL_PREFIX_RE = /^(?:huyen|quan|thi xa|thanh pho|tp\.?)\s+/;
 const ADMIN_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran|huyen|quan|thi xa|thanh pho|tp\.?|tinh)\s+/;
 
-export function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
-  const target = normGeoText(assignedRaw);
+function matchesSingleSegment(target: string, adminLocations: string[]): boolean {
   if (!target) return false;
   if (target === "*" || target === "toan quoc") return true;
 
@@ -43,6 +44,15 @@ export function matchesJurisdiction(assignedRaw: string, adminLocations: string[
     ) {
       return true;
     }
+    const hasEaKhalCommune = segments.some((s) => s === "xa ea khal" || s === "ea khal");
+    if (
+      hasEaKhalCommune &&
+      (target === "huyen ea h'leo" ||
+        target === "huyen ea hleo" ||
+        (!targetHasPrefix && (targetStripped === "ea h'leo" || targetStripped === "ea hleo")))
+    ) {
+      return true;
+    }
     for (const seg of segments) {
       if (seg === target) return true;
       if (!targetHasPrefix) {
@@ -52,6 +62,44 @@ export function matchesJurisdiction(assignedRaw: string, adminLocations: string[
     }
   }
   return false;
+}
+
+export function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
+  const fullTarget = normGeoText(assignedRaw);
+  if (!fullTarget) return false;
+  if (fullTarget === "*" || fullTarget === "toan quoc") return true;
+
+  const rawParts = assignedRaw
+    .split(",")
+    .map((s) => normGeoText(s))
+    .filter(Boolean);
+  if (rawParts.length <= 1) {
+    return matchesSingleSegment(fullTarget, adminLocations);
+  }
+
+  // Khi chuỗi địa bàn chứa nhiều cấp hành chính ngăn cách bởi dấu phẩy
+  // (VD: "Xã Krông Búk, Tỉnh Đắk Lắk" hoặc "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk"),
+  // ưu tiên cấp chi tiết nhất (cấp xã -> cấp huyện -> cấp tỉnh) để hậu tố ", Tỉnh Đắk Lắk"
+  // không làm mở rộng nhầm sang xã khác trong cùng tỉnh.
+  const communeParts = rawParts.filter(
+    (p) =>
+      COMMUNE_LEVEL_PREFIX_RE.test(p) ||
+      p === "cu ne" ||
+      p === "krong buk" ||
+      p === "ea khal",
+  );
+  if (communeParts.length > 0) {
+    return communeParts.some((p) => matchesSingleSegment(p, adminLocations));
+  }
+
+  const districtParts = rawParts.filter(
+    (p) => DISTRICT_LEVEL_PREFIX_RE.test(p) || p === "ea h'leo" || p === "ea hleo",
+  );
+  if (districtParts.length > 0) {
+    return districtParts.some((p) => matchesSingleSegment(p, adminLocations));
+  }
+
+  return rawParts.some((p) => matchesSingleSegment(p, adminLocations));
 }
 
 export function resolveParcelAdminLocation(villageName?: string | null, zoneOrPlotCode?: string | null): string {
@@ -190,7 +238,7 @@ export const villageScope = (column: string) => (user: AuthUser, params: unknown
     if (inEaKhal && !inCune) {
       clauses.push(`${column} IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}')`);
     } else if (inCune && !inEaKhal) {
-      clauses.push(`${column} IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name !~* '${EAKHAL_VILLAGE_SQL_REGEX}')`);
+      clauses.push(`(${column} IS NULL OR ${column} NOT IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'))`);
     }
   }
 

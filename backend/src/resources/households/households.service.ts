@@ -14,7 +14,7 @@ import {
   villageScope,
 } from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
-import { publicAttachmentUrlSql } from "../../common/sql/rows";
+import { camelRows, publicAttachmentUrlSql } from "../../common/sql/rows";
 import { hasPublicTable } from "../../common/sql/schema-cache";
 import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
 import { DatabaseService } from "../../database/database.service";
@@ -272,8 +272,124 @@ export class HouseholdsService extends BaseCrudService {
     });
   }
 
+  private async listWithZoneFilter(
+    user: AuthUser,
+    query: ListQueryDto & Record<string, unknown>,
+    rawZone: string,
+  ) {
+    const safePage = Math.min(10_000, Math.max(1, Math.trunc(Number(query.page) || 1)));
+    const safePageSize = Math.min(500, Math.max(1, Math.trunc(Number(query.pageSize) || 100)));
+    const cleanQ = typeof query.q === "string" ? query.q.trim() : undefined;
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+
+    const scoped = this.config.scope?.(user, params);
+    if (scoped) conditions.push(scoped);
+
+    for (const [param, column] of Object.entries(this.config.filters ?? {})) {
+      const value = query[param];
+      if (value === undefined) continue;
+      if (typeof value !== "string") throw badRequest(`Tham số ${param} không hợp lệ.`);
+      const trimmed = value.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > 100) throw badRequest(`Tham số ${param} vượt quá độ dài cho phép.`);
+      if (column.endsWith("_id") && !/^[1-9]\d{0,14}$/.test(trimmed)) {
+        throw badRequest(`Tham số ${param} phải là mã định danh số nguyên dương.`);
+      }
+      params.push(trimmed);
+      conditions.push(`${column} = $${params.length}`);
+    }
+
+    const searchColumns = this.config.searchFor?.(user) ?? this.config.search;
+    if (cleanQ && searchColumns?.length) {
+      params.push(`%${cleanQ.replace(/[\\%_]/g, "\\$&")}%`);
+      const ref = `$${params.length}`;
+      conditions.push(`(${searchColumns.map((column) => `${column}::text ILIKE ${ref} ESCAPE '\\'`).join(" OR ")})`);
+    }
+
+    const [hasPlots, hasSignboards] = await Promise.all([
+      hasPlotsTable(this.db),
+      hasPublicTable(this.db, "plot_signboard_tokens"),
+    ]);
+
+    const normZone = rawZone.trim().toUpperCase().replace(/Đ/g, "D");
+    params.push(normZone);
+    const zoneRef = `$${params.length}`;
+    params.push(`${normZone.replace(/[\\%_]/g, "\\$&")}-%`);
+    const zonePrefixRef = `$${params.length}`;
+
+    const zoneParts: string[] = [
+      `replace(upper(btrim(t.code)), 'Đ', 'D') = ${zoneRef}`,
+      `replace(upper(btrim(t.code)), 'Đ', 'D') LIKE ${zonePrefixRef} ESCAPE '\\'`,
+    ];
+    if (hasPlots) {
+      zoneParts.push(
+        `EXISTS (
+           SELECT 1
+             FROM plots p_z
+            WHERE p_z.household_id = t.id
+              AND (
+                replace(upper(btrim(COALESCE(p_z.zone_code, ''))), 'Đ', 'D') = ${zoneRef}
+                OR replace(upper(btrim(p_z.code)), 'Đ', 'D') LIKE ${zonePrefixRef} ESCAPE '\\'
+              )
+         )`,
+      );
+    }
+    if (hasSignboards) {
+      zoneParts.push(
+        `EXISTS (
+           SELECT 1
+             FROM plot_signboard_tokens sb_z
+            WHERE sb_z.household_id = t.id
+              AND (
+                replace(upper(btrim(COALESCE(sb_z.zone_code, ''))), 'Đ', 'D') = ${zoneRef}
+                OR replace(upper(btrim(sb_z.plot_code)), 'Đ', 'D') LIKE ${zonePrefixRef} ESCAPE '\\'
+              )
+         )`,
+      );
+    }
+    conditions.push(`(${zoneParts.join(" OR ")})`);
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const { rows } = await this.db.query<Record<string, unknown> & { __total_count?: number }>(
+      `SELECT ${this.config.fields}, count(*) OVER()::int AS __total_count
+         FROM ${this.config.from}
+         ${where}
+        ORDER BY ${this.config.orderBy}
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, safePageSize, (safePage - 1) * safePageSize],
+    );
+
+    let total = 0;
+    if (rows.length > 0) {
+      total = Number(rows[0].__total_count ?? 0);
+    } else if (safePage > 1) {
+      total = (
+        await this.db.query<{ total: number }>(
+          `SELECT count(*)::int AS total FROM ${this.config.from} ${where}`,
+          params,
+        )
+      ).rows[0].total;
+    }
+
+    const data = camelRows(
+      rows.map((row) => {
+        const { __total_count: _ignored, ...rest } = row;
+        void _ignored;
+        return rest;
+      }),
+    );
+    return { data, total, page: safePage, pageSize: safePageSize };
+  }
+
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
-    const result = await super.list(user, query);
+    const cleanZone = typeof query?.zone === "string" ? query.zone.trim() : "";
+    if (cleanZone.length > 80) {
+      throw badRequest("Tham số zone vượt quá độ dài cho phép.");
+    }
+    const result = cleanZone
+      ? await this.listWithZoneFilter(user, query, cleanZone)
+      : await super.list(user, query);
     const forceMask = query?.full === "0" || query?.full === false;
     const enriched = await this.enrichHouseholdsWithDiaryAndPlots(
       result.data.map((row) => redact(row, user, forceMask)),
@@ -290,7 +406,17 @@ export class HouseholdsService extends BaseCrudService {
 
   override async create(dto: object, user: AuthUser, ip?: string) {
     const created = await super.create(dto, user, ip);
-    await syncHouseholdAndVillageStats(this.db);
+    const createdId = created && "id" in created ? Number(created.id) : 0;
+    const hasPlots = await hasPlotsTable(this.db);
+    await syncHouseholdAndVillageStats(this.db, {
+      householdIds: createdId > 0 ? [createdId] : [],
+      hasPlots,
+      resetEmptyHouseholds: false,
+    });
+    if (hasPlots && createdId > 0) {
+      const refreshed = await super.findOne(createdId, user).catch(() => created);
+      return redact(refreshed, user);
+    }
     return redact(created, user);
   }
 
@@ -309,6 +435,7 @@ export class HouseholdsService extends BaseCrudService {
     const oldPhone = oldRow?.phone?.trim() ?? "";
     const oldStatus = oldRow?.status ?? null;
     const updated = await super.update(id, dto, user, ip);
+    const hasPlots = await hasPlotsTable(this.db);
     const nextVillageId =
       (dto as { villageId?: number }).villageId !== undefined
         ? Number((dto as { villageId?: number }).villageId)
@@ -317,7 +444,7 @@ export class HouseholdsService extends BaseCrudService {
           : oldVillageId;
     if (nextVillageId !== undefined && nextVillageId !== oldVillageId) {
       await this.db.query("UPDATE users SET village_id = $2 WHERE household_id = $1", [id, nextVillageId]);
-      await this.syncHouseholdPlotsVillage(id, nextVillageId);
+      await this.syncHouseholdPlotsVillage(id, nextVillageId, hasPlots);
     }
 
     const nextName =
@@ -349,7 +476,10 @@ export class HouseholdsService extends BaseCrudService {
     }
 
     await syncHouseholdAndVillageStats(this.db, {
+      householdIds: [id],
       forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
+      hasPlots,
+      resetEmptyHouseholds: false,
     });
 
     const nextStatus = typeof (dto as { status?: string }).status === "string" ? (dto as { status: string }).status : null;
@@ -368,7 +498,8 @@ export class HouseholdsService extends BaseCrudService {
       });
     }
 
-    return redact(updated, user);
+    const refreshed = await super.findOne(id, user).catch(() => updated);
+    return redact(refreshed, user);
   }
 
   override async remove(id: number, user: AuthUser, ip?: string) {
@@ -390,6 +521,8 @@ export class HouseholdsService extends BaseCrudService {
       this.resolveOfficerVillageName(user),
     ]);
     const villageNameById = new Map<number, string>(villagesRes.rows.map((v) => [Number(v.id), v.name]));
+    const touchedHouseholdIds: number[] = [];
+    const vacatedVillageIds: number[] = [];
 
     for (const [index, raw] of rows.entries()) {
       const rowNo = index + 1;
@@ -472,6 +605,7 @@ export class HouseholdsService extends BaseCrudService {
           result.errors.push({ row: rowNo, message: "Mã hộ đang thuộc thôn khác, không được phép ghi đè." });
           continue;
         }
+        touchedHouseholdIds.push(Number(saved[0].id));
         if (saved[0].inserted) {
           result.created += 1;
         } else {
@@ -481,6 +615,9 @@ export class HouseholdsService extends BaseCrudService {
             [saved[0].id, saved[0].village_id],
           );
           if (existingRow && Number(existingRow.village_id) !== Number(saved[0].village_id)) {
+            if (existingRow.village_id) {
+              vacatedVillageIds.push(Number(existingRow.village_id));
+            }
             await this.syncHouseholdPlotsVillage(Number(saved[0].id), Number(saved[0].village_id), hasPlots);
           }
         }
@@ -491,7 +628,12 @@ export class HouseholdsService extends BaseCrudService {
     }
 
     if (result.created > 0 || result.updated > 0) {
-      await syncHouseholdAndVillageStats(this.db);
+      await syncHouseholdAndVillageStats(this.db, {
+        householdIds: touchedHouseholdIds,
+        forceZeroVillageIds: vacatedVillageIds,
+        hasPlots,
+        resetEmptyHouseholds: false,
+      });
     }
 
     await this.audit.write(

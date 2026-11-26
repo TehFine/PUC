@@ -5,7 +5,12 @@ import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { isCoopStaffRole } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
-import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../../common/crud/village-scope";
+import {
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+  villageScope,
+} from "../../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
 import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
@@ -322,6 +327,7 @@ export interface ReportFilter {
 interface InternalBuildResult {
   headers: string[];
   rows: unknown[][];
+  total: number;
   evidencePhotos: ReportEvidencePhotoItem[];
   truncatedPhotoCount: number;
   summaryStats?: ReportSummaryStats;
@@ -332,7 +338,7 @@ export class ReportsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
 
   async getReportData(
     type: string,
@@ -410,8 +416,10 @@ export class ReportsService {
       );
     }
 
-    const total = built.rows.length;
-    const exposedRows = isFullExport ? built.rows : built.rows.slice(0, PREVIEW_EXPORT_ROWS);
+    const exposedRows = isFullExport
+      ? built.rows.slice(0, MAX_EXPORT_ROWS)
+      : built.rows.slice(0, PREVIEW_EXPORT_ROWS);
+    const total = isFullExport ? exposedRows.length : built.total;
     const stringRows = exposedRows.map((row) =>
       row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
     );
@@ -573,39 +581,39 @@ export class ReportsService {
     const [plotsRes, tokenRes, coopRes] = await Promise.all([
       hasPlots
         ? this.db.query<PlotMetaRow>(
-            `SELECT p.code, p.area_ha::float8 AS area_ha, p.variety, p.planted_year, p.zone_code, p.status
+          `SELECT p.code, p.area_ha::float8 AS area_ha, p.variety, p.planted_year, p.zone_code, p.status
                FROM plots p
               WHERE p.household_id = $1
               ORDER BY p.code ASC`,
-            [householdId],
-          )
+          [householdId],
+        )
         : hasSignboards
           ? this.db.query<PlotMetaRow>(
-              `SELECT pst.plot_code AS code, pst.area_ha::float8 AS area_ha, pst.variety,
+            `SELECT pst.plot_code AS code, pst.area_ha::float8 AS area_ha, pst.variety,
                       pst.planted_year, pst.zone_code, 'approved'::text AS status
                  FROM plot_signboard_tokens pst
                 WHERE pst.household_id = $1
                 ORDER BY pst.plot_code ASC`,
-              [householdId],
-            )
+            [householdId],
+          )
           : Promise.resolve({ rows: [] as PlotMetaRow[] }),
       hasSignboards
         ? this.db.query<{ qr_token: string; zone_code: string | null }>(
-            `SELECT qr_token, zone_code
+          `SELECT qr_token, zone_code
                FROM plot_signboard_tokens
               WHERE household_id = $1
               ORDER BY plot_code ASC
               LIMIT 1`,
-            [householdId],
-          )
+          [householdId],
+        )
         : Promise.resolve({ rows: [] as Array<{ qr_token: string; zone_code: string | null }> }),
       hasEndorsement
         ? this.db.query<{ coop_legal_name: string | null; coop_address: string | null }>(
-            `SELECT coop_legal_name, coop_address
+          `SELECT coop_legal_name, coop_address
                FROM commune_endorsement_config
               ORDER BY id ASC
               LIMIT 1`,
-          )
+        )
         : Promise.resolve({ rows: [] as Array<{ coop_legal_name: string | null; coop_address: string | null }> }),
     ]);
 
@@ -621,8 +629,8 @@ export class ReportsService {
     const codeDerivedZone = hh.code.replace(/-(?:H|T)\d+$/i, "");
     const validDerivedZone =
       codeDerivedZone &&
-      codeDerivedZone !== hh.code &&
-      /^(?:VN-|66-PUC-)/i.test(codeDerivedZone)
+        codeDerivedZone !== hh.code &&
+        /^(?:VN-|66-PUC-)/i.test(codeDerivedZone)
         ? codeDerivedZone
         : null;
 
@@ -661,7 +669,7 @@ export class ReportsService {
       /^66-PUC-SR0001-/i.test(inferredPucCode) ||
       /ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(hh.village_name ?? "") ||
       /ea\s*kh[aă]l/i.test(zoneName);
-    const zoneAddress = isEaKhalZone ? "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk" : coopAddress;
+    const zoneAddress = isEaKhalZone ? EAKHAL_ADMIN_LOCATION : coopAddress;
 
     return {
       id: Number(hh.id),
@@ -754,7 +762,8 @@ export class ReportsService {
         const tokenSelect = hasSignboards ? "sb.qr_token" : "NULL::text AS qr_token";
         const { rows } = await this.db.query(
           `SELECT h.code, h.name, ${cccdSelectExpr}, h.phone, COALESCE(v.name, 'Chưa phân thôn') AS village_name,
-                  h.plot_count, h.area_ha, h.status, ${tokenSelect}
+                  h.plot_count, h.area_ha, h.status, ${tokenSelect},
+                  COUNT(*) OVER()::int AS __total_count
            FROM households h
            LEFT JOIN villages v ON v.id = h.village_id
            ${tokenJoin}
@@ -763,6 +772,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
         return {
           headers: [
             "Mã hộ",
@@ -786,6 +796,7 @@ export class ReportsService {
             HOUSEHOLD_STATUS_VN[String(r.status)] ?? r.status,
             r.qr_token ? `/t/${String(r.qr_token)}` : `/trace/${String(r.code)}`,
           ]),
+          total: trueTotal,
           evidencePhotos: [],
           truncatedPhotoCount: 0,
         };
@@ -803,7 +814,8 @@ export class ReportsService {
           `SELECT j.id, j.entry_on, h.code AS household_code, h.name AS household_name,
                   COALESCE(v.name, 'Chưa phân thôn') AS village_name, j.plot_code, j.activity, j.detail, j.recorder,
                   j.photo_id, j.photo_ids, j.gps_verified,
-                  j.verification_status, j.verified_by_name
+                  j.verification_status, j.verified_by_name,
+                  COUNT(*) OVER()::int AS __total_count
            FROM journal_entries j
            JOIN households h ON h.id = j.household_id
            LEFT JOIN villages v ON v.id = h.village_id
@@ -812,6 +824,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
 
         const allIds: number[] = [];
         const perRowIds = rows.map((r) => {
@@ -900,6 +913,7 @@ export class ReportsService {
             "Minh chứng",
           ],
           rows: outRows,
+          total: trueTotal,
           evidencePhotos,
           truncatedPhotoCount,
           summaryStats: {
@@ -930,7 +944,8 @@ export class ReportsService {
                   COALESCE(p.name, 'Thuốc BVTV') AS pesticide_name,
                   p.active_ingredient, s.dose, s.area_ha, s.isolation_days, s.mrl_status,
                   s.photo_id, s.photo_ids, ${sprayGpsSelect},
-                  s.verification_status, s.verified_by_name
+                  s.verification_status, s.verified_by_name,
+                  COUNT(*) OVER()::int AS __total_count
            FROM spray_records s
            JOIN households h ON h.id = s.household_id
            LEFT JOIN villages v ON v.id = h.village_id
@@ -940,6 +955,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
 
         const allIds: number[] = [];
         const perRowIds = rows.map((r) => {
@@ -1035,6 +1051,7 @@ export class ReportsService {
             "Minh chứng",
           ],
           rows: outRows,
+          total: trueTotal,
           evidencePhotos,
           truncatedPhotoCount,
           summaryStats: {
@@ -1060,7 +1077,8 @@ export class ReportsService {
         const { rows } = await this.db.query(
           `SELECT lt.code, lt.sampled_on, h.code AS household_code, h.name AS household_name,
                   COALESCE(v.name, 'Chưa phân thôn') AS village_name, lt.plot_code, lt.cd_mg_kg, lt.yellow_o_positive,
-                  lt.residue_mg_kg, lt.chlorpyrifos_mg_kg, lt.result, lt.lab
+                  lt.residue_mg_kg, lt.chlorpyrifos_mg_kg, lt.result, lt.lab,
+                  COUNT(*) OVER()::int AS __total_count
            FROM lab_tests lt
            JOIN households h ON h.id = lt.household_id
            LEFT JOIN villages v ON v.id = h.village_id
@@ -1069,6 +1087,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
         return {
           headers: [
             "Mã mẫu",
@@ -1098,6 +1117,7 @@ export class ReportsService {
             LAB_RESULT_VN[String(r.result)] ?? r.result,
             r.lab,
           ]),
+          total: trueTotal,
           evidencePhotos: [],
           truncatedPhotoCount: 0,
         };
@@ -1114,7 +1134,8 @@ export class ReportsService {
         const { rows } = await this.db.query(
           `SELECT vl.id, vl.detected_on, vl.severity, vl.title, vl.household_label,
                   vl.plot_code, vl.status, vl.farmer_response, vl.resolved_on, vl.resolution_notes,
-                  vl.farmer_response_photo_id, vl.farmer_response_photo_ids
+                  vl.farmer_response_photo_id, vl.farmer_response_photo_ids,
+                  COUNT(*) OVER()::int AS __total_count
            FROM violations vl
            LEFT JOIN households h ON h.id = vl.household_id
            ${where}
@@ -1122,6 +1143,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
 
         const allIds: number[] = [];
         const perRowIds = rows.map((r) => {
@@ -1204,6 +1226,7 @@ export class ReportsService {
             "Minh chứng khắc phục",
           ],
           rows: outRows,
+          total: trueTotal,
           evidencePhotos,
           truncatedPhotoCount,
         };
@@ -1261,13 +1284,15 @@ export class ReportsService {
         const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
         const { rows } = await this.db.query(
           `SELECT hl.code, hl.harvested_on, hl.weight_tons, hl.household_count,
-                  hl.buyer, hl.market, hl.packhouse_code, hl.status
+                  hl.buyer, hl.market, hl.packhouse_code, hl.status,
+                  COUNT(*) OVER()::int AS __total_count
            FROM harvest_lots hl
            ${where}
            ORDER BY hl.harvested_on DESC, hl.id DESC
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
         return {
           headers: [
             "Mã lô",
@@ -1289,6 +1314,7 @@ export class ReportsService {
             r.packhouse_code,
             HARVEST_STATUS_VN[String(r.status)] ?? r.status,
           ]),
+          total: trueTotal,
           evidencePhotos: [],
           truncatedPhotoCount: 0,
         };
@@ -1304,7 +1330,8 @@ export class ReportsService {
         );
         const { rows } = await this.db.query(
           `SELECT tc.title, tc.held_on, h.code AS household_code, h.name AS household_name,
-                  h.phone, COALESCE(v.name, 'Chưa phân thôn') AS village_name, tr.status, tr.registered_at
+                  h.phone, COALESCE(v.name, 'Chưa phân thôn') AS village_name, tr.status, tr.registered_at,
+                  COUNT(*) OVER()::int AS __total_count
            FROM training_registrations tr
            JOIN training_courses tc ON tc.id = tr.course_id
            JOIN households h ON h.id = tr.household_id
@@ -1314,6 +1341,7 @@ export class ReportsService {
            LIMIT ${rowLimit}`,
           params,
         );
+        const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
         return {
           headers: [
             "Khóa tập huấn",
@@ -1335,6 +1363,7 @@ export class ReportsService {
             TRAINING_REG_STATUS_VN[String(r.status)] ?? r.status,
             formatDateVn(r.registered_at),
           ]),
+          total: trueTotal,
           evidencePhotos: [],
           truncatedPhotoCount: 0,
         };
@@ -1428,6 +1457,7 @@ export class ReportsService {
       spray_gps_cnt: number;
       spray_media_cnt: number;
       qr_token: string | null;
+      __total_count?: number;
     }>(
       `WITH j_agg AS (
          SELECT j.household_id,
@@ -1469,11 +1499,11 @@ export class ReportsService {
               COALESCE(s_agg.spray_verified_cnt, 0) AS spray_verified_cnt,
               COALESCE(s_agg.spray_gps_cnt, 0) AS spray_gps_cnt,
               COALESCE(s_agg.spray_media_cnt, 0) AS spray_media_cnt,
-              ${
-                hasSignboards
-                  ? `(SELECT pst.qr_token FROM plot_signboard_tokens pst WHERE pst.household_id = h.id ORDER BY pst.plot_code ASC LIMIT 1) AS qr_token`
-                  : `NULL::text AS qr_token`
-              }
+              ${hasSignboards
+        ? `(SELECT pst.qr_token FROM plot_signboard_tokens pst WHERE pst.household_id = h.id ORDER BY pst.plot_code ASC LIMIT 1) AS qr_token,`
+        : `NULL::text AS qr_token,`
+      }
+              COUNT(*) OVER()::int AS __total_count
          FROM households h
          LEFT JOIN villages v ON v.id = h.village_id
          LEFT JOIN j_agg ON j_agg.household_id = h.id
@@ -1484,6 +1514,7 @@ export class ReportsService {
         LIMIT ${rowLimit}`,
       params,
     );
+    const trueTotal = rows.length > 0 ? Number(rows[0].__total_count ?? rows.length) : 0;
 
     let totalVerified = 0;
     let totalEntries = 0;
@@ -1539,6 +1570,7 @@ export class ReportsService {
         "Đường dẫn hồ sơ số",
       ],
       rows: outRows,
+      total: trueTotal,
       evidencePhotos: [],
       truncatedPhotoCount: 0,
       summaryStats: {
@@ -1598,39 +1630,42 @@ export class ReportsService {
       this.db.query(
         `SELECT j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.recorder,
                 j.photo_id, j.photo_ids, j.gps_verified,
-                j.verification_status, j.verified_by_name, j.created_at
+                j.verification_status, j.verified_by_name, j.created_at,
+                COUNT(*) OVER()::int AS __total_count
            FROM journal_entries j
           WHERE ${jConds.join(" AND ")}
           ORDER BY j.entry_on ASC, j.id ASC
-          LIMIT ${rowLimit}`,
+          LIMIT ${MAX_EXPORT_ROWS}`,
         jParams,
       ),
       this.db.query(
         `SELECT s.id, s.sprayed_on, s.plot_code, COALESCE(p.name, 'Thuốc BVTV') AS pesticide_name,
                 p.active_ingredient, s.dose, s.area_ha, s.isolation_days, s.mrl_status,
                 s.note, s.photo_id, s.photo_ids, ${sprayGpsSelect},
-                s.verification_status, s.verified_by_name, s.created_at
+                s.verification_status, s.verified_by_name, s.created_at,
+                COUNT(*) OVER()::int AS __total_count
            FROM spray_records s
            LEFT JOIN pesticides p ON p.id = s.pesticide_id
           WHERE ${sConds.join(" AND ")}
           ORDER BY s.sprayed_on ASC, s.id ASC
-          LIMIT ${rowLimit}`,
+          LIMIT ${MAX_EXPORT_ROWS}`,
         sParams,
       ),
       hasMilestones
         ? this.db.query(
-            `SELECT m.id, m.performed_on, m.plot_code, m.stage_code, m.milestone_code,
+          `SELECT m.id, m.performed_on, m.plot_code, m.stage_code, m.milestone_code,
                     m.actual_tree_state, m.actual_dosage, m.supplier_name,
                     m.field_photo_id, m.field_photo_ids,
                     m.invoice_photo_id, m.invoice_photo_ids,
                     m.gps_verified, m.compliance_status,
-                    m.journal_entry_id, m.spray_record_id, m.created_at
+                    m.journal_entry_id, m.spray_record_id, m.created_at,
+                    COUNT(*) FILTER (WHERE m.journal_entry_id IS NULL AND m.spray_record_id IS NULL) OVER()::int AS __standalone_total
                FROM care_milestone_declarations m
               WHERE ${mConds.join(" AND ")}
               ORDER BY m.performed_on ASC, m.id ASC
-              LIMIT ${rowLimit}`,
-            mParams,
-          )
+              LIMIT ${MAX_EXPORT_ROWS}`,
+          mParams,
+        )
         : Promise.resolve({ rows: [] as Array<Record<string, unknown>> }),
     ]);
 
@@ -1799,6 +1834,13 @@ export class ReportsService {
       return a.sortKind - b.sortKind;
     });
 
+    const jTotal = jRes.rows.length > 0 ? Number(jRes.rows[0].__total_count ?? jRes.rows.length) : 0;
+    const sTotal = sRes.rows.length > 0 ? Number(sRes.rows[0].__total_count ?? sRes.rows.length) : 0;
+    const mStandaloneTotal =
+      mRes.rows.length > 0
+        ? Number(mRes.rows[0].__standalone_total ?? standaloneMilestones.length)
+        : 0;
+    const trueTotal = Math.max(unified.length, jTotal + sTotal + mStandaloneTotal);
     const limitedItems = unified.slice(0, rowLimit);
     const allLookupIds: number[] = [];
     for (const item of limitedItems) {
@@ -1919,6 +1961,7 @@ export class ReportsService {
         "Mã minh chứng",
       ],
       rows: outRows,
+      total: trueTotal,
       evidencePhotos,
       truncatedPhotoCount,
       summaryStats: {
@@ -1970,7 +2013,7 @@ export class ReportsService {
 
 @Controller("reports")
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(private readonly reports: ReportsService) { }
 
   @Get(":type")
   @Throttle(RateLimitTier.REPORT_EXPORT)
@@ -2006,4 +2049,4 @@ export class ReportsController {
   providers: [ReportsService],
   exports: [ReportsService],
 })
-export class ReportsModule {}
+export class ReportsModule { }

@@ -1,7 +1,7 @@
 import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
-import { can, isAdminPrivilegedRole, isCoopStaffRole } from "../../auth/permissions";
+import { can, isAdminPrivilegedRole } from "../../auth/permissions";
 import {
   CUNE_ADMIN_LOCATION,
   EAKHAL_ADMIN_LOCATION,
@@ -13,6 +13,7 @@ import { camelRow, camelRows } from "../../common/sql/rows";
 import { hasPublicTable } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { INSPECTION_ROLES } from "../../portal/common/admin-links";
+import { buildHarvestContributionScope, buildHarvestLotScope } from "../harvest/harvest.service";
 import { TODAY_VN_SQL } from "../shared/state";
 
 @Injectable()
@@ -69,7 +70,6 @@ export class DashboardService {
     // Lịch đột xuất chỉ hiển thị cho vai trò lập và thực hiện kiểm tra.
     const canSeeSuddenSchedule = INSPECTION_ROLES.includes(user.role);
     const isEnterprise = user.role === "enterprise";
-    const isCoopStaff = isCoopStaffRole(user.role);
     const inCoopScope = isStaffInCuneCoopScope(user, true);
 
     const countsParams: unknown[] = [];
@@ -78,28 +78,13 @@ export class DashboardService {
     const hhWhere = hhScope ? `WHERE ${hhScope}` : "";
     const bindVillage = (col: string) => villageScope(col)(user, countsParams) ?? "true";
 
-    const violWhere = isVillageScoped ? "AND v.household_id IN (SELECT id FROM hh)" : "";
-    const apprWhere = isVillageScoped ? "AND a.household_id IN (SELECT id FROM hh)" : "";
     const bindParam = (value: unknown) => {
       countsParams.push(value);
       return `$${countsParams.length}`;
     };
-    let harvestLotScope = "";
-    if (isEnterprise) {
-      // Doanh nghiệp chỉ thấy sản lượng và số lô của chính mình; chưa gắn doanh nghiệp thì không thấy gì.
-      harvestLotScope = user.enterpriseId ? `WHERE hl.enterprise_id = ${bindParam(user.enterpriseId)}` : "WHERE 1 = 0";
-    } else if (!inCoopScope) {
-      harvestLotScope = "WHERE 1 = 0";
-    } else if (isVillageScoped) {
-      harvestLotScope = `WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE' AND EXISTS (SELECT 1 FROM harvest_contributions hc JOIN hh ON hh.id = hc.household_id WHERE hc.lot_id = hl.id)`;
-    } else if (isCoopStaff) {
-      harvestLotScope = `WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = ${bindParam((user.coopCode || "HTX-CUNE").trim().toUpperCase())}`;
-    } else {
-      harvestLotScope = "WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'";
-    }
     const isAdmin = isAdminPrivilegedRole(user.role);
 
-    const [hasPlots, hasDelReqTable, hasTraceReqTable] = await Promise.all([
+    const [hasPlots, hasDelReqTable, hasTraceReqTable, hasCareDeclarations] = await Promise.all([
       this.hasPlotsTable(),
       canReadDeletionRequests && inCoopScope
         ? hasPublicTable(this.db, "member_deletion_requests")
@@ -107,7 +92,14 @@ export class DashboardService {
       canReadTraceRequests && inCoopScope
         ? hasPublicTable(this.db, "trace_access_requests")
         : Promise.resolve(false),
+      canReadJournal && canReadSpray
+        ? hasPublicTable(this.db, "care_milestone_declarations")
+        : Promise.resolve(false),
     ]);
+    const dedupCareSpraySql =
+      canReadJournal && canReadSpray && hasCareDeclarations
+        ? "AND NOT EXISTS (SELECT 1 FROM care_milestone_declarations cmd WHERE cmd.spray_record_id = sr.id AND cmd.journal_entry_id IS NOT NULL)"
+        : "";
 
     const householdsCountExpr = !canReadHouseholds
       ? "0"
@@ -303,28 +295,42 @@ export class DashboardService {
              )::float8`;
 
     const openViolationsExpr = canReadViolations
-      ? `(SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere})`
+      ? isVillageScoped
+        ? `(SELECT count(*)::int FROM violations v LEFT JOIN households h_v ON h_v.id = v.household_id WHERE v.status = 'open' AND (${bindVillage("h_v.village_id")}))`
+        : "(SELECT count(*)::int FROM violations v WHERE v.status = 'open')"
       : "0";
     const pendingApprovalsExpr = canReadApprovals
-      ? `(SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere})`
+      ? isVillageScoped
+        ? `(SELECT count(*)::int FROM approvals a LEFT JOIN households h_a ON h_a.id = a.household_id WHERE a.status = 'pending' AND (${bindVillage("h_a.village_id")}))`
+        : "(SELECT count(*)::int FROM approvals a WHERE a.status = 'pending')"
       : "0";
-    const pendingRegistrationsExpr = canReadRegistrations && inCoopScope
-      ? (() => {
-          const regUserScope = isVillageScoped ? `AND ${bindVillage("u.village_id")}` : "";
-          return `(
-           (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regUserScope}) +
-           (
-             SELECT count(*)::int
-             FROM password_reset_requests r
-             JOIN users u ON u.id = r.user_id
-             WHERE r.status = 'pending'
-               AND r.expires_at > now()
-               AND (${isAdmin ? "true" : "(u.role = 'farmer' AND u.status = 'active')"})
-               ${regUserScope}
-           )
-         )`;
-        })()
-      : "0";
+    const pendingSignupsExpr =
+      canReadRegistrations && inCoopScope
+        ? (() => {
+            const signupScope = isVillageScoped ? `AND (${bindVillage("u.village_id")})` : "";
+            return `(SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${signupScope})`;
+          })()
+        : "0";
+    const pendingPasswordResetsExpr =
+      canReadRegistrations && inCoopScope
+        ? (() => {
+            const resetScope = !isVillageScoped
+              ? ""
+              : user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined
+                ? `AND (${bindVillage("COALESCE(h_pr.village_id, u.village_id)")})`
+                : `AND (u.role <> 'farmer' OR (${bindVillage("COALESCE(h_pr.village_id, u.village_id)")}))`;
+            return `(
+              SELECT count(*)::int
+              FROM password_reset_requests r
+              JOIN users u ON u.id = r.user_id
+              LEFT JOIN households h_pr ON h_pr.id = u.household_id
+              WHERE r.status = 'pending'
+                AND r.expires_at > now()
+                AND (${isAdmin ? "true" : "(u.role = 'farmer' AND u.status = 'active')"})
+                ${resetScope}
+            )`;
+          })()
+        : "0";
     // Doanh nghiệp: chỉ phiếu đã xác thực của các hộ từng cung ứng vào lô hàng của chính mình.
     const labScope = !canReadLabTests
       ? null
@@ -338,20 +344,41 @@ export class DashboardService {
                  WHERE hc.household_id = lt.household_id AND hl.enterprise_id = ${bindParam(user.enterpriseId)}
                )`
           : "FROM lab_tests lt WHERE 1 = 0"
-        : "FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE true";
+        : "FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE lt.record_status = 'verified'";
     const labTestsExpr = labScope ? `(SELECT count(*)::int ${labScope})` : "0";
     const labTestsPassedExpr = labScope ? `(SELECT count(*)::int ${labScope} AND lt.result = 'pass')` : "0";
-    const harvestTonsExpr = canReadHarvest
-      ? `(SELECT COALESCE(sum(hl.weight_tons), 0)::float8 FROM harvest_lots hl ${harvestLotScope})`
-      : "0::float8";
-    const harvestLotsExpr = canReadHarvest
-      ? `(SELECT count(*)::int FROM harvest_lots hl ${harvestLotScope})`
-      : "0";
+
+    const harvestLotCond = canReadHarvest
+      ? buildHarvestLotScope("hl", user, countsParams, { excludeRevoked: true })
+      : "1 = 0";
+    const harvestLotsExpr =
+      !canReadHarvest || harvestLotCond === "1 = 0"
+        ? "0"
+        : `(SELECT count(*)::int FROM harvest_lots hl ${harvestLotCond ? `WHERE ${harvestLotCond}` : ""})`;
+    const harvestTonsExpr = (() => {
+      if (!canReadHarvest || harvestLotCond === "1 = 0") return "0::float8";
+      if (!isEnterprise && isVillageScoped) {
+        const contribCond = buildHarvestContributionScope("hc", "h_sc", "v_sc", user, countsParams);
+        if (contribCond === "1 = 0") return "0::float8";
+        return `(
+          SELECT ROUND((COALESCE(SUM(hc.weight_kg), 0) / 1000.0)::numeric, 3)::float8
+          FROM harvest_contributions hc
+          JOIN harvest_lots hl ON hl.id = hc.lot_id
+          LEFT JOIN households h_sc ON h_sc.id = hc.household_id
+          LEFT JOIN villages v_sc ON v_sc.id = h_sc.village_id
+          WHERE hl.status <> 'revoked'
+            AND upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'
+            ${contribCond ? `AND (${contribCond})` : ""}
+        )`;
+      }
+      return `(SELECT COALESCE(SUM(hl.weight_tons), 0)::float8 FROM harvest_lots hl ${harvestLotCond ? `WHERE ${harvestLotCond}` : ""})`;
+    })();
+
     const journalLast30Expr =
       canReadJournal || canReadSpray
         ? `(
-             ${canReadJournal ? `(SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 29)` : "0"} +
-             ${canReadSpray ? `(SELECT count(*)::int FROM spray_records sr JOIN hh ON hh.id = sr.household_id WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29)` : "0"}
+             ${canReadJournal ? `(SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 29 AND je.entry_on <= ${TODAY_VN_SQL})` : "0"} +
+             ${canReadSpray ? `(SELECT count(*)::int FROM spray_records sr JOIN hh ON hh.id = sr.household_id WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29 AND sr.sprayed_on <= ${TODAY_VN_SQL} ${dedupCareSpraySql})` : "0"}
            )`
         : "0";
 
@@ -363,12 +390,14 @@ export class DashboardService {
        )
        SELECT
          ${householdsCountExpr} AS households,
+         ${canReadHouseholds ? "(SELECT count(*)::int FROM hh)" : "0"} AS registered_households,
          ${plotsCountExpr} AS plots,
          ${areaHaExpr} AS area_ha,
          ${canReadHouseholds ? "(SELECT count(*)::int FROM hh WHERE hh.status = 'qualified')" : "0"} AS qualified_households,
          ${openViolationsExpr} AS open_violations,
          ${pendingApprovalsExpr} AS pending_approvals,
-         ${pendingRegistrationsExpr} AS pending_registrations,
+         ${pendingSignupsExpr} AS pending_signups,
+         ${pendingPasswordResetsExpr} AS pending_password_resets,
          ${canReadDeclarations ? "(SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted')" : "0"} AS pending_declarations,
          ${hasDelReqTable ? "(SELECT count(*)::int FROM member_deletion_requests WHERE status = 'pending')" : "0"} AS pending_deletions,
          ${
@@ -392,6 +421,11 @@ export class DashboardService {
          ${harvestTonsExpr} AS harvest_tons,
          ${harvestLotsExpr} AS harvest_lots,
          ${canReadTraining && (isEnterprise || inCoopScope) ? "(SELECT count(*)::int FROM training_courses)" : "0"} AS training_courses,
+         ${
+           canReadSchedule && inCoopScope
+             ? `(SELECT count(*)::int FROM inspection_schedule WHERE scheduled_on >= ${TODAY_VN_SQL} ${canSeeSuddenSchedule ? "" : "AND kind <> 'sudden'"})`
+             : "0"
+         } AS upcoming_schedule_count,
          ${journalLast30Expr} AS "journalLast30Days",
          ${
            canReadHouseholds
@@ -433,10 +467,8 @@ export class DashboardService {
     const dailyHhWhere = canReadJournal || canReadSpray ? buildActivityHhWhere(dailyParams) : "";
 
     const listsParams: unknown[] = [];
-    const listsHhCond =
-      canReadViolations || canReadApprovals ? villageScope("h.village_id")(user, listsParams) : null;
-    const listsViolWhere = listsHhCond ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
-    const listsApprWhere = listsHhCond ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
+    const listsViolCond = canReadViolations ? villageScope("h_v.village_id")(user, listsParams) : null;
+    const listsApprCond = canReadApprovals ? villageScope("h_a.village_id")(user, listsParams) : null;
 
     const [countsRes, villagesRes, trendRes, dailyRes, listsRes] = await Promise.all([
       countsQuery,
@@ -525,6 +557,7 @@ export class DashboardService {
                FROM spray_records sr
                JOIN scoped_hh ON scoped_hh.id = sr.household_id
                WHERE sr.sprayed_on >= date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months'
+                 ${dedupCareSpraySql}
                GROUP BY 1
              ) s ON s.m_start = m.month_start
              ORDER BY m.month_start ASC`
@@ -556,7 +589,8 @@ export class DashboardService {
                       SELECT sr.sprayed_on AS day_on, sr.household_id, 0::int AS is_journal, 1::int AS is_spray
                       FROM spray_records sr
                       JOIN scoped_hh ON scoped_hh.id = sr.household_id
-                      WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29 AND sr.sprayed_on <= ${TODAY_VN_SQL}`
+                      WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29 AND sr.sprayed_on <= ${TODAY_VN_SQL}
+                        ${dedupCareSpraySql}`
                    : canReadJournal
                      ? `SELECT je.entry_on AS day_on, je.household_id, 1::int AS is_journal, 0::int AS is_spray
                         FROM journal_entries je
@@ -626,7 +660,8 @@ export class DashboardService {
                       FROM (
                         SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
                         FROM violations v
-                        WHERE v.status = 'open' ${listsViolWhere}
+                        ${listsViolCond ? "LEFT JOIN households h_v ON h_v.id = v.household_id" : ""}
+                        WHERE v.status = 'open' ${listsViolCond ? `AND (${listsViolCond})` : ""}
                         ORDER BY v.detected_on DESC, v.id DESC
                         LIMIT 5
                       ) v
@@ -652,7 +687,8 @@ export class DashboardService {
                       FROM (
                         SELECT a.id, a.code, a.applicant_name, a.request_type, a.submitted_on, a.priority
                         FROM approvals a
-                        WHERE a.status = 'pending' ${listsApprWhere}
+                        ${listsApprCond ? "LEFT JOIN households h_a ON h_a.id = a.household_id" : ""}
+                        WHERE a.status = 'pending' ${listsApprCond ? `AND (${listsApprCond})` : ""}
                         ORDER BY a.submitted_on DESC, a.id DESC
                         LIMIT 5
                       ) a
@@ -694,12 +730,14 @@ export class DashboardService {
 
     const rawCounts = camelRow<{
       households: number;
+      registeredHouseholds: number;
       plots: number;
       areaHa: number;
       qualifiedHouseholds: number;
       openViolations: number;
       pendingApprovals: number;
-      pendingRegistrations: number;
+      pendingSignups: number;
+      pendingPasswordResets: number;
       pendingDeclarations: number;
       pendingDeletions: number;
       pendingTraceRequests: number;
@@ -708,11 +746,16 @@ export class DashboardService {
       harvestTons: number;
       harvestLots: number;
       trainingCourses: number;
+      upcomingScheduleCount: number;
       journalLast30Days: number;
       householdStatus: { status: string; count: number }[];
     }>(countsRes.rows[0]);
 
-    const { harvestLots, householdStatus, ...counts } = rawCounts;
+    const { harvestLots, householdStatus, ...restCounts } = rawCounts;
+    const counts = {
+      ...restCounts,
+      pendingRegistrations: restCounts.pendingSignups + restCounts.pendingPasswordResets,
+    };
     const listsRow = listsRes.rows[0];
 
     return {

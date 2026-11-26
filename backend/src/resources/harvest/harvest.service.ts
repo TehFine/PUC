@@ -7,6 +7,7 @@ import {
   assertHouseholdInScope,
   CUNE_ADMIN_LOCATION,
   EAKHAL_ADMIN_LOCATION,
+  EAKHAL_VILLAGE_SQL_REGEX,
   isStaffInCuneCoopScope,
   isStaffInParcelScope,
   matchesJurisdiction,
@@ -57,6 +58,150 @@ function resolveMilestoneOffsetDays(stage: string | null, variety: string | null
   return 30;
 }
 
+export function buildHarvestContributionScope(
+  hcAlias: string,
+  hhAlias: string,
+  vAlias: string,
+  user: AuthUser,
+  params: unknown[],
+): string | null {
+  if (!isStaffInCuneCoopScope(user, true)) {
+    return "1 = 0";
+  }
+  let inCune = true;
+  let inEaKhal = true;
+  if (user.role === "inspector") {
+    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+    inCune = inCune && matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
+    inEaKhal = inEaKhal && matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
+  }
+  const commune = user.assignedCommune?.trim() || "";
+  if (commune) {
+    inCune = inCune && matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    inEaKhal = inEaKhal && matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+  }
+  if (!inCune && !inEaKhal) {
+    return "1 = 0";
+  }
+
+  const hasSpecificVillage =
+    user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined;
+  if (hasSpecificVillage) {
+    const vClause = villageScope(`${hhAlias}.village_id`)(user, params);
+    if (!vClause) return null;
+    if (vClause === "1 = 0") return "1 = 0";
+    if (inCune && !inEaKhal) {
+      return `(${vClause} AND COALESCE(${hcAlias}.plot_code, '') !~* '^66-PUC-SR0001-')`;
+    }
+    return vClause;
+  }
+
+  if (inEaKhal && !inCune) {
+    return `(${vAlias}.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}' OR ${hcAlias}.plot_code ~* '^66-PUC-SR0001-')`;
+  }
+
+  if (inCune && !inEaKhal) {
+    const vClause = villageScope(`${hhAlias}.village_id`)(user, params);
+    if (vClause === "1 = 0") return "1 = 0";
+    return `(${vClause ?? "true"} AND COALESCE(${hcAlias}.plot_code, '') !~* '^66-PUC-SR0001-')`;
+  }
+
+  return null;
+}
+
+export function buildHarvestLotScope(
+  alias: string,
+  user: AuthUser,
+  params: unknown[],
+  options?: { excludeRevoked?: boolean },
+): string | null {
+  const excludeRevoked = Boolean(options?.excludeRevoked);
+  if (user.role === "enterprise") {
+    if (!user.enterpriseId) return "1 = 0";
+    params.push(user.enterpriseId);
+    const entConds = [`${alias}.enterprise_id = $${params.length}`];
+    if (excludeRevoked) entConds.push(`${alias}.status <> 'revoked'`);
+    return entConds.join(" AND ");
+  }
+
+  if (!isStaffInCuneCoopScope(user, true)) {
+    return "1 = 0";
+  }
+
+  let inCune = true;
+  let inEaKhal = true;
+  if (user.role === "inspector") {
+    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+    inCune = inCune && matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
+    inEaKhal = inEaKhal && matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
+  }
+  const commune = user.assignedCommune?.trim() || "";
+  if (commune) {
+    inCune = inCune && matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    inEaKhal = inEaKhal && matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+  }
+  if (!inCune && !inEaKhal) {
+    return "1 = 0";
+  }
+
+  const conds: string[] = [];
+  if (isCoopStaffRole(user.role)) {
+    params.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
+    conds.push(`upper(COALESCE(${alias}.coop_code, 'HTX-CUNE')) = $${params.length}`);
+  } else {
+    conds.push(`upper(COALESCE(${alias}.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'`);
+  }
+  if (excludeRevoked) {
+    conds.push(`${alias}.status <> 'revoked'`);
+  }
+
+  const hasSpecificVillage =
+    user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined;
+
+  if (hasSpecificVillage) {
+    const vClause = villageScope("h_sc.village_id")(user, params);
+    if (vClause === "1 = 0") return "1 = 0";
+    if (vClause) {
+      const extraKrongBuk =
+        inCune && !inEaKhal ? " AND COALESCE(hc_sc.plot_code, '') !~* '^66-PUC-SR0001-'" : "";
+      conds.push(
+        `EXISTS (
+          SELECT 1 FROM harvest_contributions hc_sc
+          JOIN households h_sc ON h_sc.id = hc_sc.household_id
+          WHERE hc_sc.lot_id = ${alias}.id AND ${vClause}${extraKrongBuk}
+        )`,
+      );
+    }
+  } else if (inEaKhal && !inCune) {
+    conds.push(
+      `EXISTS (
+        SELECT 1 FROM harvest_contributions hc_sc
+        LEFT JOIN households h_sc ON h_sc.id = hc_sc.household_id
+        LEFT JOIN villages v_sc ON v_sc.id = h_sc.village_id
+        WHERE hc_sc.lot_id = ${alias}.id
+          AND (v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}' OR hc_sc.plot_code ~* '^66-PUC-SR0001-')
+      )`,
+    );
+  } else if (inCune && !inEaKhal) {
+    const vClause = villageScope("h_sc.village_id")(user, params);
+    if (vClause === "1 = 0") return "1 = 0";
+    conds.push(
+      `(
+        NOT EXISTS (SELECT 1 FROM harvest_contributions hc0 WHERE hc0.lot_id = ${alias}.id)
+        OR EXISTS (
+          SELECT 1 FROM harvest_contributions hc_sc
+          LEFT JOIN households h_sc ON h_sc.id = hc_sc.household_id
+          WHERE hc_sc.lot_id = ${alias}.id
+            AND (${vClause ?? "true"})
+            AND COALESCE(hc_sc.plot_code, '') !~* '^66-PUC-SR0001-'
+        )
+      )`,
+    );
+  }
+
+  return conds.length > 0 ? conds.join(" AND ") : null;
+}
+
 @Injectable()
 export class HarvestService extends BaseCrudService {
   constructor(
@@ -86,77 +231,7 @@ export class HarvestService extends BaseCrudService {
       search: ["t.code", "t.buyer", "t.market", "e.name", "t.brand_name"],
       filters: { status: "t.status", market: "t.market", enterpriseId: "t.enterprise_id" },
       virtual: ["_actorUser"],
-      scope: (user, params) => {
-        if (user.role === "enterprise") {
-          if (!user.enterpriseId) return "1 = 0";
-          params.push(user.enterpriseId);
-          return `t.enterprise_id = $${params.length}`;
-        }
-        if (user.role === "inspector") {
-          const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-          const allowedLocs = [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION];
-          if (!matchesJurisdiction(region, allowedLocs)) return "1 = 0";
-          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, allowedLocs)) return "1 = 0";
-          const inCune = matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
-          const inEaKhal = matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
-          if (inEaKhal && !inCune) {
-            return `EXISTS (
-              SELECT 1 FROM harvest_contributions hc
-              JOIN households h ON h.id = hc.household_id
-              JOIN villages v ON v.id = h.village_id
-              WHERE hc.lot_id = t.id AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
-            )`;
-          }
-          if (inCune && !inEaKhal) {
-            return `NOT EXISTS (
-              SELECT 1 FROM harvest_contributions hc
-              JOIN households h ON h.id = hc.household_id
-              JOIN villages v ON v.id = h.village_id
-              WHERE hc.lot_id = t.id AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
-            )`;
-          }
-          return null;
-        }
-        if (user.role === "village_officer") {
-          const hasVillage = user.villageId !== null && user.villageId !== undefined;
-          const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
-          if (!hasVillage && !hasCommune) return "1 = 0";
-          if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
-            return "1 = 0";
-          }
-          const vConds: string[] = [];
-          if (hasVillage) {
-            params.push(Number(user.villageId));
-            vConds.push(`h.village_id = $${params.length}`);
-          }
-          if (hasCommune) {
-            const inCune = matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION]);
-            const inEaKhal = matchesJurisdiction(user.assignedCommune!, [EAKHAL_ADMIN_LOCATION]);
-            if (inEaKhal && !inCune) {
-              vConds.push(`(v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')`);
-            } else if (inCune && !inEaKhal) {
-              vConds.push(`v.name !~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]'`);
-            }
-          }
-          if (vConds.length > 0) {
-            return `EXISTS (
-              SELECT 1 FROM harvest_contributions hc
-              JOIN households h ON h.id = hc.household_id
-              JOIN villages v ON v.id = h.village_id
-              WHERE hc.lot_id = t.id AND ${vConds.join(" AND ")}
-            )`;
-          }
-          return null;
-        }
-        if (isCoopStaffRole(user.role)) {
-          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
-            return "1 = 0";
-          }
-          params.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
-          return `upper(COALESCE(t.coop_code, 'HTX-CUNE')) = $${params.length}`;
-        }
-        return null;
-      },
+      scope: (user, params) => buildHarvestLotScope("t", user, params),
     });
   }
 
@@ -2458,9 +2533,11 @@ export class HarvestService extends BaseCrudService {
       usedKg: number;
       remainingKg: number;
     }>(scopedRows);
-    const totalMaxQuotaKg = Number(mapped.reduce((s, r) => s + Number(r.maxQuotaKg || 0), 0).toFixed(1));
-    const totalUsedKg = Number(mapped.reduce((s, r) => s + Number(r.usedKg || 0), 0).toFixed(1));
-    const totalRemainingKg = Number(Math.max(0, totalMaxQuotaKg - totalUsedKg).toFixed(1));
+    const totalMaxQuotaKg = Number(mapped.reduce((s, r) => s + Number(r.maxQuotaKg || 0), 0).toFixed(2));
+    const totalUsedKg = Number(mapped.reduce((s, r) => s + Number(r.usedKg || 0), 0).toFixed(2));
+    const totalRemainingKg = Number(
+      mapped.reduce((acc, r) => acc + Math.max(0, Number(r.remainingKg || 0)), 0).toFixed(2),
+    );
 
     return {
       seasonYear,

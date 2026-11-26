@@ -83,9 +83,11 @@ export async function syncHouseholdAndVillageStats(
     householdIds?: number[];
     forceZeroVillageIds?: number[];
     hasPlots?: boolean;
+    resetEmptyHouseholds?: boolean;
   },
 ): Promise<void> {
   const hasPlots = options?.hasPlots ?? (await hasPlotsTable(db));
+  const resetEmpty = options?.resetEmptyHouseholds ?? true;
 
   const hhIds = Array.from(
     new Set((options?.householdIds ?? []).filter((id) => Number.isInteger(id) && id > 0)),
@@ -93,19 +95,25 @@ export async function syncHouseholdAndVillageStats(
   if (hasPlots && hhIds.length > 0) {
     await db.query(
       `UPDATE households h
-       SET plot_count = s.cnt,
-           area_ha = ROUND(s.total_area::numeric, 2),
+       SET plot_count = COALESCE(s.cnt, 0),
+           area_ha = ROUND(COALESCE(s.total_area, 0)::numeric, 2),
            updated_at = now()
-       FROM (
+       FROM unnest($1::bigint[]) AS u(id)
+       LEFT JOIN (
          SELECT household_id,
                 COUNT(*)::int AS cnt,
                 COALESCE(SUM(area_ha), 0)::numeric AS total_area
          FROM plots
          WHERE household_id = ANY($1::bigint[])
          GROUP BY household_id
-       ) s
-       WHERE h.id = s.household_id`,
-      [hhIds],
+       ) s ON s.household_id = u.id
+       WHERE h.id = u.id
+         AND ($2::boolean OR COALESCE(s.cnt, 0) > 0)
+         AND (
+           h.plot_count IS DISTINCT FROM COALESCE(s.cnt, 0)
+           OR h.area_ha IS DISTINCT FROM ROUND(COALESCE(s.total_area, 0)::numeric, 2)
+         )`,
+      [hhIds, resetEmpty],
     );
   }
 

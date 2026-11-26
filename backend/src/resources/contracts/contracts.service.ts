@@ -34,10 +34,45 @@ export class ContractsService extends BaseCrudService {
     });
   }
 
+  private async querySummary(user: AuthUser): Promise<{
+    totalCount: number;
+    activeCount: number;
+    activeTargetTons: number;
+  }> {
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+    const scoped = this.config.scope?.(user, params);
+    if (scoped) conditions.push(scoped);
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const { rows } = await this.db.query<{
+      total_count: number;
+      active_count: number;
+      active_target_tons: number;
+    }>(
+      `SELECT COUNT(*)::int AS total_count,
+              COUNT(*) FILTER (WHERE t.status = 'active')::int AS active_count,
+              COALESCE(SUM(t.target_tons) FILTER (WHERE t.status = 'active'), 0)::float8 AS active_target_tons
+         FROM contracts t
+         JOIN enterprises e ON e.id = t.enterprise_id
+        ${where}`,
+      params,
+    );
+    const row = rows[0];
+    return {
+      totalCount: Number(row?.total_count ?? 0),
+      activeCount: Number(row?.active_count ?? 0),
+      activeTargetTons: Number(row?.active_target_tons ?? 0),
+    };
+  }
+
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
     // Bỏ qua bộ lọc enterpriseId do client gửi với tài khoản doanh nghiệp: phạm vi đã cố định theo tài khoản.
     const cleanQuery = user.role === "enterprise" ? { ...query, enterpriseId: undefined } : query;
-    return super.list(user, cleanQuery);
+    const [res, summary] = await Promise.all([
+      super.list(user, cleanQuery),
+      this.querySummary(user),
+    ]);
+    return { ...res, summary };
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {

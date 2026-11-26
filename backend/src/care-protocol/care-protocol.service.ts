@@ -2,7 +2,12 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, isCoopStaffRole } from "../auth/permissions";
-import { isStaffInCuneCoopScope } from "../common/crud/village-scope";
+import {
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  matchesJurisdiction,
+} from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { attachmentUrlSql, attachmentUrlsSql, camelRows, nowClockVn, todayVn } from "../common/sql/rows";
@@ -45,59 +50,13 @@ const PROTOCOL_SEASON = "2026-2027";
 const PORTAL_PROTOCOL_LINK = "/portal?tab=diary&view=protocol";
 const ADMIN_PROTOCOL_LINK = "/admin?section=journal&tab=protocol";
 
-function normGeoText(val: string): string {
-  return val
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const ADMIN_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran|huyen|quan|thi xa|thanh pho|tp\.?|tinh)\s+/;
-
-function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
-  const target = normGeoText(assignedRaw);
-  if (!target) return false;
-  if (target === "*" || target === "toan quoc") return true;
-
-  const targetHasPrefix = ADMIN_LEVEL_PREFIX_RE.test(target);
-  const targetStripped = target.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
-
-  for (const loc of adminLocations) {
-    const segments = loc
-      .split(",")
-      .map((s) => normGeoText(s))
-      .filter(Boolean);
-    const hasKrongBukCommune = segments.some((s) => s === "xa krong buk" || s === "krong buk");
-    if (
-      hasKrongBukCommune &&
-      (target === "xa cu ne" ||
-        target === "huyen krong buk" ||
-        (!targetHasPrefix && (targetStripped === "cu ne" || targetStripped === "krong buk")))
-    ) {
-      return true;
-    }
-    for (const seg of segments) {
-      if (seg === target) return true;
-      if (!targetHasPrefix) {
-        const segStripped = seg.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
-        if (segStripped === targetStripped) return true;
-      }
-    }
-  }
-  return false;
-}
-
 function resolveHouseholdAdminLocation(villageName?: string | null, plotCode?: string | null): string {
   const v = (villageName || "").trim();
   const p = (plotCode || "").trim();
   if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(p)) {
-    return "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
+    return EAKHAL_ADMIN_LOCATION;
   }
-  return "Xã Krông Búk, Tỉnh Đắk Lắk";
+  return CUNE_ADMIN_LOCATION;
 }
 
 function isStaffInPlanScope(
@@ -239,8 +198,9 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
   /** Đảm bảo hộ dân có sẵn kế hoạch chăm sóc 2026-2027 cho mọi thửa vườn thuộc hộ. */
   async ensureHouseholdPlans(householdId: number): Promise<void> {
     const plotCodes = new Set<string>();
+    const hasPlotsTable = await plotsTableExists(this.db);
 
-    if (await plotsTableExists(this.db)) {
+    if (hasPlotsTable) {
       const pRes = await this.db.query<{ code: string }>(
         "SELECT code FROM plots WHERE household_id = $1 ORDER BY code",
         [householdId],
@@ -272,7 +232,7 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (plotCodes.size === 0) {
+    if (plotCodes.size === 0 && !hasPlotsTable) {
       const hRes = await this.db.query<{ code: string }>("SELECT code FROM households WHERE id = $1", [householdId]);
       const hCode = hRes.rows[0]?.code?.trim().toUpperCase();
       if (hCode) plotCodes.add(`${hCode}-T01`);
@@ -308,8 +268,9 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const today = todayVn();
+    const hasPlotsTable = await plotsTableExists(this.db);
 
-    if (await plotsTableExists(this.db)) {
+    if (hasPlotsTable) {
       await this.db.query(
         `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
          SELECT p.household_id, upper(btrim(p.code)), $1, $2::date, 1, 'cb-rua-vuon'
@@ -337,6 +298,7 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
            AND NOT EXISTS (
              SELECT 1 FROM plot_care_plans pcp
              WHERE pcp.household_id = pst.household_id
+               AND upper(pcp.plot_code) = upper(btrim(pst.plot_code))
                AND pcp.season = $1
            )
          ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
@@ -344,35 +306,58 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    await this.db.query(
-      `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
-       SELECT h.id,
-              COALESCE(
-                (
-                  SELECT upper(btrim(je.plot_code))
-                  FROM journal_entries je
-                  WHERE je.household_id = h.id
-                    AND je.plot_code IS NOT NULL
-                    AND btrim(je.plot_code) <> ''
-                  ORDER BY je.id ASC
-                  LIMIT 1
+    if (hasPlotsTable) {
+      await this.db.query(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
+         SELECT DISTINCT je.household_id,
+                upper(btrim(je.plot_code)),
+                $1,
+                $2::date,
+                1,
+                'cb-rua-vuon'
+         FROM journal_entries je
+         JOIN households h ON h.id = je.household_id
+         WHERE je.plot_code IS NOT NULL
+           AND btrim(je.plot_code) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM plot_care_plans pcp
+             WHERE pcp.household_id = h.id
+               AND pcp.season = $1
+           )
+         ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
+        [PROTOCOL_SEASON, today],
+      );
+    } else {
+      await this.db.query(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
+         SELECT h.id,
+                COALESCE(
+                  (
+                    SELECT upper(btrim(je.plot_code))
+                    FROM journal_entries je
+                    WHERE je.household_id = h.id
+                      AND je.plot_code IS NOT NULL
+                      AND btrim(je.plot_code) <> ''
+                    ORDER BY je.id ASC
+                    LIMIT 1
+                  ),
+                  upper(btrim(h.code)) || '-T01'
                 ),
-                upper(btrim(h.code)) || '-T01'
-              ),
-              $1,
-              $2::date,
-              1,
-              'cb-rua-vuon'
-       FROM households h
-       WHERE btrim(h.code) <> ''
-         AND NOT EXISTS (
-           SELECT 1 FROM plot_care_plans pcp
-           WHERE pcp.household_id = h.id
-             AND pcp.season = $1
-         )
-       ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
-      [PROTOCOL_SEASON, today],
-    );
+                $1,
+                $2::date,
+                1,
+                'cb-rua-vuon'
+         FROM households h
+         WHERE btrim(h.code) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM plot_care_plans pcp
+             WHERE pcp.household_id = h.id
+               AND pcp.season = $1
+           )
+         ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
+        [PROTOCOL_SEASON, today],
+      );
+    }
     this.lastEnsuredAllAt = Date.now();
   }
 
@@ -1524,9 +1509,9 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       village_id: number;
       village_name: string;
     }>(
-      `SELECT h.id, h.village_id, v.name AS village_name
+      `SELECT h.id, h.village_id, COALESCE(v.name, '') AS village_name
        FROM households h
-       JOIN villages v ON v.id = h.village_id
+       LEFT JOIN villages v ON v.id = h.village_id
        WHERE h.id = $1`,
       [householdId],
     );
@@ -1541,7 +1526,7 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
   private async loadPlanRows(whereSql: string, params: unknown[]): Promise<PlanRow[]> {
     const { rows } = await this.db.query<PlanRow>(
       `SELECT pcp.id, pcp.household_id, h.code AS household_code, h.name AS household_name, h.phone AS household_phone,
-              h.village_id, v.name AS village_name,
+              h.village_id, COALESCE(v.name, '') AS village_name,
               pcp.plot_code, pcp.season, pcp.cycle_start_on, pcp.start_milestone_seq,
               pcp.current_milestone_code,
               COALESCE(pcp.reminder_lead_days, 1)::int AS reminder_lead_days,
@@ -1549,7 +1534,7 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
               pcp.status, pcp.note, pcp.updated_at
        FROM plot_care_plans pcp
        JOIN households h ON h.id = pcp.household_id
-       JOIN villages v ON v.id = h.village_id
+       LEFT JOIN villages v ON v.id = h.village_id
        ${whereSql}
        ORDER BY pcp.plot_code ASC, pcp.id ASC`,
       params,

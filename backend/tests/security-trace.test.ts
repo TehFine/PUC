@@ -2789,6 +2789,29 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         [spacedPhoneRes.body.requestCode],
       );
       expect(savedPhoneRow.rows[0]?.contact_phone).toBe("0912345678");
+
+      // 10. Kiểm tra hàm chuẩn hóa địa danh sáp nhập Xã Krông Búk (042): đổi Xã Cư Né cũ sang Xã Krông Búk nhưng giữ nguyên Hợp tác xã Cư Né / HTX Cư Né
+      const normRes = await db.query<{
+        c1: string;
+        c2: string;
+        c3: string;
+        c4: string;
+        c5: string;
+      }>(`
+        SELECT
+          puc_normalize_krong_buk_text('Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk') AS c1,
+          puc_normalize_krong_buk_text('Thôn 2, Cư Né, Krông Búk, Đắk Lắk') AS c2,
+          puc_normalize_krong_buk_text('Xã Ea Khăl, Huyện Krông Búk, Tỉnh Đắk Lắk') AS c3,
+          puc_normalize_krong_buk_text('Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né') AS c4,
+          puc_normalize_krong_buk_text('Hộ Nguyễn Văn A - HTX Cư Né, Xã Cư Né') AS c5
+      `);
+      expect(normRes.rows[0]).toEqual({
+        c1: "Xã Krông Búk, Tỉnh Đắk Lắk",
+        c2: "Thôn 2, Xã Krông Búk, Đắk Lắk",
+        c3: "Xã Ea Khăl, Tỉnh Đắk Lắk",
+        c4: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
+        c5: "Hộ Nguyễn Văn A - HTX Cư Né, Xã Krông Búk",
+      });
     } finally {
       await deviceGuard.expireActiveBlocksForTest();
       await db.query("DELETE FROM trace_device_guards");

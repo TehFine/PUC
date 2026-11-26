@@ -38,10 +38,29 @@ export class HarvestService {
 
   async harvest(user: AuthUser) {
     const { rows } = await this.db.query(
-      `SELECT c.id, l.code AS lot_code, l.qr_code, l.qr_token, NULLIF(c.plot_code, '') AS plot_code,
-              l.harvested_on, c.weight_kg, l.buyer, l.market, l.status
-       FROM harvest_contributions c JOIN harvest_lots l ON l.id = c.lot_id
-       WHERE c.household_id = $1 ORDER BY l.harvested_on DESC, c.id DESC LIMIT 100`,
+      `SELECT MIN(c.id)::int AS id,
+              l.id::int AS lot_id,
+              l.code AS lot_code,
+              l.qr_code,
+              l.qr_token,
+              string_agg(DISTINCT btrim(c.plot_code), ', ' ORDER BY btrim(c.plot_code))
+                FILTER (WHERE c.plot_code IS NOT NULL AND btrim(c.plot_code) <> '') AS plot_code,
+              l.harvested_on,
+              COALESCE(SUM(c.weight_kg), 0)::float8 AS weight_kg,
+              CASE WHEN l.weight_tons IS NOT NULL AND l.weight_tons > 0
+                THEN ROUND((l.weight_tons * 1000)::numeric, 1)::float8
+                ELSE NULL
+              END AS lot_weight_kg,
+              l.buyer,
+              l.market,
+              l.status,
+              l.revoked_reason
+       FROM harvest_contributions c
+       JOIN harvest_lots l ON l.id = c.lot_id
+       WHERE c.household_id = $1
+       GROUP BY l.id, l.code, l.qr_code, l.qr_token, l.harvested_on, l.weight_tons, l.buyer, l.market, l.status, l.revoked_reason
+       ORDER BY l.harvested_on DESC, MAX(c.id) DESC
+       LIMIT 100`,
       [householdIdOf(user)],
     );
     return { data: camelRows(rows) };

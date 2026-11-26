@@ -1,12 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
+import {
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  EAKHAL_VILLAGE_SQL_REGEX,
+} from "../../common/crud/village-scope";
 import { notFound } from "../../common/errors/app.exception";
 import { camelRow, publicAttachmentUrlSql } from "../../common/sql/rows";
+import { hasPublicColumn } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
-import { type ClientContext, householdIdOf } from "../common/portal-context";
+import { type ClientContext, householdIdOf, plotsTableExists } from "../common/portal-context";
 
 /** Hồ sơ tài khoản và hộ. CCCD chỉ trả về dạng che (2 số cuối). Đổi mật khẩu dùng `POST /api/auth/change-password`. */
 @Injectable()
@@ -20,15 +26,44 @@ export class ProfileService {
 
   async profile(user: AuthUser) {
     const householdId = householdIdOf(user);
+    const [hasCommuneCol, hasPlots] = await Promise.all([
+      hasPublicColumn(this.db, "villages", "commune_location"),
+      plotsTableExists(this.db),
+    ]);
+
+    const communeLocationSql = `COALESCE(${
+      hasCommuneCol ? "NULLIF(btrim(v.commune_location), ''), " : ""
+    }CASE WHEN COALESCE(v.name, '') ~* '(${EAKHAL_VILLAGE_SQL_REGEX})' THEN '${EAKHAL_ADMIN_LOCATION}' ELSE '${CUNE_ADMIN_LOCATION}' END) AS commune_location`;
+
+    const plotScaleSelectSql = hasPlots
+      ? `CASE WHEN COALESCE(pl.cnt, 0) > 0 THEN pl.cnt ELSE h.plot_count END AS plot_count,
+         CASE WHEN COALESCE(pl.cnt, 0) > 0 THEN pl.area ELSE h.area_ha::float8 END AS area_ha`
+      : `h.plot_count, h.area_ha::float8 AS area_ha`;
+
+    const plotScaleJoinSql = hasPlots
+      ? `LEFT JOIN LATERAL (
+           SELECT COUNT(*)::int AS cnt,
+                  ROUND(COALESCE(SUM(p.area_ha), 0)::numeric, 2)::float8 AS area
+           FROM plots p
+           WHERE p.household_id = h.id
+         ) pl ON true`
+      : "";
+
     const [accountRes, hhRes] = await Promise.all([
       this.db.query("SELECT full_name, username, email, last_login_at FROM users WHERE id = $1", [user.id]),
       this.db.query(
         `SELECT h.code, h.name, h.phone,
                 CASE WHEN h.cccd IS NULL OR btrim(h.cccd) = '' THEN NULL ELSE '**********' || right(btrim(h.cccd), 2) END AS cccd_masked,
-                v.name AS village_name, v.leader AS village_leader, h.plot_count, h.area_ha, h.status,
+                v.name AS village_name, v.leader AS village_leader,
+                ${communeLocationSql},
+                ${plotScaleSelectSql},
+                h.status,
                 h.public_trace_consent,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
-         FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
+         FROM households h
+         LEFT JOIN villages v ON v.id = h.village_id
+         ${plotScaleJoinSql}
+         WHERE h.id = $1`,
         [householdId],
       ),
     ]);

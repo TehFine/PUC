@@ -86,11 +86,44 @@ export class TestingService extends BaseCrudService {
     };
   }
 
+  private async queryVerifiedSummary(user: AuthUser): Promise<{
+    total: number;
+    passCount: number;
+    failCount: number;
+  }> {
+    const params: unknown[] = [];
+    const conditions: string[] = ["t.record_status = 'verified'"];
+    const scoped = this.config.scope?.(user, params);
+    if (scoped) conditions.push(scoped);
+    const { rows } = await this.db.query<{
+      total: number;
+      pass_count: number;
+      fail_count: number;
+    }>(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE t.result = 'pass')::int AS pass_count,
+              COUNT(*) FILTER (WHERE t.result = 'fail')::int AS fail_count
+         FROM lab_tests t
+         JOIN households h ON h.id = t.household_id
+        WHERE ${conditions.join(" AND ")}`,
+      params,
+    );
+    const row = rows[0];
+    return {
+      total: Number(row?.total ?? 0),
+      passCount: Number(row?.pass_count ?? 0),
+      failCount: Number(row?.fail_count ?? 0),
+    };
+  }
+
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
     const cleanQuery = user.role === "enterprise" ? { ...query, householdId: undefined } : query;
-    const res = await super.list(user, cleanQuery);
-    if (user.role !== "enterprise") return res;
-    return { ...res, data: res.data.map((r) => this.redactForEnterprise(r, user)) };
+    const [res, summary] = await Promise.all([
+      super.list(user, cleanQuery),
+      this.queryVerifiedSummary(user),
+    ]);
+    if (user.role !== "enterprise") return { ...res, summary };
+    return { ...res, data: res.data.map((r) => this.redactForEnterprise(r, user)), summary };
   }
 
   override async findOne(id: number, user: AuthUser) {

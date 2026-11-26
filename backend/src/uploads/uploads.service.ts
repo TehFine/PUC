@@ -974,15 +974,19 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
       hasMilestones,
       hasApprovalAtts,
       hasNews,
+      hasPesticidesImg,
       hasFertilizers,
       hasVarieties,
+      hasDiseasesImg,
       hasLotProdImg,
     ] = await Promise.all([
       hasPublicTable(this.db, "care_milestone_declarations"),
       hasPublicTable(this.db, "approval_attachments"),
       hasPublicTable(this.db, "news_articles"),
+      hasPublicColumn(this.db, "pesticides", "image_url"),
       hasPublicTable(this.db, "fertilizers"),
       hasPublicTable(this.db, "varieties"),
+      hasPublicColumn(this.db, "diseases", "image_url"),
       hasPublicColumn(this.db, "harvest_lots", "product_image_id"),
     ]);
 
@@ -1014,6 +1018,16 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
            SELECT 1 FROM news_articles na
            WHERE na.image_url LIKE '%' || a.public_token || '%'
               OR na.image_url = '/api/uploads/' || a.id::text
+              OR na.content::text LIKE '%' || a.public_token || '%'
+         )`,
+      );
+    }
+    if (hasPesticidesImg) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM pesticides ps
+           WHERE ps.image_url LIKE '%' || a.public_token || '%'
+              OR ps.image_url = '/api/uploads/' || a.id::text
          )`,
       );
     }
@@ -1032,6 +1046,15 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
            SELECT 1 FROM varieties vr
            WHERE vr.image_url LIKE '%' || a.public_token || '%'
               OR vr.image_url = '/api/uploads/' || a.id::text
+         )`,
+      );
+    }
+    if (hasDiseasesImg) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM diseases ds
+           WHERE ds.image_url LIKE '%' || a.public_token || '%'
+              OR ds.image_url = '/api/uploads/' || a.id::text
          )`,
       );
     }

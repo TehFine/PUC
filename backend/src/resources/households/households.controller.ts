@@ -1,17 +1,29 @@
-import { Body, Controller, HttpCode, Ip, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Ip, Param, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
 import { ParseRecordIdPipe } from "../../common/pipes/validation.pipes";
 import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
-import { CreateHouseholdDto, ImportHouseholdsDto, IssueHouseholdAccountDto, UpdateHouseholdDto } from "./households.dto";
+import {
+  CreateHouseholdDto,
+  ImportHouseholdsDto,
+  IssueHouseholdAccountDto,
+  ListHouseholdsQueryDto,
+  UpdateHouseholdDto,
+} from "./households.dto";
 import { HouseholdsService } from "./households.service";
 
 @Controller("households")
 export class HouseholdsController extends CrudController("households", CreateHouseholdDto, UpdateHouseholdDto) {
   constructor(private readonly households: HouseholdsService) {
     super(households);
+  }
+
+  @Get()
+  @Authorize("households", "read")
+  override list(@CurrentUser() user: AuthUser, @Query() query: ListHouseholdsQueryDto) {
+    return this.households.list(user, query as ListHouseholdsQueryDto & Record<string, unknown>);
   }
 
   /** Nhập danh sách hộ (cập nhật theo `code`): `{ created, updated, errors: [{ row, message }] }`. */

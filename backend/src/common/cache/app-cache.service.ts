@@ -40,7 +40,7 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   plots: ["plots", "dashboard", "portal", "public-overview", "trace"],
   plot_measurements: ["plots", "dashboard", "trace"],
   plot_signboard_tokens: ["plots", "portal", "trace"],
-  plot_season_quotas: ["plots", "portal", "trace"],
+  plot_season_quotas: ["plots", "dashboard", "portal", "trace"],
   growing_zones: ["plots", "dashboard", "public-overview", "trace"],
 
   villages: ["auth", "catalog", "plots", "dashboard", "portal", "public-overview", "trace"],
@@ -69,7 +69,7 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   farmer_stamp_allocations: ["dashboard", "portal", "trace"],
   farmer_stamps: ["dashboard", "portal", "trace"],
   enterprises: ["auth", "uploads", "dashboard", "trace"],
-  contracts: ["trace"],
+  contracts: ["dashboard", "trace"],
   // Tránh vòng lặp SSE khi tăng bộ đếm access_count lúc đọc; thao tác cấp/duyệt/thu hồi chủ động gọi invalidateTags(["trace"]).
   field_audit_passes: [],
   trace_access_requests: ["dashboard"],

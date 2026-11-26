@@ -639,7 +639,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
              '/portal?tab=inspection&scheduleId=' || i.id,
              now()
            FROM inspection_schedule i
-           WHERE i.scheduled_on >= current_date
+           WHERE i.scheduled_on >= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
              AND i.kind <> 'sudden'
              AND NOT EXISTS (
                SELECT 1 FROM notifications n

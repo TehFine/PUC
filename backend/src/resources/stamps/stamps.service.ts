@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRows } from "../../common/sql/rows";
@@ -53,6 +54,50 @@ export class StampsService extends BaseCrudService {
       filters: { status: "t.status", householdId: "t.household_id" },
       scope: villageScope("h.village_id"),
     });
+  }
+
+  private async querySummary(user: AuthUser): Promise<{
+    activeAllocations: number;
+    issuedStamps: number;
+    activatedStamps: number;
+  }> {
+    const params: unknown[] = [];
+    const conditions: string[] = ["t.status <> 'revoked'"];
+    const scoped = this.config.scope?.(user, params);
+    if (scoped) conditions.push(scoped);
+    const { rows } = await this.db.query<{
+      active_allocations: number;
+      issued_stamps: number;
+      activated_stamps: number;
+    }>(
+      `SELECT COUNT(*)::int AS active_allocations,
+              COALESCE(SUM(t.quantity_allocated), 0)::int AS issued_stamps,
+              COALESCE(SUM(fs_agg.act_cnt), 0)::int AS activated_stamps
+         FROM farmer_stamp_allocations t
+         JOIN households h ON h.id = t.household_id
+         LEFT JOIN (
+           SELECT allocation_id, COUNT(*)::int AS act_cnt
+             FROM farmer_stamps
+            WHERE status = 'activated'
+            GROUP BY allocation_id
+         ) fs_agg ON fs_agg.allocation_id = t.id
+        WHERE ${conditions.join(" AND ")}`,
+      params,
+    );
+    const row = rows[0];
+    return {
+      activeAllocations: Number(row?.active_allocations ?? 0),
+      issuedStamps: Number(row?.issued_stamps ?? 0),
+      activatedStamps: Number(row?.activated_stamps ?? 0),
+    };
+  }
+
+  override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
+    const [res, summary] = await Promise.all([
+      super.list(user, query),
+      this.querySummary(user),
+    ]);
+    return { ...res, summary };
   }
 
   async allocate(dto: CreateStampAllocationDto, user: AuthUser, ip?: string) {
