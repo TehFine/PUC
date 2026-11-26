@@ -18,7 +18,7 @@ function IosSpinner({ className }: { className?: string }) {
 }
 
 function CheckIcon() {
-  return <PublicIcon src="/icons/check.svg" size={18} />;
+  return <PublicIcon src="/accept.png" size={18} color="#15803d" />;
 }
 
 /**
@@ -223,10 +223,10 @@ export default function NetworkStatus() {
 
   const dismissStyle: React.CSSProperties | undefined = isDismissing
     ? {
-        transform: "translate(-50%, calc(-100% - 36px)) scale(0.92)",
+        transform: "translate(-50%, calc(-100% - 32px))",
         opacity: 0,
         transition:
-          "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease",
+          "transform 0.26s cubic-bezier(0.4, 0, 1, 1), opacity 0.22s ease",
         pointerEvents: "none",
       }
     : isDragging

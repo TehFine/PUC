@@ -342,11 +342,105 @@ img[data-nimg="fill"] {
 @keyframes net-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -20px) scale(0.97);
+    transform: translate(-50%, calc(-100% - 20px));
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ─── Toast thao tác toàn hệ thống (bật từ cạnh trên xuống, vuốt ngược lên để tắt) ─── */
+.puc-toast-dock {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10020;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(440px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.puc-toast {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  width: max-content;
+  padding: 9px 15px 9px 12px;
+  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid #d4d4d2;
+  color: #14372f;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.38;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px -4px rgba(20, 55, 47, 0.11),
+              0 2px 6px rgba(20, 55, 47, 0.05);
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  animation: puc-toast-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.puc-toast.is-error {
+  color: #b91c1c;
+}
+
+.puc-toast:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(20, 55, 47, 0.18),
+              0 6px 18px -4px rgba(20, 55, 47, 0.11);
+}
+
+.puc-toast-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.puc-toast-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.puc-toast.is-dragging {
+  animation: none !important;
+  transition: none !important;
+  cursor: grabbing !important;
+}
+
+.puc-toast.is-snapping {
+  animation: none !important;
+}
+
+.puc-toast.is-leaving {
+  animation: none !important;
+  pointer-events: none !important;
+  transform: translate3d(0, calc(-100% - 24px), 0);
+  opacity: 0;
+  transition: transform 0.24s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
+}
+
+@keyframes puc-toast-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, calc(-100% - 20px), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -362,6 +456,16 @@ img[data-nimg="fill"] {
     width: 17px;
     height: 17px;
   }
+  .puc-toast-dock {
+    width: calc(100vw - 20px);
+    gap: 6px;
+  }
+  .puc-toast {
+    padding: 8px 13px 8px 11px;
+    border-radius: 6px;
+    font-size: 13px;
+    gap: 8px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -370,7 +474,8 @@ img[data-nimg="fill"] {
     animation: none !important;
   }
   .sk-group,
-  .net-toast {
+  .net-toast,
+  .puc-toast {
     animation-duration: 0.01s !important;
   }
 }
