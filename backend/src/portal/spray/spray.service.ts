@@ -7,6 +7,7 @@ import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { ADMIN_LINKS } from "../common/admin-links";
+import { evaluateFieldEvidence } from "../common/field-evidence";
 import { assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
 import type { CreatePortalSprayDto } from "./spray.dto";
 
@@ -67,6 +68,8 @@ const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name A
   s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.note,
   ${attachmentUrlSql("s.photo_id")} AS photo_url,
   ${attachmentUrlsSql("s.photo_ids", "s.photo_id")} AS photo_urls,
+  s.latitude, s.longitude, s.gps_accuracy_m::float8 AS gps_accuracy_m, s.gps_verified, s.gps_distance_m::float8 AS gps_distance_m,
+  s.capture_source, s.client_captured_at, s.offline_queued, s.signboard_qr_verified, s.trust_level, s.trust_flags,
   s.created_at,
   s.server_recorded_at,
   to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
@@ -161,11 +164,30 @@ export class SprayService {
       }
     }
 
+    const evidence = await evaluateFieldEvidence(this.db, user, {
+      plotCode,
+      activityDateIso: sprayedOn,
+      todayVnIso: today,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      gpsAccuracyM: dto.gpsAccuracyM,
+      captureSource: dto.captureSource ?? "camera",
+      clientCapturedAt: dto.clientCapturedAt,
+      timeAnchorToken: dto.timeAnchorToken,
+      monotonicElapsedMs: dto.monotonicElapsedMs,
+      offlineQueued: dto.offlineQueued,
+      signboardQrToken: dto.signboardQrToken,
+    });
+
     const { rows } = await this.db.query<{ id: number }>(
       `INSERT INTO spray_records
-         (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, note, photo_id, photo_ids, late_reason,
-          recorded_by_role, created_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::bigint[], $13, 'farmer', $14) RETURNING id`,
+         (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, note, photo_id, photo_ids,
+          latitude, longitude, gps_accuracy_m, gps_verified, gps_distance_m, capture_source,
+          client_captured_at, offline_queued, signboard_qr_verified, trust_level, trust_flags,
+          late_reason, recorded_by_role, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::bigint[],
+               $13, $14, $15, $16, $17, $18, $19::timestamptz, $20, $21, $22, $23::text[],
+               $24, 'farmer', $25) RETURNING id`,
       [
         sprayedOn,
         householdId,
@@ -179,6 +201,17 @@ export class SprayService {
         dto.note?.trim() || null,
         media.primaryId,
         media.ids,
+        dto.latitude ?? null,
+        dto.longitude ?? null,
+        evidence.gpsAccuracyM,
+        evidence.gpsCheck.verified,
+        evidence.gpsCheck.distanceMeters,
+        evidence.captureSource,
+        evidence.clientCapturedAt,
+        evidence.offlineQueued,
+        evidence.signboardQrVerified,
+        evidence.trustLevel,
+        evidence.trustFlags,
         dto.lateReason ?? null,
         user.id,
       ],

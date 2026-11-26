@@ -2,13 +2,13 @@ import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
-import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
 import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { hasJournalSince, isJournalViolationSql, lastJournalOnSql } from "../../resources/shared/violation-evidence";
 import { ADMIN_LINKS } from "../common/admin-links";
+import { evaluateFieldEvidence } from "../common/field-evidence";
 import { assertPlotOwned, type ClientContext, conflict, householdIdOf } from "../common/portal-context";
 import type { CreatePortalJournalDto, ViolationResponseDto } from "./journal.dto";
 
@@ -29,12 +29,14 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
 const JOURNAL_COLUMNS = `j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.recorder, j.has_photo,
   ${attachmentUrlSql("j.photo_id")} AS photo_url,
   ${attachmentUrlsSql("j.photo_ids", "j.photo_id")} AS photo_urls,
-  j.latitude, j.longitude, j.created_at,
+  j.latitude, j.longitude, j.gps_accuracy_m::float8 AS gps_accuracy_m, j.created_at,
   j.server_recorded_at,
+  j.client_captured_at,
   to_char(j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
   GREATEST(0, ((j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - j.entry_on))::int AS late_declaration_days,
   j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
   j.record_hash, j.gps_verified, j.gps_distance_m::float8 AS gps_distance_m, j.capture_source,
+  j.offline_queued, j.signboard_qr_verified, j.trust_level, j.trust_flags,
   j.verification_status, j.verified_at,
   j.updated_by_name, j.updated_by_role, j.updated_at, j.edit_count,
   (j.recorder = '${FARMER_RECORDER}' AND j.created_at > now() - interval '24 hours'
@@ -119,13 +121,27 @@ export class JournalService {
       );
     }
 
-    const gpsCheck = await verifyPlotGpsProximity(this.db, plotCode, dto.latitude, dto.longitude);
-    const captureSource = dto.captureSource ?? "camera";
+    const evidence = await evaluateFieldEvidence(this.db, user, {
+      plotCode,
+      activityDateIso: entryOn,
+      todayVnIso: today,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      gpsAccuracyM: dto.gpsAccuracyM,
+      captureSource: dto.captureSource ?? "camera",
+      clientCapturedAt: dto.clientCapturedAt,
+      timeAnchorToken: dto.timeAnchorToken,
+      monotonicElapsedMs: dto.monotonicElapsedMs,
+      offlineQueued: dto.offlineQueued,
+      signboardQrToken: dto.signboardQrToken,
+    });
 
     const inserted = await this.db.query<{ id: number }>(
       `INSERT INTO journal_entries
-         (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, $13, $14) RETURNING id`,
+         (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids,
+          latitude, longitude, gps_accuracy_m, gps_verified, gps_distance_m, capture_source,
+          client_captured_at, offline_queued, signboard_qr_verified, trust_level, trust_flags, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, $13, $14, $15::timestamptz, $16, $17, $18, $19::text[], $20) RETURNING id`,
       [
         entryOn,
         householdId,
@@ -137,9 +153,15 @@ export class JournalService {
         media.ids,
         dto.latitude ?? null,
         dto.longitude ?? null,
-        gpsCheck.verified,
-        gpsCheck.distanceMeters,
-        captureSource,
+        evidence.gpsAccuracyM,
+        evidence.gpsCheck.verified,
+        evidence.gpsCheck.distanceMeters,
+        evidence.captureSource,
+        evidence.clientCapturedAt,
+        evidence.offlineQueued,
+        evidence.signboardQrVerified,
+        evidence.trustLevel,
+        evidence.trustFlags,
         dto.lateReason ?? null,
       ],
     );

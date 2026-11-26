@@ -216,5 +216,202 @@ describe("Đồng bộ vùng sóng yếu & Chống ghi trùng bằng X-Idempoten
     );
     expect(Number(countRes.rows[0]?.cnt)).toBe(1);
   });
+
+  it("xác thực đa tầng nhật ký ngoại tuyến (vé time-anchor, in_app_camera, biển QR vườn, tọa độ GPS) cho cả canh tác và phun thuốc", async () => {
+    const farmerAn = await loggedIn("0905123456");
+    const admin = await loggedIn("0901234567");
+
+    // 1. Lấy vé neo thời gian từ máy chủ trước khi lên rẫy mất sóng
+    const overviewRes = await farmerAn.get("/api/portal/overview");
+    expect(overviewRes.status).toBe(200);
+    expect(overviewRes.body.timeAnchor?.token).toBeTruthy();
+
+    const anchorRes = await farmerAn.get("/api/portal/time-anchor");
+    expect(anchorRes.status).toBe(200);
+    const anchorToken = anchorRes.body.token as string;
+    const anchorServerMs = Number(anchorRes.body.serverTimeMs);
+    expect(anchorToken).toMatch(/^v1\.\d+\.\d+\.\d+\.[a-f0-9]+\.[a-f0-9]{64}$/);
+    expect(anchorServerMs).toBeGreaterThan(1_700_000_000_000);
+
+    // 2. Đọc thông tin thửa đất kèm mã QR biển vườn và tâm đa giác của hộ An
+    const plotsRes = await farmerAn.get("/api/portal/plots");
+    expect(plotsRes.status).toBe(200);
+    const firstPlot = (plotsRes.body.data as Array<{
+      code: string;
+      qrToken?: string | null;
+      lat?: number | null;
+      lng?: number | null;
+    }>)[0];
+    expect(firstPlot?.code).toBeTruthy();
+    expect(firstPlot?.qrToken).toBeTruthy();
+
+    function makeDistinctJpeg(tag: string): Buffer {
+      const tail = Buffer.from(
+        "ffdb004300" +
+          "08".repeat(64) +
+          "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+        "hex",
+      );
+      const comment = Buffer.from(`PUC-FIELD-${tag}-${Date.now()}`, "ascii");
+      const len = Buffer.alloc(2);
+      len.writeUInt16BE(comment.length + 2, 0);
+      return Buffer.concat([
+        Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+        Buffer.from("JFIF\0\x01\x01\x00\x00\x01\x00\x01\x00\x00", "binary"),
+        Buffer.from([0xff, 0xfe]),
+        len,
+        comment,
+        tail,
+      ]);
+    }
+
+    const upJournal = await farmerAn
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", makeDistinctJpeg("journal-1"), "chup-truc-tiep-tai-ray.jpg");
+    const upSpray = await farmerAn
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", makeDistinctJpeg("spray-1"), "chup-phun-thuoc.jpg");
+    const upSuspicious = await farmerAn
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", makeDistinctJpeg("suspicious-1"), "anh-thu-vien.jpg");
+    expect(upJournal.status).toBe(201);
+    expect(upSpray.status).toBe(201);
+    expect(upSuspicious.status).toBe(201);
+
+    const createdJournalIds: number[] = [];
+    let createdSprayId: number | null = null;
+
+    try {
+      // 3. Bản ghi thực địa chuẩn (chụp trực tiếp + quét QR biển vườn + GPS khớp thửa + đồng hồ đơn điệu khớp) -> Mức 1
+      const capturedIso = new Date(anchorServerMs + 1_500).toISOString();
+      const goodJournal = await farmerAn.post("/api/portal/journal").send({
+        plotCode: firstPlot.code,
+        activity: "Tưới nước",
+        detail: "Tưới giữ ẩm gốc sầu riêng tại rẫy không có 4G",
+        photoId: upJournal.body.id,
+        photoIds: [upJournal.body.id],
+        latitude: firstPlot.lat ?? 13.128,
+        longitude: firstPlot.lng ?? 108.186,
+        gpsAccuracyM: 14.5,
+        captureSource: "in_app_camera",
+        clientCapturedAt: capturedIso,
+        timeAnchorToken: anchorToken,
+        monotonicElapsedMs: 1_500,
+        offlineQueued: true,
+        signboardQrToken: `/t/${firstPlot.qrToken}`,
+      });
+      expect(goodJournal.status).toBe(201);
+      createdJournalIds.push(goodJournal.body.id as number);
+      expect(goodJournal.body.trustLevel).toBe(1);
+      expect(goodJournal.body.signboardQrVerified).toBe(true);
+      expect(goodJournal.body.offlineQueued).toBe(true);
+      expect(goodJournal.body.captureSource).toBe("in_app_camera");
+      expect(goodJournal.body.trustFlags).toEqual(
+        expect.arrayContaining(["in_app_camera", "signboard_qr", "time_anchored", "offline_sync"]),
+      );
+
+      // Chặn dùng lại ảnh của bản ghi trước cho bản ghi mới (400)
+      const reusedAttempt = await farmerAn.post("/api/portal/journal").send({
+        plotCode: firstPlot.code,
+        activity: "Làm cỏ",
+        photoId: upJournal.body.id,
+        photoIds: [upJournal.body.id],
+      });
+      expect(reusedAttempt.status).toBe(400);
+
+      // 4. Nhật ký phun thuốc cũng hỗ trợ đầy đủ GPS + biển QR + trustLevel Mức 1
+      const goodSpray = await farmerAn.post("/api/portal/spray").send({
+        pesticideId: 1,
+        dose: "20 ml / bình 20L",
+        areaHa: 0.5,
+        plotCode: firstPlot.code,
+        note: "Phun phòng rầy xanh sáng sớm",
+        photoId: upSpray.body.id,
+        photoIds: [upSpray.body.id],
+        latitude: firstPlot.lat ?? 13.128,
+        longitude: firstPlot.lng ?? 108.186,
+        gpsAccuracyM: 16,
+        captureSource: "in_app_camera",
+        clientCapturedAt: capturedIso,
+        timeAnchorToken: anchorToken,
+        monotonicElapsedMs: 1_500,
+        offlineQueued: true,
+        signboardQrToken: firstPlot.qrToken,
+      });
+      expect(goodSpray.status).toBe(201);
+      createdSprayId = goodSpray.body.id as number;
+      expect(goodSpray.body.trustLevel).toBe(1);
+      expect(goodSpray.body.signboardQrVerified).toBe(true);
+      expect(goodSpray.body.gpsAccuracyM).toBeCloseTo(16, 1);
+
+      // 5. Hồ sơ truy xuất thửa đất phản ánh đúng trustLevel và signboardQrVerified cho đoàn kiểm tra
+      const traceRes = await admin.get(`/api/trace/${encodeURIComponent(firstPlot.qrToken!)}`);
+      expect(traceRes.status).toBe(200);
+      const authDiaries = (traceRes.body.authorityData?.cultivationDiaries ?? []) as Array<{
+        detail?: string | null;
+        trustLevel?: number;
+        signboardQrVerified?: boolean;
+        offlineQueued?: boolean;
+      }>;
+      const tracedEntry = authDiaries.find(
+        (d) => d.detail === "Tưới giữ ẩm gốc sầu riêng tại rẫy không có 4G",
+      );
+      expect(tracedEntry).toBeDefined();
+      expect(tracedEntry?.trustLevel).toBe(1);
+      expect(tracedEntry?.signboardQrVerified).toBe(true);
+      expect(tracedEntry?.offlineQueued).toBe(true);
+
+      // 6. Phát hiện gian lận: vặn lùi đồng hồ máy 2 giờ trước vé timeAnchor + tọa độ cách xa hàng trăm km + ảnh từ thư viện -> Mức 3
+      const rolledBackIso = new Date(anchorServerMs - 2 * 3_600_000).toISOString();
+      const suspiciousJournal = await farmerAn.post("/api/portal/journal").send({
+        plotCode: firstPlot.code,
+        activity: "Bón phân",
+        detail: "Bản ghi giả lập chỉnh lùi giờ và đứng ngoài thửa",
+        photoId: upSuspicious.body.id,
+        photoIds: [upSuspicious.body.id],
+        latitude: 10.7769,
+        longitude: 106.7009,
+        gpsAccuracyM: 12,
+        captureSource: "upload",
+        clientCapturedAt: rolledBackIso,
+        timeAnchorToken: anchorToken,
+        offlineQueued: true,
+        signboardQrToken: "QR_GIA_MAO_9999",
+      });
+      expect(suspiciousJournal.status).toBe(201);
+      const suspiciousId = suspiciousJournal.body.id as number;
+      createdJournalIds.push(suspiciousId);
+      expect(suspiciousJournal.body.trustLevel).toBe(3);
+      expect(suspiciousJournal.body.gpsVerified).toBe(false);
+      expect(suspiciousJournal.body.signboardQrVerified).toBe(false);
+      expect(suspiciousJournal.body.trustFlags).toEqual(
+        expect.arrayContaining([
+          "clock_skew",
+          "outside_plot",
+          "gallery_upload",
+          "invalid_signboard_qr",
+        ]),
+      );
+
+      // 7. Khi cán bộ HTX kiểm tra thực tế và bấm xác minh -> bản ghi thăng hạng lên Mức 1 (staff_verified)
+      const verifyRes = await admin
+        .post(`/api/journal/${suspiciousId}/verify`)
+        .send({ verified: true });
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.verificationStatus).toBe("verified");
+      expect(verifyRes.body.trustLevel).toBe(1);
+      expect(verifyRes.body.trustFlags).toContain("staff_verified");
+    } finally {
+      if (createdSprayId) {
+        await admin.delete(`/api/spray/${createdSprayId}`);
+      }
+      for (const jId of createdJournalIds) {
+        await admin.delete(`/api/journal/${jId}`);
+      }
+    }
+  });
 });
 

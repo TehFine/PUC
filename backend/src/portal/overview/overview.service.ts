@@ -1,41 +1,97 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
+import {
+    CUNE_ADMIN_LOCATION,
+    EAKHAL_ADMIN_LOCATION,
+    EAKHAL_VILLAGE_SQL_REGEX,
+} from "../../common/crud/village-scope";
 import { notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows, publicAttachmentUrlSql } from "../../common/sql/rows";
+import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
-import { householdIdOf, PORTAL_TABS, TODAY_VN_SQL } from "../common/portal-context";
+import { issueServerTimeAnchor } from "../common/field-evidence";
+import { householdIdOf, plotsTableExists, PORTAL_TABS, TODAY_VN_SQL } from "../common/portal-context";
 
 export interface PortalReminder {
-  kind: "journal" | "violation" | "isolation" | "schedule" | "training" | "harvest" | "protocol";
-  title: string;
-  detail: string;
-  tab: string;
-  date: string | null;
+    kind: "journal" | "violation" | "isolation" | "schedule" | "training" | "harvest" | "protocol";
+    title: string;
+    detail: string;
+    tab: string;
+    date: string | null;
 }
 
 /** Tổng quan của hộ: thông tin hộ, số liệu nhanh, kết quả kiểm nghiệm gần nhất và nhắc việc. */
 @Injectable()
 export class OverviewService {
-  constructor(
-    private readonly db: DatabaseService,
-    private readonly notifications: NotificationsService,
-  ) {}
+    constructor(
+        private readonly db: DatabaseService,
+        private readonly notifications: NotificationsService,
+    ) { }
 
-  async overview(user: AuthUser) {
-    const id = householdIdOf(user);
-    await this.notifications.syncFarmerNotifications(user);
-    const loadOverview = async () => {
-      const [hhRes, statsRes, lastTestRes, reminders] = await Promise.all([
-        this.db.query(
-          `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
+    async overview(user: AuthUser) {
+        const id = householdIdOf(user);
+        await this.notifications.syncFarmerNotifications(user);
+        const loadOverview = async () => {
+            const [hasCommuneCol, hasPlots, hasSignboard] = await Promise.all([
+                hasPublicColumn(this.db, "villages", "commune_location"),
+                plotsTableExists(this.db),
+                hasPublicTable(this.db, "plot_signboard_tokens"),
+            ]);
+
+            const communeLocationSql = `COALESCE(${hasCommuneCol ? "NULLIF(btrim(v.commune_location), ''), " : ""
+                }CASE WHEN COALESCE(v.name, '') ~* '(${EAKHAL_VILLAGE_SQL_REGEX})' THEN '${EAKHAL_ADMIN_LOCATION}' ELSE '${CUNE_ADMIN_LOCATION}' END) AS commune_location`;
+
+            const plotScaleSelectSql = hasPlots
+                ? `CASE WHEN COALESCE(pl.cnt, 0) > 0 THEN pl.cnt ELSE h.plot_count END AS plot_count,
+           CASE WHEN COALESCE(pl.cnt, 0) > 0 THEN pl.area ELSE h.area_ha::float8 END AS area_ha`
+                : `h.plot_count, h.area_ha::float8 AS area_ha`;
+
+            const plotScaleJoinSql = hasPlots
+                ? `LEFT JOIN LATERAL (
+             SELECT COUNT(*)::int AS cnt,
+                    ROUND(COALESCE(SUM(p.area_ha), 0)::numeric, 2)::float8 AS area
+             FROM plots p
+             WHERE p.household_id = h.id
+           ) pl ON true`
+                : "";
+
+            const plotsZoneSql = `(SELECT string_agg(DISTINCT btrim(p.zone_code), ', ' ORDER BY btrim(p.zone_code))
+                             FROM plots p
+                             WHERE p.household_id = h.id
+                               AND p.zone_code IS NOT NULL
+                               AND btrim(p.zone_code) <> '')`;
+            const signboardZoneSql = `(SELECT string_agg(DISTINCT btrim(pst.zone_code), ', ' ORDER BY btrim(pst.zone_code))
+                                 FROM plot_signboard_tokens pst
+                                 WHERE pst.household_id = h.id
+                                   AND pst.zone_code IS NOT NULL
+                                   AND btrim(pst.zone_code) <> '')`;
+            const zoneCodeSql =
+                hasPlots && hasSignboard
+                    ? `COALESCE(${plotsZoneSql}, ${signboardZoneSql}) AS zone_code`
+                    : hasPlots
+                        ? `${plotsZoneSql} AS zone_code`
+                        : hasSignboard
+                            ? `${signboardZoneSql} AS zone_code`
+                            : `NULL::text AS zone_code`;
+
+            const [hhRes, statsRes, lastTestRes, reminders] = await Promise.all([
+                this.db.query(
+                    `SELECT h.id, h.code, h.name, h.phone,
+                  ${plotScaleSelectSql},
+                  h.status,
                   v.name AS village_name, v.leader AS village_leader,
+                  ${communeLocationSql},
+                  ${zoneCodeSql},
                   ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
-           FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
-          [id],
-        ),
-        this.db.query(
-          `SELECT
+           FROM households h
+           LEFT JOIN villages v ON v.id = h.village_id
+           ${plotScaleJoinSql}
+           WHERE h.id = $1`,
+                    [id],
+                ),
+                this.db.query(
+                    `SELECT
              (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
              (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
              GREATEST(
@@ -49,45 +105,54 @@ export class OverviewService {
                (SELECT count(*)::int FROM spray_records
                   WHERE household_id = $1 AND sprayed_on >= (${TODAY_VN_SQL} - 30))
              ) AS "journalLast30Days",
-             (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
+             (SELECT coalesce(sum(c.weight_kg), 0)::float8
+                FROM harvest_contributions c
+                JOIN harvest_lots l ON l.id = c.lot_id
+               WHERE c.household_id = $1
+                 AND l.status <> 'revoked') AS harvest_total_kg,
              (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
-          [id, user.id],
-        ),
-        this.db.query(
-          `SELECT code, plot_code, sampled_on, result FROM lab_tests
+                    [id, user.id],
+                ),
+                this.db.query(
+                    `SELECT code, plot_code, sampled_on, result FROM lab_tests
            WHERE household_id = $1 AND record_status = 'verified'
            ORDER BY sampled_on DESC, id DESC LIMIT 1`,
-          [id],
-        ),
-        this.reminders(id),
-      ]);
+                    [id],
+                ),
+                this.reminders(id),
+            ]);
 
-      const household = hhRes.rows[0];
-      if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
+            const household = hhRes.rows[0];
+            if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
 
-      const stats = statsRes.rows[0];
-      const lastTest = lastTestRes.rows[0];
+            const stats = statsRes.rows[0];
+            const lastTest = lastTestRes.rows[0];
 
-      return {
-        household: camelRow(household),
-        stats: camelRow(stats),
-        lastTest: lastTest ? camelRow(lastTest) : null,
-        reminders,
-      };
-    };
+            return {
+                household: camelRow(household),
+                stats: camelRow(stats),
+                lastTest: lastTest ? camelRow(lastTest) : null,
+                reminders,
+            };
+        };
 
-    if (!this.db.cache) return loadOverview();
-    return this.db.cache.getOrLoad(`portal:overview:u:${user.id}:h:${id}`, 12_000, ["portal"], loadOverview);
-  }
+        const base = this.db.cache
+            ? await this.db.cache.getOrLoad(`portal:overview:u:${user.id}:h:${id}`, 12_000, ["portal"], loadOverview)
+            : await loadOverview();
+        return {
+            ...base,
+            timeAnchor: issueServerTimeAnchor(user),
+        };
+    }
 
-  /**
-   * Nhắc việc tính hoàn toàn bằng SQL:
-   * chưa ghi nhật ký 7 ngày, vi phạm đang mở, đang trong thời gian cách ly thuốc,
-   * lịch kiểm tra trong 7 ngày tới, lớp tập huấn đã đăng ký trong 7 ngày tới, khai báo thu hái bị từ chối (30 ngày gần đây).
-   */
-  private async reminders(householdId: number): Promise<PortalReminder[]> {
-    const { rows } = await this.db.query(
-      `WITH today AS (SELECT ${TODAY_VN_SQL} AS d)
+    /**
+     * Nhắc việc tính hoàn toàn bằng SQL:
+     * chưa ghi nhật ký 7 ngày, vi phạm đang mở, đang trong thời gian cách ly thuốc,
+     * lịch kiểm tra trong 7 ngày tới, lớp tập huấn đã đăng ký trong 7 ngày tới, khai báo thu hái bị từ chối (30 ngày gần đây).
+     */
+    private async reminders(householdId: number): Promise<PortalReminder[]> {
+        const { rows } = await this.db.query(
+            `WITH today AS (SELECT ${TODAY_VN_SQL} AS d)
        SELECT * FROM (
          SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký 7 ngày' AS title,
                 CASE
@@ -115,7 +180,7 @@ export class OverviewService {
            LIMIT 1
          ) dv ON true
          WHERE j.last_on IS NULL
-            OR j.last_on < today.d - 7
+            OR j.last_on <= today.d - 7
             OR (dv.detected_on IS NOT NULL AND dv.farmer_response_at IS NULL)
 
          UNION ALL
@@ -129,13 +194,25 @@ export class OverviewService {
            AND v.title NOT ILIKE '%nhật ký%'
 
          UNION ALL
-         SELECT 2, 'isolation', 'Cách ly thuốc: ' || p.name,
-                'Ngưng thu hái đến ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') ||
-                  coalesce(' - Thửa ' || s.plot_code, ''),
-                '${PORTAL_TABS.diary}', s.sprayed_on + s.isolation_days
-         FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id, today
-         WHERE s.household_id = $1 AND s.isolation_days > 0 AND s.sprayed_on <= today.d
-           AND s.sprayed_on + s.isolation_days >= today.d
+         SELECT iso.priority, iso.kind, iso.title, iso.detail, iso.tab, iso.date
+         FROM (
+           SELECT DISTINCT ON (COALESCE(upper(btrim(s.plot_code)), ''))
+                  2 AS priority,
+                  'isolation'::text AS kind,
+                  'Cách ly thuốc: ' || p.name AS title,
+                  'Ngưng thu hái đến ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') ||
+                    coalesce(' - Thửa ' || NULLIF(btrim(s.plot_code), ''), '') AS detail,
+                  '${PORTAL_TABS.diary}'::text AS tab,
+                  (s.sprayed_on + s.isolation_days) AS date
+           FROM spray_records s
+           JOIN pesticides p ON p.id = s.pesticide_id
+           CROSS JOIN today
+           WHERE s.household_id = $1
+             AND s.isolation_days > 0
+             AND s.sprayed_on <= today.d
+             AND (s.sprayed_on + s.isolation_days) > today.d
+           ORDER BY COALESCE(upper(btrim(s.plot_code)), ''), (s.sprayed_on + s.isolation_days) DESC, s.id DESC
+         ) iso
 
          UNION ALL
          SELECT 3, 'schedule', i.title,
@@ -165,8 +242,8 @@ export class OverviewService {
        ) r
        ORDER BY priority, date NULLS FIRST
        LIMIT 20`,
-      [householdId],
-    );
-    return camelRows<PortalReminder & { priority?: number }>(rows).map(({ priority: _priority, ...reminder }) => reminder);
-  }
+            [householdId],
+        );
+        return camelRows<PortalReminder & { priority?: number }>(rows).map(({ priority: _priority, ...reminder }) => reminder);
+    }
 }

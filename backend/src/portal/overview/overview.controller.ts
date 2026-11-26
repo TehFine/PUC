@@ -1,6 +1,7 @@
 import { Controller, Get } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
+import { issueServerTimeAnchor } from "../common/field-evidence";
 import { OverviewService } from "./overview.service";
 
 /** `GET /api/portal/overview`: tổng quan và nhắc việc của hộ đang đăng nhập. */
@@ -12,5 +13,11 @@ export class OverviewController {
   @Authorize("portal", "read")
   overview(@CurrentUser() user: AuthUser) {
     return this.service.overview(user);
+  }
+
+  @Get("time-anchor")
+  @Authorize("portal", "read")
+  timeAnchor(@CurrentUser() user: AuthUser) {
+    return issueServerTimeAnchor(user);
   }
 }

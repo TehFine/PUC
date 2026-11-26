@@ -62,6 +62,8 @@ export class SprayService extends BaseCrudService {
       t.note, t.photo_id, t.photo_ids,
       ${attachmentUrlSql("t.photo_id")} AS photo_url,
       ${attachmentUrlsSql("t.photo_ids", "t.photo_id")} AS photo_urls,
+      t.latitude, t.longitude, t.gps_accuracy_m::float8 AS gps_accuracy_m, t.gps_verified, t.gps_distance_m::float8 AS gps_distance_m,
+      t.capture_source, t.client_captured_at, t.offline_queued, t.signboard_qr_verified, t.trust_level, t.trust_flags,
       t.server_recorded_at,
       to_char(t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
       GREATEST(0, ((t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - t.sprayed_on))::int AS late_declaration_days,
@@ -413,9 +415,25 @@ export class SprayService extends BaseCrudService {
            SET verification_status = $2,
                verified_by_user_id = $3,
                verified_by_name = $4,
-               verified_at = $5::timestamptz
+               verified_at = $5::timestamptz,
+               trust_level = CASE
+                 WHEN $6::boolean THEN 1
+                 WHEN array_remove(trust_flags, 'staff_verified') && ARRAY['clock_skew', 'outside_plot', 'invalid_signboard_qr', 'gallery_upload']::text[]
+                   OR COALESCE(entry_delay_hours, 0) > 72
+                   THEN 3
+                 WHEN COALESCE(gps_verified, false) OR COALESCE(signboard_qr_verified, false) THEN 1
+                 ELSE 2
+               END,
+               trust_flags = CASE
+                 WHEN $6::boolean THEN
+                   CASE
+                     WHEN 'staff_verified' = ANY(trust_flags) THEN trust_flags
+                     ELSE array_append(trust_flags, 'staff_verified')
+                   END
+                 ELSE array_remove(trust_flags, 'staff_verified')
+               END
            WHERE id = $1`,
-          [id, nextStatus, dto.verified ? user.id : null, dto.verified ? user.fullName : null, verifiedAt],
+          [id, nextStatus, dto.verified ? user.id : null, dto.verified ? user.fullName : null, verifiedAt, Boolean(dto.verified)],
         );
       },
       { "puc.verifying_diary": "on" },

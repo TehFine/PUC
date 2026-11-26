@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsIn, IsInt, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, Min } from "class-validator";
 import { RecordId, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 import { OptionalAttachmentId, OptionalNumberIn } from "../common/portal-fields";
 
@@ -38,9 +38,28 @@ export class CreatePortalJournalDto {
   @OptionalNumberIn(-180, 180)
   longitude?: number | null;
 
+  @OptionalNumberIn(0, 50_000)
+  gpsAccuracyM?: number | null;
+
   @OptionalField()
-  @IsIn(["camera", "upload"])
-  captureSource?: "camera" | "upload";
+  @IsIn(["in_app_camera", "camera", "upload"])
+  captureSource?: "in_app_camera" | "camera" | "upload";
+
+  @OptionalText(64)
+  clientCapturedAt?: string | null;
+
+  @OptionalText(240)
+  timeAnchorToken?: string | null;
+
+  @OptionalNumberIn(0, 30 * 86_400_000)
+  monotonicElapsedMs?: number | null;
+
+  @OptionalField()
+  @IsBoolean()
+  offlineQueued?: boolean;
+
+  @OptionalText(120)
+  signboardQrToken?: string | null;
 
   @OptionalText(250)
   lateReason?: string | null;
