@@ -205,7 +205,22 @@ export default function Journal() {
   // Compute real KPIs from summary & loaded lists (no hardcoded numbers)
   const qualifiedHouseholds =
     summary?.counts?.qualifiedHouseholds ?? households.filter((h) => h.status === "qualified").length;
-  const improveHouseholds = households.filter((h) => h.status === "improve" || h.status === "pending").length;
+  const improveHouseholds = useMemo(() => {
+    const raw = summary?.householdStatus;
+    if (Array.isArray(raw)) {
+      let sum = 0;
+      for (const item of raw) {
+        if (item && (item.status === "improve" || item.status === "pending")) {
+          sum += Number(item.count) || 0;
+        }
+      }
+      return sum;
+    }
+    if (raw && typeof raw === "object") {
+      return (Number(raw.improve) || 0) + (Number(raw.pending) || 0);
+    }
+    return households.filter((h) => h.status === "improve" || h.status === "pending").length;
+  }, [summary?.householdStatus, households]);
   const openViolations =
     summary?.counts?.openViolations ??
     (canReadViolations ? violationsList.rows.filter((v) => v.status === "open").length : 0);
@@ -342,7 +357,7 @@ export default function Journal() {
           <strong className="comp-kpi-num">{formatVn(openViolations)}</strong>
         </div>
         <div className="comp-kpi-row info">
-          <span className="comp-kpi-label">Bản ghi nhật ký</span>
+          <span className="comp-kpi-label">Nhật ký 30 ngày</span>
           <strong className="comp-kpi-num">{formatVn(journalRecent)}</strong>
         </div>
       </div>
@@ -422,10 +437,21 @@ export default function Journal() {
                                   </span>
                                   <span
                                     className={`admin-diary-verify-sub ${
-                                      j.verificationStatus === "verified" ? "is-verified" : ""
+                                      j.verificationStatus === "verified" || j.trustLevel === 1 ? "is-verified" : ""
                                     }`}
+                                    style={
+                                      j.verificationStatus !== "verified" && j.trustLevel === 3
+                                        ? { color: "#9a6712", fontWeight: 600 }
+                                        : undefined
+                                    }
                                   >
-                                    {j.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                    {j.verificationStatus === "verified"
+                                      ? "HTX đã xác minh"
+                                      : j.trustLevel === 3
+                                        ? "Cần đối chiếu thực địa"
+                                        : j.trustLevel === 1
+                                          ? "Xác thực thực địa cao"
+                                          : "Tự khai báo"}
                                   </span>
                                 </span>
                                 <DetailArrowIcon className="admin-diary-arrow" size={20} />
@@ -503,90 +529,103 @@ export default function Journal() {
             onRetry={() => void violationsList.refresh()}
           />
 
-          <div>
-            {violationsList.rows.map((v) => {
-              const sev = badgeOf(SEVERITY, v.severity);
-              const st = badgeOf(VIOLATION_STATUS, v.status);
-              return (
-                <div key={v.id} className={`violation-item ${v.severity}`}>
-                  <div className="violation-body">
-                    <div className="violation-head">
-                      <div className="violation-badges">
-                        <span className={`badge ${sev.badge}`}>{sev.label}</span>
-                        <span className={`badge ${st.badge}`}>{st.label}</span>
+          {violationsList.rows.length > 0 && (
+            <>
+              <div>
+                {violationsList.rows.map((v) => {
+                  const sev = badgeOf(SEVERITY, v.severity);
+                  const st = badgeOf(VIOLATION_STATUS, v.status);
+                  return (
+                    <div key={v.id} className={`violation-item ${v.severity}`}>
+                      <div className="violation-body">
+                        <div className="violation-head">
+                          <div className="violation-badges">
+                            <span className={`badge ${sev.badge}`}>{sev.label}</span>
+                            <span className={`badge ${st.badge}`}>{st.label}</span>
+                          </div>
+                          <div className="violation-title">{v.title}</div>
+                        </div>
+                        {v.description && <div className="violation-desc">{v.description}</div>}
+                        {v.farmerResponse && (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: "8px 12px",
+                              borderRadius: 6,
+                              background: "#f3f7ee",
+                              border: "1px solid #d4d4d2",
+                              fontSize: 12.5,
+                            }}
+                          >
+                            <strong>Giải trình của hộ:</strong> {v.farmerResponse}
+                            {(() => {
+                              const respUrls = extractSafeMediaUrls(v.farmerResponsePhotoUrls, v.farmerResponsePhotoUrl);
+                              if (respUrls.length === 0) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  style={{ marginLeft: 8, cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                                  className="badge badge-blue"
+                                  onClick={() =>
+                                    setPreviewMedia({
+                                      urls: respUrls,
+                                      title: v.householdLabel,
+                                      subtitle: `Ảnh giải trình ngày ${formatDate(v.detectedOn)}`,
+                                    })
+                                  }
+                                >
+                                  {respUrls.length > 1 ? `Xem ảnh (${respUrls.length})` : "Xem ảnh"}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {v.resolutionNotes && (
+                          <div style={{ marginTop: 6, fontSize: 12.5, color: "#277a48" }}>
+                            <strong>Kết quả xử lý ({formatDate(v.resolvedOn)}):</strong> {v.resolutionNotes}
+                          </div>
+                        )}
+                        <div className="violation-meta">
+                          <span>Hộ: {v.householdLabel}</span>
+                          <span>Ngày: {formatDate(v.detectedOn)}</span>
+                          <span>Thửa: {v.plotCode || "-"}</span>
+                        </div>
                       </div>
-                      <div className="violation-title">{v.title}</div>
+                      <div className="violation-actions">
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingViolation(v)}>
+                          Chi tiết
+                        </button>
+                        {canUpdateViolation && v.status === "open" && (
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => setResolvingViolation(v)}>
+                            Xử lý
+                          </button>
+                        )}
+                        {canUpdateViolation && (
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingViolation(v)}>
+                            Sửa
+                          </button>
+                        )}
+                        {canDeleteViolation && (
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingViolation(v)}>
+                            Xóa
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {v.description && <div className="violation-desc">{v.description}</div>}
-                    {v.farmerResponse && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          padding: "8px 12px",
-                          borderRadius: 6,
-                          background: "#f3f7ee",
-                          border: "1px solid #d4d4d2",
-                          fontSize: 12.5,
-                        }}
-                      >
-                        <strong>Giải trình của hộ:</strong> {v.farmerResponse}
-                        {(() => {
-                          const respUrls = extractSafeMediaUrls(v.farmerResponsePhotoUrls, v.farmerResponsePhotoUrl);
-                          if (respUrls.length === 0) return null;
-                          return (
-                            <button
-                              type="button"
-                              style={{ marginLeft: 8, cursor: "pointer", border: "none", fontFamily: "inherit" }}
-                              className="badge badge-blue"
-                              onClick={() =>
-                                setPreviewMedia({
-                                  urls: respUrls,
-                                  title: v.householdLabel,
-                                  subtitle: `Ảnh giải trình ngày ${formatDate(v.detectedOn)}`,
-                                })
-                              }
-                            >
-                              {respUrls.length > 1 ? `Xem ảnh (${respUrls.length})` : "Xem ảnh"}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    {v.resolutionNotes && (
-                      <div style={{ marginTop: 6, fontSize: 12.5, color: "#277a48" }}>
-                        <strong>Kết quả xử lý ({formatDate(v.resolvedOn)}):</strong> {v.resolutionNotes}
-                      </div>
-                    )}
-                    <div className="violation-meta">
-                      <span>Hộ: {v.householdLabel}</span>
-                      <span>Ngày: {formatDate(v.detectedOn)}</span>
-                      <span>Thửa: {v.plotCode || "-"}</span>
-                    </div>
-                  </div>
-                  <div className="violation-actions">
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingViolation(v)}>
-                      Chi tiết
-                    </button>
-                    {canUpdateViolation && v.status === "open" && (
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => setResolvingViolation(v)}>
-                        Xử lý
-                      </button>
-                    )}
-                    {canUpdateViolation && (
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingViolation(v)}>
-                        Sửa
-                      </button>
-                    )}
-                    {canDeleteViolation && (
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingViolation(v)}>
-                        Xóa
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+              <div className="admin-diary-pagination">
+                <Pagination
+                  page={vPage}
+                  pageSize={PAGE_SIZE}
+                  total={violationsList.total}
+                  unit="vi phạm"
+                  onChange={setVPage}
+                />
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -670,10 +709,21 @@ export default function Journal() {
                                   </span>
                                   <span
                                     className={`admin-diary-verify-sub ${
-                                      s.verificationStatus === "verified" ? "is-verified" : ""
+                                      s.verificationStatus === "verified" || s.trustLevel === 1 ? "is-verified" : ""
                                     }`}
+                                    style={
+                                      s.verificationStatus !== "verified" && s.trustLevel === 3
+                                        ? { color: "#9a6712", fontWeight: 600 }
+                                        : undefined
+                                    }
                                   >
-                                    {s.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                    {s.verificationStatus === "verified"
+                                      ? "HTX đã xác minh"
+                                      : s.trustLevel === 3
+                                        ? "Cần đối chiếu thực địa"
+                                        : s.trustLevel === 1
+                                          ? "Xác thực thực địa cao"
+                                          : "Tự khai báo"}
                                   </span>
                                 </span>
                                 <DetailArrowIcon className="admin-diary-arrow" size={20} />

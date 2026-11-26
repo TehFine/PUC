@@ -10043,13 +10043,38 @@ body.pt-body {
   box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055)) !important;
 }
 
+.pt-notif-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.pt-notif-day-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pt-notif-day-heading {
+  margin: 0;
+  padding: 2px 2px 0;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
 .pt-notif-list {
   list-style: none;
   margin: 0;
-  padding: 2px 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pt-notif-item,
@@ -10129,10 +10154,13 @@ body.pt-body {
 }
 
 .pt-notif-time {
-  font-size: 11.5px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.35;
   padding-top: 1px;
-  color: var(--text-secondary);
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -12545,10 +12573,15 @@ html:has(.app-shell) .pt-sheet .pt-notif-item,
 html:has(.pt-app) .pt-notif-item,
 html:has(.pt-app) .pt-list>li.pt-notif-item:first-child {
   background: #ffffff !important;
-  border: none !important;
+  border: 1px solid rgba(20, 55, 47, 0.1) !important;
   outline: none !important;
   border-radius: 8px;
-  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.04));
+}
+
+html:has(.app-shell) .pt-sheet .pt-notif-item.is-read,
+html:has(.pt-app) .pt-notif-item.is-read {
+  background: #fafaf8 !important;
 }
 
 html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-footer,

@@ -12,6 +12,7 @@ import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
+import { describeFieldEvidence, FieldTrustBadge } from "@/components/portal/shared/FieldEvidenceCapture";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 import { formatDate, formatDateTime, formatDiaryEditor } from "@/utils/format";
 import {
@@ -42,6 +43,15 @@ export function JournalDetailModal({
   const hasMedia = Boolean(entry.photoUrls?.length || entry.photoUrl);
   const [verifying, setVerifying] = useState(false);
   const isVerified = entry.verificationStatus === "verified";
+  const trustInfo = describeFieldEvidence({
+    trustLevel: entry.trustLevel,
+    trustFlags: entry.trustFlags,
+    verificationStatus: entry.verificationStatus,
+    gpsVerified: entry.gpsVerified,
+    signboardQrVerified: entry.signboardQrVerified,
+    offlineQueued: entry.offlineQueued,
+    captureSource: entry.captureSource,
+  });
 
   const handleToggleVerify = async () => {
     setVerifying(true);
@@ -123,6 +133,26 @@ export function JournalDetailModal({
           </div>
         </div>
         <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mức tin cậy thực địa</span>
+          <div className="admin-detail-list-value">
+            <FieldTrustBadge
+              trustLevel={entry.trustLevel}
+              trustFlags={entry.trustFlags}
+              verificationStatus={entry.verificationStatus}
+              gpsVerified={entry.gpsVerified}
+              signboardQrVerified={entry.signboardQrVerified}
+              offlineQueued={entry.offlineQueued}
+              captureSource={entry.captureSource}
+            />
+          </div>
+        </div>
+        {trustInfo.evidenceNotes.length > 0 && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Bằng chứng đối chiếu</span>
+            <div className="admin-detail-list-value">{trustInfo.evidenceNotes.join(", ")}</div>
+          </div>
+        )}
+        <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Ngày thực hiện tại vườn</span>
           <div className="admin-detail-list-value">{formatDate(entry.entryOn)}</div>
         </div>
@@ -178,8 +208,22 @@ export function JournalDetailModal({
         {(entry.latitude != null || entry.longitude != null) && (
           <div className="admin-detail-list-row">
             <span className="admin-detail-list-label">Tọa độ GPS</span>
-            <div className="admin-detail-list-value" style={{ fontFamily: "var(--font-num-stack)" }}>
+            <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
               {entry.latitude?.toFixed(5)}, {entry.longitude?.toFixed(5)}
+              {entry.gpsAccuracyM != null ? ` (sai số ${Math.round(entry.gpsAccuracyM)} m)` : ""}
+              {entry.gpsVerified
+                ? ", khớp ranh giới thửa"
+                : entry.gpsDistanceM != null
+                  ? `, cách ranh giới ${Math.round(entry.gpsDistanceM)} m`
+                  : ""}
+            </div>
+          </div>
+        )}
+        {entry.recordHash && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Mã băm niêm phong</span>
+            <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+              {entry.recordHash.slice(0, 20)}...
             </div>
           </div>
         )}
@@ -308,7 +352,7 @@ export function JournalFormModal({
     const res = await save.run(payload);
     if (!res) return;
     if (res.mode === "queued") {
-      toast.success("Mạng hiện trường yếu: đã lưu nhật ký vào máy để tự động đồng bộ khi có sóng.");
+      toast.success("Đã lưu nhật ký vào máy, tự gửi khi có sóng");
       onClose();
       return;
     }
@@ -592,15 +636,14 @@ export function HouseholdLogbookExportModal({
           },
           (done, total) => setPhotoProgress({ done, total }),
         );
-        const photoNote = totalPhotos > 0 ? `, kèm ${totalPhotos} ảnh minh chứng` : "";
-        toast.success(`Đã mở bản in sổ nhật ký (${data.total} bản ghi${photoNote}).`);
+        toast.success(`Đã mở bản in sổ nhật ký (${data.total} bản ghi)`);
         onClose();
       } else {
         const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
         const dateSuffix = effectiveTo || todayIso();
         const blob = buildUtf8CsvBlob(data.headers, data.rows);
         triggerBlobDownload(blob, `so-nhat-ky${hhSuffix}-${dateSuffix}.csv`);
-        toast.success(`Đã tải xuống CSV sổ nhật ký (${data.total} bản ghi).`);
+        toast.success(`Đã tải CSV sổ nhật ký (${data.total} bản ghi)`);
         onClose();
       }
     } catch (err) {

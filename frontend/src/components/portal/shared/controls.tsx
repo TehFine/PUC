@@ -15,6 +15,7 @@ import { getNetworkQualitySnapshot, isLowEndDevice } from "@/lib/network";
 import { usePersistedState } from "@/lib/back-navigation";
 import { isDeviceOfflineNow, type OfflineMediaSlot } from "@/lib/offline-sync";
 import { isSafeMediaUrl } from "@/utils/url-safety";
+import { FieldCameraCaptureModal } from "./FieldEvidenceCapture";
 import {
   ALLOWED_IMAGE_MIMES,
   computeBlobSha256Hex,
@@ -630,6 +631,9 @@ export interface MultiMediaItem {
   blob?: Blob;
   precompressed?: boolean;
   sha256?: string;
+  captureSource?: "in_app_camera" | "camera" | "upload";
+  capturedAtIso?: string;
+  capturedPerfNow?: number;
   bgStatus?: "local" | "uploading" | "uploaded";
   uploadedId?: number;
   uploadedUrl?: string;
@@ -676,6 +680,8 @@ function buildInitialPickerItems(options: UseMultiPhotoPickerOptions): MultiMedi
         blob: slot.blob,
         precompressed: !slot.isVideo,
         sha256: slot.sha256,
+        captureSource: slot.captureSource,
+        capturedAtIso: slot.capturedAtIso,
         bgStatus: slot.uploadedId ? "uploaded" : "local",
         uploadedId: slot.uploadedId,
         uploadedUrl: slot.uploadedUrl,
@@ -816,7 +822,10 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
   }, [pumpBackgroundUpload]);
 
   const addFiles = useCallback(
-    async (fileList: FileList | File[] | null | undefined) => {
+    async (
+      fileList: FileList | File[] | null | undefined,
+      sourceMode: "in_app_camera" | "camera" | "upload" = "upload",
+    ) => {
       if (!fileList) return;
       const incoming = Array.from(fileList);
       if (incoming.length === 0) return;
@@ -839,6 +848,9 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
       if (totalBatch > 1) {
         setCompressing({ done: 0, total: totalBatch });
       }
+
+      const batchCapturedAtIso = new Date().toISOString();
+      const batchCapturedPerfNow = typeof performance !== "undefined" ? performance.now() : undefined;
 
       try {
         // Nén tuần tự từng tệp một (tuyệt đối không Promise.all) để giữ đỉnh bộ nhớ RAM thấp nhất trên điện thoại cũ
@@ -873,6 +885,9 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
               file: rawFile,
               blob: rawFile,
               sha256,
+              captureSource: sourceMode,
+              capturedAtIso: batchCapturedAtIso,
+              capturedPerfNow: batchCapturedPerfNow,
               bgStatus: "local",
             };
             if (itemsRef.current.length < maxFiles) {
@@ -895,6 +910,9 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
               blob: compressedFile,
               precompressed: true,
               sha256,
+              captureSource: sourceMode,
+              capturedAtIso: batchCapturedAtIso,
+              capturedPerfNow: batchCapturedPerfNow,
               bgStatus: "local",
             };
             if (itemsRef.current.length < maxFiles) {
@@ -1023,16 +1041,34 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
     }
   }, [purpose]);
 
+  const primaryCaptureSource = useMemo<"in_app_camera" | "camera" | "upload">(() => {
+    if (items.length === 0) return "camera";
+    if (items.some((it) => it.captureSource === "upload")) return "upload";
+    if (items.every((it) => it.captureSource === "in_app_camera")) return "in_app_camera";
+    return "camera";
+  }, [items]);
+
+  const firstCapturedMeta = useMemo(() => {
+    const first = items.find((it) => it.capturedAtIso || typeof it.capturedPerfNow === "number");
+    return {
+      capturedAtIso: first?.capturedAtIso ?? null,
+      capturedPerfNow: first?.capturedPerfNow ?? null,
+    };
+  }, [items]);
+
   return {
     items,
     count: items.length,
     hasFiles: items.length > 0,
     maxFiles,
     allowVideo,
+    primaryCaptureSource,
+    firstCapturedMeta,
     error,
     compressing,
     progress,
     setUploadProgress: setProgress,
+    setPickerError: setError,
     addFiles,
     removeKey,
     clearAll,
@@ -1050,6 +1086,7 @@ export function MultiPhotoField({
   label,
   picker,
   required = false,
+  cameraOnly = false,
   description,
   cameraLabel = "Chụp ảnh",
   galleryLabel = "Chọn nhiều ảnh",
@@ -1060,6 +1097,8 @@ export function MultiPhotoField({
   label: string;
   picker: MultiPhotoPicker;
   required?: boolean;
+  /** Khi bật cho nhật ký thực địa của nông hộ: chặn chọn ảnh cũ từ thư viện máy, chỉ cho chụp trực tiếp tại hiện trường. */
+  cameraOnly?: boolean;
   description?: string;
   cameraLabel?: string;
   galleryLabel?: string;
@@ -1067,6 +1106,7 @@ export function MultiPhotoField({
   disabled?: boolean;
 }) {
   const [removingItem, setRemovingItem] = useState<MultiMediaItem | null>(null);
+  const [liveCameraOpen, setLiveCameraOpen] = useState(false);
   const canAddMore = picker.count < picker.maxFiles;
 
   return (
@@ -1149,35 +1189,48 @@ export function MultiPhotoField({
 
       {canAddMore && (
         <div className="pt-multi-media-actions">
-          <label className={`pt-multi-media-btn is-primary ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-camera`}>
-            <input
-              id={`${id}-camera`}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
+          {cameraOnly ? (
+            <button
+              type="button"
+              className={`pt-multi-media-btn is-primary ${disabled ? "is-disabled" : ""}`.trim()}
               disabled={disabled}
-              onChange={(event) => {
-                void picker.addFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <span>{picker.count > 0 ? "Chụp thêm ảnh" : cameraLabel}</span>
-          </label>
+              onClick={() => setLiveCameraOpen(true)}
+            >
+              <span>{picker.count > 0 ? "Chụp thêm ảnh hiện trường" : cameraLabel}</span>
+            </button>
+          ) : (
+            <label className={`pt-multi-media-btn is-primary ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-camera`}>
+              <input
+                id={`${id}-camera`}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                disabled={disabled}
+                onChange={(event) => {
+                  void picker.addFiles(event.target.files, "camera");
+                  event.target.value = "";
+                }}
+              />
+              <span>{picker.count > 0 ? "Chụp thêm ảnh" : cameraLabel}</span>
+            </label>
+          )}
 
-          <label className={`pt-multi-media-btn is-tinted ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-gallery`}>
-            <input
-              id={`${id}-gallery`}
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              disabled={disabled}
-              onChange={(event) => {
-                void picker.addFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <span>{galleryLabel}</span>
-          </label>
+          {!cameraOnly && (
+            <label className={`pt-multi-media-btn is-tinted ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-gallery`}>
+              <input
+                id={`${id}-gallery`}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                disabled={disabled}
+                onChange={(event) => {
+                  void picker.addFiles(event.target.files, "upload");
+                  event.target.value = "";
+                }}
+              />
+              <span>{galleryLabel}</span>
+            </label>
+          )}
 
           {picker.allowVideo && (
             <label className={`pt-multi-media-btn is-gray ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-video`}>
@@ -1185,16 +1238,40 @@ export function MultiPhotoField({
                 id={`${id}-video`}
                 type="file"
                 accept="video/mp4,video/webm,video/quicktime"
+                capture={cameraOnly ? "environment" : undefined}
                 disabled={disabled}
                 onChange={(event) => {
-                  void picker.addFiles(event.target.files);
+                  const files = event.target.files;
+                  if (cameraOnly && files?.[0]) {
+                    const f = files[0];
+                    if (f.lastModified > 0 && Math.abs(Date.now() - f.lastModified) > 5 * 60_000) {
+                      picker.setPickerError(
+                        "Chỉ nhận video vừa quay trực tiếp tại vườn, không nhận video cũ từ thư viện máy.",
+                      );
+                      event.target.value = "";
+                      return;
+                    }
+                  }
+                  void picker.addFiles(files, cameraOnly ? "camera" : "upload");
                   event.target.value = "";
                 }}
               />
-              <span>{videoLabel}</span>
+              <span>{cameraOnly ? "Quay video tại vườn" : videoLabel}</span>
             </label>
           )}
         </div>
+      )}
+
+      {liveCameraOpen && cameraOnly && (
+        <FieldCameraCaptureModal
+          remainingSlots={Math.max(0, picker.maxFiles - picker.count)}
+          currentCount={picker.count}
+          maxFiles={picker.maxFiles}
+          onCaptureFile={async (file, source) => {
+            await picker.addFiles([file], source);
+          }}
+          onClose={() => setLiveCameraOpen(false)}
+        />
       )}
 
       {picker.compressing && !picker.progress && (

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
+import { toast } from "@/components/ui/Toast";
 import { useNetworkQuality } from "@/lib/network";
 import {
   type OfflineMediaSlot,
@@ -243,7 +244,10 @@ export default function OfflineSyncBar() {
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          onClick={() => void retryOfflineOutboxItem(item.id)}
+                          onClick={() => {
+                            toast.info("Đang thử gửi lại bản ghi");
+                            void retryOfflineOutboxItem(item.id);
+                          }}
                         >
                           Thử gửi lại
                         </button>
@@ -279,7 +283,9 @@ export default function OfflineSyncBar() {
           onConfirm={() => {
             const id = deletingItem.id;
             setDeletingItem(null);
-            void removeOfflineOutboxItem(id);
+            void removeOfflineOutboxItem(id).then(() => {
+              toast.success("Đã xóa bản ghi chờ gửi");
+            });
           }}
           onClose={() => setDeletingItem(null)}
         />

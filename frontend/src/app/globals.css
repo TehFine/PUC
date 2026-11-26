@@ -5627,42 +5627,13 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   display: none;
 }
 
-.report-card-eyebrow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 18px 20px 6px;
-  border-right: none;
-  min-width: 0;
-}
-
-.report-card-index {
-  font-size: 14px;
-  font-weight: 700;
-  color: #14372f;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-}
-
-.report-card-cat {
-  font-size: 11px;
-  font-weight: 600;
-  color: #7c8982;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1.3;
-}
-
 .report-card-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px 20px 18px;
+  padding: 20px 20px 18px;
 }
 
 .report-title {
@@ -5682,6 +5653,7 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
+  text-align: center;
 }
 
 .report-formats {
@@ -9258,17 +9230,8 @@ code {
     border-radius: 8px;
   }
 
-  .report-card-index {
-    display: none;
-  }
-
-  .report-card-eyebrow {
-    padding: 15px 16px 4px;
-    justify-content: flex-start;
-  }
-
   .report-card-body {
-    padding: 2px 16px 15px;
+    padding: 16px 16px 15px;
     gap: 5px;
   }
 
@@ -12971,11 +12934,36 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   border-radius: 6px !important;
 }
 
-/* ─── THẺ THÔNG BÁO TRONG NGĂN THÔNG BÁO QUẢN TRỊ VIÊN (KHÔNG OUTLINE, ĐỔ BÓNG CHUẨN) ─── */
+/* ─── THẺ THÔNG BÁO TRONG NGĂN THÔNG BÁO QUẢN TRỊ VIÊN (GOM THEO NGÀY, THẺ RIÊNG BIỆT) ─── */
+.admin-notif-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.admin-notif-day-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.admin-notif-day-heading {
+  margin: 0;
+  padding: 2px 2px 0;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
 .admin-notif-card-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .admin-notif-card {
@@ -12983,35 +12971,87 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   text-align: left;
   padding: 12px 14px;
   border-radius: 8px;
-  border: none !important;
+  border: 1px solid rgba(20, 55, 47, 0.1) !important;
   outline: none !important;
   background: #ffffff;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-sm);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   font-family: inherit;
-  transition: background-color 150ms ease, box-shadow 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.admin-notif-card.is-read {
+  background: #fafaf8;
+}
+
+.admin-notif-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.admin-notif-card-kind {
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.admin-notif-card-time {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-notif-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #14372f;
+  line-height: 1.4;
+}
+
+.admin-notif-card.is-read .admin-notif-card-title {
+  font-weight: 600;
+}
+
+.admin-notif-card-body {
+  margin: 0;
+  font-size: 12.5px;
+  color: #435951;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
 }
 
 .admin-notif-card:focus,
 .admin-notif-card:focus-visible {
   outline: none !important;
+  border-color: rgba(20, 55, 47, 0.24) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .admin-notif-card:hover {
-    background: #fafcfb;
+    background: #f6f9f7;
+    border-color: rgba(20, 55, 47, 0.18) !important;
   }
 }
 
 .admin-notif-card:active {
-  background: #f4f7f5;
+  background: #f1f5f3;
 }
 
 html[data-perf="lite"] .admin-notif-card {
-  box-shadow: var(--shadow-card-sm);
+  box-shadow: none;
 }
 
 /* ─── DÒNG TÓM TẮT NHẬT KÝ THAO TÁC (AUDIT LOG) TRONG THẺ THEO NGÀY ─── */
@@ -13179,6 +13219,368 @@ html[data-perf="lite"] .admin-notif-card {
   font-size: 13.5px;
   font-weight: 600;
   border-radius: 6px !important;
+}
+
+.account-detail-sec-btn.is-lock-danger {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  outline: none !important;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.2), 0 8px 18px -4px rgba(15, 23, 42, 0.16) !important;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .account-detail-sec-btn.is-lock-danger:hover:not(:disabled) {
+    background: #b91c1c !important;
+    border-color: #991b1b !important;
+    color: #ffffff !important;
+    box-shadow: 0 3px 8px rgba(185, 28, 28, 0.26), 0 10px 22px -4px rgba(15, 23, 42, 0.2) !important;
+  }
+}
+
+.account-detail-sec-btn.is-lock-danger:active:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #7f1d1d !important;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.2) !important;
+}
+
+/* ─── THẺ & NÚT TRONG NGĂN PHIÊN ĐĂNG NHẬP (KHÔNG VIỀN CỨNG, ĐỔ BÓNG ĐỒNG BỘ HỆ THỐNG) ─── */
+.session-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-device-card {
+  border-radius: 8px;
+  border: none !important;
+  outline: none !important;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-device-card.is-current {
+  background: #f3fbf5;
+}
+
+.session-device-body {
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.session-device-name {
+  min-width: 0;
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #14372f;
+  line-height: 1.35;
+}
+
+.session-device-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #166534;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.22);
+}
+
+.session-device-meta {
+  color: #5f6d66;
+  font-size: 12px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-device-exp {
+  color: #8a968f;
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-device-foot {
+  padding: 10px 15px;
+  border-top: 1px solid rgba(20, 55, 47, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.session-revoke-btn,
+.session-revoke-all-btn {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  outline: none !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.18), 0 6px 16px -4px rgba(15, 23, 42, 0.14) !important;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.session-revoke-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .session-revoke-btn:hover:not(:disabled),
+  .session-revoke-all-btn:hover:not(:disabled) {
+    background: #b91c1c !important;
+    border-color: #991b1b !important;
+    color: #ffffff !important;
+    box-shadow: 0 3px 8px rgba(185, 28, 28, 0.24), 0 8px 20px -4px rgba(15, 23, 42, 0.18) !important;
+  }
+}
+
+.session-revoke-btn:active:not(:disabled),
+.session-revoke-all-btn:active:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #7f1d1d !important;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.2) !important;
+}
+
+html[data-perf="lite"] .session-device-card {
+  box-shadow: var(--shadow-card-sm);
+}
+
+.account-detail-sec-btn.is-lock-danger {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  outline: none !important;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.2), 0 8px 18px -4px rgba(15, 23, 42, 0.16) !important;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .account-detail-sec-btn.is-lock-danger:hover:not(:disabled) {
+    background: #b91c1c !important;
+    border-color: #991b1b !important;
+    color: #ffffff !important;
+    box-shadow: 0 3px 8px rgba(185, 28, 28, 0.26), 0 10px 22px -4px rgba(15, 23, 42, 0.2) !important;
+  }
+}
+
+.account-detail-sec-btn.is-lock-danger:active:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #7f1d1d !important;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.2) !important;
+}
+
+/* ─── THẺ & NÚT TRONG NGĂN PHIÊN ĐĂNG NHẬP (KHÔNG VIỀN CỨNG, ĐỔ BÓNG ĐỒNG BỘ HỆ THỐNG) ─── */
+.session-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-device-card {
+  border-radius: 8px;
+  border: none !important;
+  outline: none !important;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-device-card.is-current {
+  background: #f3fbf5;
+}
+
+.session-device-body {
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.session-device-name {
+  min-width: 0;
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #14372f;
+  line-height: 1.35;
+}
+
+.session-device-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #166534;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.22);
+}
+
+.session-device-meta {
+  color: #5f6d66;
+  font-size: 12px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-device-exp {
+  color: #8a968f;
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-device-foot {
+  padding: 10px 15px;
+  border-top: 1px solid rgba(20, 55, 47, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.session-revoke-btn,
+.session-revoke-all-btn {
+  background: #dc2626 !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  outline: none !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.18), 0 6px 16px -4px rgba(15, 23, 42, 0.14) !important;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.session-revoke-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .session-revoke-btn:hover:not(:disabled),
+  .session-revoke-all-btn:hover:not(:disabled) {
+    background: #b91c1c !important;
+    border-color: #991b1b !important;
+    color: #ffffff !important;
+    box-shadow: 0 3px 8px rgba(185, 28, 28, 0.24), 0 8px 20px -4px rgba(15, 23, 42, 0.18) !important;
+  }
+}
+
+.session-revoke-btn:active:not(:disabled),
+.session-revoke-all-btn:active:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #7f1d1d !important;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.2) !important;
+}
+
+html[data-perf="lite"] .session-device-card {
+  box-shadow: var(--shadow-card-sm);
+}
+
+/* ─── CỤM 2 NÚT NẰM NGANG (XÁC NHẬN & XUẤT SỔ PDF) TRONG CHI TIẾT NHẬT KÝ / PHUN THUỐC ─── */
+.diary-detail-sec-actions {
+  margin-top: 18px;
+  padding-top: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.diary-detail-sec-actions:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.diary-detail-sec-actions .account-detail-sec-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .diary-detail-sec-actions {
+    margin-top: 16px;
+    gap: 8px;
+  }
+
+  .diary-detail-sec-actions .account-detail-sec-btn {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}
+
+/* ─── CỤM 2 NÚT NẰM NGANG (XÁC NHẬN & XUẤT SỔ PDF) TRONG CHI TIẾT NHẬT KÝ / PHUN THUỐC ─── */
+.diary-detail-sec-actions {
+  margin-top: 18px;
+  padding-top: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.diary-detail-sec-actions:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.diary-detail-sec-actions .account-detail-sec-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .diary-detail-sec-actions {
+    margin-top: 16px;
+    gap: 8px;
+  }
+
+  .diary-detail-sec-actions .account-detail-sec-btn {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
 }
 
 /* ─── Ô CHỌN NGÀY / GIỜ: HIỂN THỊ CON TRỎ BẤM TRÊN TOÀN BỘ PHẠM VI Ô ─── */

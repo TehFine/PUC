@@ -14,6 +14,7 @@ import {
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import type { PortalAction } from "./PortalSearch";
+import { IosPwaInstallGuideBanner } from "./shared/FieldEvidenceCapture";
 import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
 function getScheduleKicker(item: PortalScheduleItem): string {
@@ -295,7 +296,8 @@ export default function HomeTab({
           num: stats.harvestTotalKg.toLocaleString("vi-VN", { maximumFractionDigits: 1 }),
           unit: "kg",
         };
-  const pucCode = household.code ? household.code.replace(/-(?:H|T)\d+$/i, "") : "-";
+  const rawZoneCode = household.zoneCode?.trim() || "";
+  const pucCode = rawZoneCode || "Chưa có mã vùng";
 
   const handleActionClick = (target: PortalTabId, action?: PortalAction) => {
     onNavigate(target, action);
@@ -303,6 +305,7 @@ export default function HomeTab({
 
   return (
     <div className="pt-stack">
+      <IosPwaInstallGuideBanner />
       <section className="pt-hero-shell" aria-label="Tổng quan hộ canh tác">
         <div className="pt-spec-rows">
           <header className="pt-spec-row is-no-meta">
@@ -315,7 +318,9 @@ export default function HomeTab({
             <span className="pt-spec-primary">Mã vùng</span>
             <span className="pt-spec-meta">Mã vùng trồng PUC</span>
             <span className="pt-spec-sub">Định danh xuất khẩu</span>
-            <span className="pt-spec-val">{pucCode}</span>
+            <span className="pt-spec-val" data-no-translate={rawZoneCode ? "true" : undefined}>
+              {pucCode}
+            </span>
           </div>
 
           <button
@@ -347,9 +352,9 @@ export default function HomeTab({
           >
             <span className="pt-spec-primary">Sản lượng</span>
             <span className="pt-spec-meta">
-              {harvestDisplay.unit === "tấn" ? "Tấn xuất kho" : "Kg xuất kho"}
+              {harvestDisplay.unit === "tấn" ? "Tấn đã góp lô" : "Kg đã góp lô"}
             </span>
-            <span className="pt-spec-sub">Sản lượng thu hoạch</span>
+            <span className="pt-spec-sub">Sản lượng đã góp lô</span>
             <span className="pt-spec-val">{harvestDisplay.num}</span>
           </button>
 

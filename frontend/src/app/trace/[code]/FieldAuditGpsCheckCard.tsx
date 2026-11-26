@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { preconnectMapTileOrigins } from "@/components/map/map-layers";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
+import { toast } from "@/components/ui/Toast";
 import { getServerCalibratedDate } from "@/lib/api-client";
 import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import { isSafeMediaUrl, isSafeTraceCode } from "@/utils/url-safety";
@@ -15,6 +16,7 @@ import {
 import {
   TRACE_UI_COPY,
   formatTraceNumber,
+  getTraceEmptyText,
   localizeAdminLocation,
   localizeAssessedBy,
   localizeCoopName,
@@ -36,7 +38,7 @@ export interface FieldAuditPlotProfile {
   variety: string;
   plantedYear: number | null;
   areaHa: number;
-  treeCount: number;
+  treeCount: number | null;
   status: string;
   sheetNo: string | null;
   parcelNo: string | null;
@@ -76,6 +78,10 @@ export interface FieldAuditLedgerItem {
   recordHash: string | null;
   gpsVerified: boolean;
   gpsDistanceM: number | null;
+  trustLevel?: number | null;
+  trustFlags?: string[] | null;
+  offlineQueued?: boolean;
+  signboardQrVerified?: boolean;
   photoUrl: string | null;
   photoUrls?: string[] | null;
 }
@@ -647,6 +653,13 @@ export default function FieldAuditGpsCheckCard({
         },
         ...prev.slice(0, 29),
       ]);
+      toast.success(
+        lang === "en"
+          ? "GPS location verified"
+          : lang === "zh"
+            ? "已完成GPS实地核验"
+            : "Đã đối chiếu vị trí GPS",
+      );
     } catch {
       setGpsError(f.gpsPermissionErr);
     } finally {
@@ -768,7 +781,7 @@ export default function FieldAuditGpsCheckCard({
     },
     {
       label: acopy.rowPuc,
-      value: plotProfile.zoneCode,
+      value: plotProfile.zoneCode || getTraceEmptyText("notRegistered", lang),
     },
     {
       label: acopy.rowScale,
@@ -1252,10 +1265,32 @@ export default function FieldAuditGpsCheckCard({
                         </button>
                       )}
                     </td>
-                    <td className={`col-status ${entry.isLateEntry ? "is-warn" : "is-ok"}`}>
+                    <td
+                      className={`col-status ${
+                        entry.isLateEntry || entry.trustLevel === 3 ? "is-warn" : "is-ok"
+                      }`}
+                    >
                       <span>{entry.isLateEntry ? f.lateTag : f.onTimeTag}</span>
+                      {entry.signboardQrVerified && (
+                        <span className="tr-doc-status-sub">
+                          {lang === "zh"
+                            ? "地块码核对一致"
+                            : lang === "en"
+                              ? "Plot QR matched"
+                              : "Khớp QR thửa"}
+                        </span>
+                      )}
                       {entry.gpsVerified && (
                         <span className="tr-doc-status-sub">{f.gpsVerifiedTag}</span>
+                      )}
+                      {entry.recordHash && (
+                        <span className="tr-doc-status-sub is-tabular">
+                          {lang === "zh"
+                            ? `防伪哈希: ${entry.recordHash.slice(0, 10)}...`
+                            : lang === "en"
+                              ? `Seal: ${entry.recordHash.slice(0, 10)}...`
+                              : `Niêm phong: ${entry.recordHash.slice(0, 10)}...`}
+                        </span>
                       )}
                     </td>
                   </tr>

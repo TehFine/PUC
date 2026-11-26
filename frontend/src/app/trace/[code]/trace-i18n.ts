@@ -451,8 +451,32 @@ export function persistTraceLang(lang: TraceLang): void {
   }
 }
 
+export function getTraceEmptyText(
+  kind: "notUpdated" | "noData" | "notRegistered" | "noRecords",
+  lang: TraceLang,
+): string {
+  switch (kind) {
+    case "noData":
+      return lang === "zh" ? "暂无数据" : lang === "en" ? "No data yet" : "Chưa có dữ liệu";
+    case "notRegistered":
+      return lang === "zh" ? "未登记" : lang === "en" ? "Not registered" : "Chưa đăng ký";
+    case "noRecords":
+      return lang === "zh" ? "暂无记录" : lang === "en" ? "No entries yet" : "Chưa có bản ghi";
+    case "notUpdated":
+    default:
+      return lang === "zh" ? "未更新" : lang === "en" ? "Not updated" : "Chưa cập nhật";
+  }
+}
+
+export function formatTracePlotsUnit(count: number, lang: TraceLang): string {
+  const safe = Math.max(0, Math.trunc(count || 0));
+  if (lang === "zh") return `${safe} 个地块`;
+  if (lang === "en") return safe === 1 ? "1 plot" : `${safe} plots`;
+  return `${safe} thửa`;
+}
+
 export function formatTraceDate(dateStr: string | null | undefined, lang: TraceLang): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return getTraceEmptyText("notUpdated", lang);
   try {
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return dateStr;
@@ -484,7 +508,7 @@ export function formatTraceDate(dateStr: string | null | undefined, lang: TraceL
 }
 
 export function formatTraceDateTime(dateStr: string | null | undefined, lang: TraceLang): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return getTraceEmptyText("notUpdated", lang);
   try {
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return dateStr;
@@ -659,7 +683,7 @@ export interface TraceUiCopy {
     sealedRecordsLabel: string;
     sealedRecordsFmt: (total: number, journals: number, sprays: number, minutes: number) => string;
     onTimeRateLabel: string;
-    onTimeRateFmt: (pct: number, lateCount: number) => string;
+    onTimeRateFmt: (pct: number, lateCount: number, totalCount?: number) => string;
     gpsEvidenceLabel: string;
     gpsEvidenceFmt: (gpsCount: number) => string;
     merkleAnchorLabel: string;
@@ -685,7 +709,7 @@ export interface TraceUiCopy {
     farmerRepLabel: string;
     pucZoneLabel: string;
     areaTreesLabel: string;
-    areaTreesFmt: (ha: number, trees: number) => string;
+    areaTreesFmt: (ha: number, trees: number | null | undefined) => string;
     varietyYearLabel: string;
     phiSafeBadge: string;
     phiLockedFmt: (safeFrom: string | null) => string;
@@ -840,7 +864,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "Xã / Tỉnh",
       statusRowLabel: "Trạng thái hiệu lực",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Hiệu lực đến ${validUntil})`,
-      coarseMapTitle: (pucCode) => `Bản đồ vệ tinh vùng trồng (${pucCode})`,
+      coarseMapTitle: (pucCode) =>
+        pucCode ? `Bản đồ vệ tinh vùng trồng (${pucCode})` : "Bản đồ vệ tinh vùng trồng",
       coarseTabTerrain: "Vệ tinh",
       coarseTabGrid: "Giao thông",
       coarseRadiusLabel: "Phạm vi vùng trồng khoảng 2.5 km",
@@ -913,8 +938,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `${total} bản ghi (${journals} nhật ký, ${sprays} đợt phun, ${minutes} biên bản)`,
       onTimeRateLabel: "Tỷ lệ ghi đúng hạn (<= 48h)",
-      onTimeRateFmt: (pct, lateCount) =>
-        lateCount > 0 ? `${pct}% (${lateCount} bản ghi bổ sung muộn có giải trình)` : `${pct}% (Không có bản ghi trễ hạn)`,
+      onTimeRateFmt: (pct, lateCount, totalCount) =>
+        totalCount !== undefined && totalCount <= 0
+          ? "Chưa có bản ghi"
+          : lateCount > 0
+            ? `${pct}% (${lateCount} bản ghi bổ sung muộn có giải trình)`
+            : `${pct}% (Không có bản ghi trễ hạn)`,
       gpsEvidenceLabel: "Ảnh hiện trường khớp GPS",
       gpsEvidenceFmt: (gpsCount) => `${gpsCount} ảnh chụp xác thực tọa độ tại thửa`,
       merkleAnchorLabel: "Mã neo gốc lô (Anchor)",
@@ -945,7 +974,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       farmerRepLabel: "Chủ hộ canh tác",
       pucZoneLabel: "Mã vùng trồng (PUC)",
       areaTreesLabel: "Quy mô thửa",
-      areaTreesFmt: (ha, trees) => `${ha} ha (${trees} cây kinh doanh)`,
+      areaTreesFmt: (ha, trees) =>
+        trees && trees > 0 ? `${ha} ha (${trees} cây kinh doanh)` : `${ha} ha`,
       varietyYearLabel: "Giống và năm trồng",
       phiSafeBadge: "Đủ thời gian cách ly an toàn",
       phiLockedFmt: (safeFrom) =>
@@ -1107,7 +1137,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "Commune / Province",
       statusRowLabel: "Validity Status",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Valid until ${validUntil})`,
-      coarseMapTitle: (pucCode) => `Growing Zone Satellite Map (${pucCode})`,
+      coarseMapTitle: (pucCode) =>
+        pucCode ? `Growing Zone Satellite Map (${pucCode})` : "Growing Zone Satellite Map",
       coarseTabTerrain: "Satellite",
       coarseTabGrid: "Streets",
       coarseRadiusLabel: "General zone scope approx. 2.5 km",
@@ -1180,8 +1211,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `${total} records (${journals} logs, ${sprays} sprays, ${minutes} inspections)`,
       onTimeRateLabel: "On-time Entry Rate (<= 48h)",
-      onTimeRateFmt: (pct, lateCount) =>
-        lateCount > 0 ? `${pct}% (${lateCount} declared late entries)` : `${pct}% (Zero late backdated entries)`,
+      onTimeRateFmt: (pct, lateCount, totalCount) =>
+        totalCount !== undefined && totalCount <= 0
+          ? "No entries yet"
+          : lateCount > 0
+            ? `${pct}% (${lateCount} declared late entries)`
+            : `${pct}% (Zero late backdated entries)`,
       gpsEvidenceLabel: "Geo-verified Field Photos",
       gpsEvidenceFmt: (gpsCount) => `${gpsCount} photos matched parcel GPS boundary`,
       merkleAnchorLabel: "Batch Anchor Digest",
@@ -1212,7 +1247,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       farmerRepLabel: "Member Grower",
       pucZoneLabel: "Production Unit Code (PUC)",
       areaTreesLabel: "Parcel Scale",
-      areaTreesFmt: (ha, trees) => `${ha} ha (${trees} fruiting trees)`,
+      areaTreesFmt: (ha, trees) =>
+        trees && trees > 0 ? `${ha} ha (${trees} fruiting trees)` : `${ha} ha`,
       varietyYearLabel: "Variety and Planted Year",
       phiSafeBadge: "Safe Withdrawal Period Met",
       phiLockedFmt: (safeFrom) =>
@@ -1373,7 +1409,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "所在乡 / 省",
       statusRowLabel: "资质有效状态",
       validUntilFmt: (statusText, validUntil) => `${statusText}（有效期至 ${validUntil}）`,
-      coarseMapTitle: (pucCode) => `注册种植区卫星地图 (${pucCode})`,
+      coarseMapTitle: (pucCode) =>
+        pucCode ? `注册种植区卫星地图 (${pucCode})` : "注册种植区卫星地图",
       coarseTabTerrain: "卫星影像",
       coarseTabGrid: "道路地图",
       coarseRadiusLabel: "产区概览范围约 2.5 公里",
@@ -1443,8 +1480,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `共 ${total} 条（农事 ${journals} 条，用药 ${sprays} 条，巡检 ${minutes} 条）`,
       onTimeRateLabel: "48小时内及时录入率",
-      onTimeRateFmt: (pct, lateCount) =>
-        lateCount > 0 ? `${pct}%（含 ${lateCount} 条已说明原因的补录记录）` : `${pct}%（全部按时实时录入）`,
+      onTimeRateFmt: (pct, lateCount, totalCount) =>
+        totalCount !== undefined && totalCount <= 0
+          ? "暂无记录"
+          : lateCount > 0
+            ? `${pct}%（含 ${lateCount} 条已说明原因的补录记录）`
+            : `${pct}%（全部按时实时录入）`,
       gpsEvidenceLabel: "GPS 地理围栏核验照片",
       gpsEvidenceFmt: (gpsCount) => `${gpsCount} 张现场实拍图已匹配地块坐标`,
       merkleAnchorLabel: "批次根哈希锚点",
@@ -1475,7 +1516,8 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       farmerRepLabel: "种植成员户",
       pucZoneLabel: "注册果园编码 (PUC)",
       areaTreesLabel: "地块面积与树数",
-      areaTreesFmt: (ha, trees) => `${ha} 公顷（${trees} 株挂果树）`,
+      areaTreesFmt: (ha, trees) =>
+        trees && trees > 0 ? `${ha} 公顷（${trees} 株挂果树）` : `${ha} 公顷`,
       varietyYearLabel: "品种与定植年份",
       phiSafeBadge: "已满安全间隔期（准予采收）",
       phiLockedFmt: (safeFrom) =>
@@ -1569,7 +1611,7 @@ export function localizeProductName(rawName: string, traceUnit: string, lang: Tr
 
 export function localizeVariety(rawVariety: string, lang: TraceLang): string {
   const cleaned = (rawVariety || "").trim();
-  if (!cleaned) return lang === "zh" ? "Ri6 与 Monthong" : lang === "en" ? "Ri6 & Monthong" : "Ri6 và Monthong";
+  if (!cleaned) return getTraceEmptyText("notUpdated", lang);
   if (lang === "vi") {
     return cleaned.replace(/\s*&\s*/g, " và ");
   }
@@ -1864,6 +1906,7 @@ function localizeGeoSegment(rawSeg: string, lang: "en" | "zh", isLastSegment = f
  */
 export function normalizeKrongBukAdminText(raw: string): string {
   if (!raw || !raw.trim()) return raw;
+  if (/^(?:xã\s+)?cư\s+né$/i.test(raw.trim())) return "Xã Krông Búk";
   let res = raw
     .replace(/HỢP TÁC XÃ/g, "__PUC_HTX_UPPER__")
     .replace(/Hợp Tác Xã/g, "__PUC_HTX_TITLE2__")
@@ -1871,10 +1914,15 @@ export function normalizeKrongBukAdminText(raw: string): string {
     .replace(/hợp tác xã/g, "__PUC_HTX_LOWER__");
 
   res = res
+    .replace(/(XÃ\s+EA\s+KH(?:Ă|A)L)\s*(?:[-–,])\s*(?:HUYỆN\s+|XÃ\s+)?KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "$1")
+    .replace(/((?:Xã|xã)\s+Ea\s+Kh(?:ă|a)l)\s*(?:[-–,])\s*(?:Huyện\s+|huyện\s+|Xã\s+|xã\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "$1")
     .replace(/XÃ\s+CƯ\s+NÉ\s*(?:[-–,]|VÀ)\s*(?:HUYỆN\s+)?KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
     .replace(/Xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:Huyện\s+|huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
     .replace(/xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:huyện\s+|Huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
     .replace(/xã\s+cư\s+né\s*(?:[-–,]|và)\s*(?:huyện\s+)?kr(?:ô|o)ng\s+b(?:ú|u)k/gi, "xã Krông Búk")
+    .replace(/((?:Thôn|thôn|Buôn|buôn)\s+[^,;()\n]{1,40}?\s*[-–,]\s*)Cư\s+Né(?:\s*[-–,]\s*(?:Huyện\s+|huyện\s+|Xã\s+|xã\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k)?/g, "$1Xã Krông Búk")
+    .replace(/(,\s*)Cư\s+Né(?:\s*,\s*(?:Huyện\s+|huyện\s+|Xã\s+|xã\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k)/g, "$1Xã Krông Búk")
+    .replace(/(,\s*)Cư\s+Né(\s*,\s*(?:Tỉnh\s+|tỉnh\s+)?Đắk\s+Lắk)/g, "$1Xã Krông Búk$2")
     .replace(/XÃ\s+CƯ\s+NÉ/g, "XÃ KRÔNG BÚK")
     .replace(/Xã\s+Cư\s+Né/g, "Xã Krông Búk")
     .replace(/xã\s+Cư\s+Né/g, "xã Krông Búk")
@@ -1884,7 +1932,7 @@ export function normalizeKrongBukAdminText(raw: string): string {
     .replace(/huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
     .replace(/Xã\s+Krong\s+Buk/g, "Xã Krông Búk")
     .replace(/xã\s+Krong\s+Buk/g, "xã Krông Búk")
-    .replace(/(Xã\s+Krông\s+Búk)(?:\s*[-–,]\s*Xã\s+Krông\s+Búk)+/gi, "$1");
+    .replace(/(Xã\s+Krông\s+Búk)(?:\s*[-–,]\s*(?:Xã\s+)?Krông\s+Búk)+/gi, "$1");
 
   return res
     .replace(/__PUC_HTX_UPPER__/g, "HỢP TÁC XÃ")
@@ -1964,7 +2012,8 @@ export function localizeCoopName(rawName: string, lang: TraceLang): string {
 
 export function localizePackhouseName(rawName: string, lang: TraceLang): string {
   const trimmed = (rawName || "").trim();
-  if (!trimmed || lang === "vi") return trimmed;
+  if (!trimmed) return getTraceEmptyText("notUpdated", lang);
+  if (lang === "vi") return trimmed;
 
   // 1. Cơ sở đóng gói liên kết HTX <Tên riêng>
   const coopLinkedMatch =
@@ -2329,7 +2378,16 @@ export function localizeTimelineStep(
   const isWarn = step.status === "warning";
   const isDone = step.status === "completed";
   const isCurrent = step.status === "current";
-  const localizedPhName = localizePackhouseName(packhouseName, lang);
+  const hasRealPhName = Boolean(packhouseName && packhouseName.trim());
+  const localizedPhName = hasRealPhName ? localizePackhouseName(packhouseName, lang) : "";
+  const safePucLabel =
+    pucCode && pucCode.trim()
+      ? pucCode.trim()
+      : getTraceEmptyText("notRegistered", lang);
+  const packhouseUnitText =
+    localizedPhName && packhouseCode
+      ? `${localizedPhName} (${packhouseCode})`
+      : localizedPhName || packhouseCode || getTraceEmptyText("notUpdated", lang);
 
   switch (step.key) {
     case "orchard": {
@@ -2346,15 +2404,15 @@ export function localizeTimelineStep(
           title: "果园管理",
           responsibleUnit: localizeCoopName(step.responsibleUnit, "zh") || "Cư Né 农业合作社",
           detail: isWarn
-            ? `提示：果园注册编码 ${pucCode} 当前处于暂停或复核状态`
-            : `注册果园 ${pucCode}${hhZh}，全程执行 VietGAP 栽培规程与采前安全间隔期管理`,
+            ? `提示：果园注册编码 ${safePucLabel} 当前处于暂停或复核状态`
+            : `注册果园 ${safePucLabel}${hhZh}，全程执行 VietGAP 栽培规程与采前安全间隔期管理`,
         }
         : {
           title: "Orchard",
           responsibleUnit: localizeCoopName(step.responsibleUnit, "en") || "Cư Né Agricultural Cooperative",
           detail: isWarn
-            ? `Alert: Production Unit Code ${pucCode} is currently suspended or under review`
-            : `PUC ${pucCode}${hhEn}, monitored under VietGAP orchard care logs and pre-harvest withdrawal safety`,
+            ? `Alert: Production Unit Code ${safePucLabel} is currently suspended or under review`
+            : `PUC ${safePucLabel}${hhEn}, monitored under VietGAP orchard care logs and pre-harvest withdrawal safety`,
         };
     }
 
@@ -2390,18 +2448,18 @@ export function localizeTimelineStep(
       return lang === "zh"
         ? {
           title: "分级包装",
-          responsibleUnit: `${localizedPhName} (${packhouseCode})`,
+          responsibleUnit: packhouseUnitText,
           detail: isWarn
-            ? `提示：注册包装厂 ${packhouseCode} 当前处于暂停运营状态`
+            ? `提示：注册包装厂 ${packhouseCode || getTraceEmptyText("notUpdated", "zh")} 当前处于暂停运营状态`
             : isDone
               ? `完成清洁吹扫、品质分级${gradeZh}、标准装箱并加贴批次溯源标签`
               : "正在等待注册包装厂接收初加工与装箱",
         }
         : {
           title: "Packing",
-          responsibleUnit: `${localizedPhName} (${packhouseCode})`,
+          responsibleUnit: packhouseUnitText,
           detail: isWarn
-            ? `Alert: Registered Packhouse ${packhouseCode} is currently suspended or inactive`
+            ? `Alert: Registered Packhouse ${packhouseCode || getTraceEmptyText("notUpdated", "en")} is currently suspended or inactive`
             : isDone
               ? `Cleaned, graded${gradeEn}, packed into batch-identified cartons, and labeled with origin traceability seals`
               : "Awaiting sorting and carton packing at registered packhouse",
@@ -2443,7 +2501,9 @@ export function localizeTimelineStep(
       return lang === "zh"
         ? {
           title: "检疫出厂",
-          responsibleUnit: `${localizedPhName} 与植物检疫机关`,
+          responsibleUnit: localizedPhName
+            ? `${localizedPhName} 与植物检疫机关`
+            : "植物检疫机关",
           detail: isWarn
             ? "该批次已召回并停止流通"
             : isDone
@@ -2456,7 +2516,9 @@ export function localizeTimelineStep(
         }
         : {
           title: "Export / Dispatch",
-          responsibleUnit: `${localizedPhName} & Plant Quarantine Authority`,
+          responsibleUnit: localizedPhName
+            ? `${localizedPhName} & Plant Quarantine Authority`
+            : "Plant Quarantine Authority",
           detail: isWarn
             ? "Shipment lot has been recalled and halted from circulation"
             : isDone

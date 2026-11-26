@@ -7,6 +7,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { SkeletonCards } from "@/components/ui/Skeleton";
+import { toast } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/constants/roles";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import {
@@ -47,6 +48,8 @@ import {
   formatTraceDate,
   formatTraceDateTime,
   formatTraceNumber,
+  formatTracePlotsUnit,
+  getTraceEmptyText,
   getTraceLoadingLabel,
   getRevokedAlertCopy,
   getScanAnomalyAlertCopy,
@@ -267,7 +270,7 @@ interface TracePublicData {
     status: "active" | "suspended" | "revoked" | "pending" | string;
     statusLabel: string;
     statusNote?: string | null;
-    validUntil: string;
+    validUntil: string | null;
     geoCheck?: {
       allPlotsMatchZone: boolean;
       checkedPlotCount: number;
@@ -476,6 +479,10 @@ interface TraceDiaryEntry {
   recordHash?: string | null;
   gpsVerified?: boolean;
   gpsDistanceM?: number | null;
+  trustLevel?: number | null;
+  trustFlags?: string[] | null;
+  offlineQueued?: boolean;
+  signboardQrVerified?: boolean;
   photoUrl?: string | null;
   photoUrls?: string[] | null;
 }
@@ -536,7 +543,7 @@ interface TracePlotSignboardInfo {
   variety?: string | null;
   plantedYear?: number | null;
   areaHa: number;
-  treeCount: number;
+  treeCount: number | null;
   plotStatus?: "approved" | "pending" | "violation" | string;
   lastCareOn?: string | null;
   lastInspectionOn?: string | null;
@@ -552,7 +559,7 @@ interface TraceHouseholdDossierInfo {
   varieties?: string | null;
   plotCount: number;
   totalAreaHa: number;
-  totalTrees: number;
+  totalTrees: number | null;
   householdStatus?: "qualified" | "pending" | "violation" | string;
   lastCareOn?: string | null;
   lastInspectionOn?: string | null;
@@ -571,7 +578,7 @@ interface TraceFarmerProfile {
   cooperativeName: string;
   plotCount: number;
   totalAreaHa: number;
-  totalTrees: number;
+  totalTrees: number | null;
   zoneCodes: string[];
   varieties: string;
   complianceStatus: "valid" | "review" | "unverified" | string;
@@ -580,7 +587,7 @@ interface TraceFarmerProfile {
     qrToken: string | null;
     zoneCode: string;
     areaHa: number;
-    treeCount: number;
+    treeCount: number | null;
     variety: string | null;
     plantedYear: number | null;
     status: string;
@@ -675,7 +682,12 @@ const DOSSIER_SHEET_COPY: Record<
     rowHeavyMetalYellowO: string;
     rowPesticideSafety: string;
     rowFarmJournal: string;
-    journalBreakdownFmt: (total: number, verified: number, selfDeclared: number) => string;
+    journalBreakdownFmt: (
+      diaryTotal: number,
+      verified: number,
+      selfDeclared: number,
+      minuteCount?: number,
+    ) => string;
     rowYieldCheck: string;
     rowPhytosanitary: string;
     rowFinalStatus: string;
@@ -740,12 +752,18 @@ const DOSSIER_SHEET_COPY: Record<
     rowHeavyMetalYellowO: "KIM LOẠI NẶNG VÀ VÀNG O:",
     rowPesticideSafety: "DƯ LƯỢNG THUỐC BVTV:",
     rowFarmJournal: "NHẬT KÝ CANH TÁC:",
-    journalBreakdownFmt: (total, verified, selfDeclared) =>
-      verified > 0 && selfDeclared > 0
-        ? `${total} bản ghi (${verified} HTX xác minh, ${selfDeclared} tự khai báo)`
-        : verified > 0
-          ? `${total} bản ghi (HTX đã xác minh)`
-          : `${total} bản ghi (nông hộ khai báo)`,
+    journalBreakdownFmt: (diaryTotal, verified, selfDeclared, minuteCount = 0) => {
+      if (diaryTotal <= 0) {
+        return minuteCount > 0 ? `${minuteCount} biên bản kiểm tra` : "Chưa có bản ghi";
+      }
+      const diaryPart =
+        verified > 0 && selfDeclared > 0
+          ? `${diaryTotal} bản ghi (${verified} HTX xác minh, ${selfDeclared} tự khai báo)`
+          : verified > 0
+            ? `${diaryTotal} bản ghi (HTX đã xác minh)`
+            : `${diaryTotal} bản ghi (nông hộ khai báo)`;
+      return minuteCount > 0 ? `${diaryPart}, ${minuteCount} biên bản` : diaryPart;
+    },
     rowYieldCheck: "SẢN LƯỢNG VÙNG TRỒNG:",
     rowPhytosanitary: "KIỂM DỊCH THỰC VẬT:",
     rowFinalStatus: "KẾT LUẬN XÁC THỰC:",
@@ -814,12 +832,18 @@ const DOSSIER_SHEET_COPY: Record<
     rowHeavyMetalYellowO: "HEAVY METALS & YELLOW O:",
     rowPesticideSafety: "PESTICIDE SAFETY:",
     rowFarmJournal: "CULTIVATION LOG:",
-    journalBreakdownFmt: (total, verified, selfDeclared) =>
-      verified > 0 && selfDeclared > 0
-        ? `${total} entries (${verified} coop-verified, ${selfDeclared} self-declared)`
-        : verified > 0
-          ? `${total} entries (coop-verified)`
-          : `${total} entries (grower self-declared)`,
+    journalBreakdownFmt: (diaryTotal, verified, selfDeclared, minuteCount = 0) => {
+      if (diaryTotal <= 0) {
+        return minuteCount > 0 ? `${minuteCount} inspection minutes` : "No entries yet";
+      }
+      const diaryPart =
+        verified > 0 && selfDeclared > 0
+          ? `${diaryTotal} entries (${verified} coop-verified, ${selfDeclared} self-declared)`
+          : verified > 0
+            ? `${diaryTotal} entries (coop-verified)`
+            : `${diaryTotal} entries (grower self-declared)`;
+      return minuteCount > 0 ? `${diaryPart}, ${minuteCount} inspections` : diaryPart;
+    },
     rowYieldCheck: "ORCHARD YIELD CHECK:",
     rowPhytosanitary: "PHYTOSANITARY CERT:",
     rowFinalStatus: "VERIFICATION STATUS:",
@@ -888,12 +912,18 @@ const DOSSIER_SHEET_COPY: Record<
     rowHeavyMetalYellowO: "重金属与碱性嫩黄O:",
     rowPesticideSafety: "农药残留安全:",
     rowFarmJournal: "果园农事记录:",
-    journalBreakdownFmt: (total, verified, selfDeclared) =>
-      verified > 0 && selfDeclared > 0
-        ? `${total} 条（合作社已核验 ${verified} 条，农户申报 ${selfDeclared} 条）`
-        : verified > 0
-          ? `${total} 条（合作社已核验）`
-          : `${total} 条（农户自主申报）`,
+    journalBreakdownFmt: (diaryTotal, verified, selfDeclared, minuteCount = 0) => {
+      if (diaryTotal <= 0) {
+        return minuteCount > 0 ? `${minuteCount} 条巡检记录` : "暂无记录";
+      }
+      const diaryPart =
+        verified > 0 && selfDeclared > 0
+          ? `${diaryTotal} 条（合作社已核验 ${verified} 条，农户申报 ${selfDeclared} 条）`
+          : verified > 0
+            ? `${diaryTotal} 条（合作社已核验）`
+            : `${diaryTotal} 条（农户自主申报）`;
+      return minuteCount > 0 ? `${diaryPart}，巡检 ${minuteCount} 条` : diaryPart;
+    },
     rowYieldCheck: "果园产量核对:",
     rowPhytosanitary: "植物检疫证书:",
     rowFinalStatus: "批次核验状态:",
@@ -1036,8 +1066,8 @@ const PLOT_DOSSIER_COPY: Record<
             : "Định danh thửa đất và ranh giới canh tác",
           unit: ctx.coopName,
           detail: ctx.isHousehold
-            ? `Mã hộ ${ctx.plotCode} thuộc vùng trồng ${ctx.pucCode}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`
-            : `Thửa ${ctx.plotCode} thuộc mã vùng trồng ${ctx.pucCode}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
+            ? `Mã hộ ${ctx.plotCode}${ctx.pucCode ? ` thuộc vùng trồng ${ctx.pucCode}` : ""}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`
+            : `Thửa ${ctx.plotCode}${ctx.pucCode ? ` thuộc mã vùng trồng ${ctx.pucCode}` : ""}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
           date: ctx.assessedOn,
           statusLabel: ctx.isSuspended ? "Cảnh báo" : ctx.isPending ? "Chờ duyệt" : "Đã xác thực",
           statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
@@ -1135,7 +1165,7 @@ const PLOT_DOSSIER_COPY: Record<
             ? "Grower & Linked Zone Registration"
             : "Plot Registration & Boundary Verification",
           unit: ctx.coopName,
-          detail: `${ctx.isHousehold ? "Grower" : "Plot"} ${ctx.plotCode} under zone ${ctx.pucCode}, scale ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
+          detail: `${ctx.isHousehold ? "Grower" : "Plot"} ${ctx.plotCode}${ctx.pucCode ? ` under zone ${ctx.pucCode}` : ""}, scale ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
           date: ctx.assessedOn,
           statusLabel: ctx.isSuspended ? "Warning" : ctx.isPending ? "Pending" : "Verified",
           statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
@@ -1231,7 +1261,7 @@ const PLOT_DOSSIER_COPY: Record<
         {
           title: ctx.isHousehold ? "成员农户与产区登记" : "地块登记与种植边界核查",
           unit: ctx.coopName,
-          detail: `${ctx.isHousehold ? "农户" : "地块"} ${ctx.plotCode} 隶属注册产区 ${ctx.pucCode}，核定规模 ${ctx.areaText}${ctx.treesText ? `（${ctx.treesText}）` : ""}`,
+          detail: `${ctx.isHousehold ? "农户" : "地块"} ${ctx.plotCode}${ctx.pucCode ? ` 隶属注册产区 ${ctx.pucCode}` : ""}，核定规模 ${ctx.areaText}${ctx.treesText ? `（${ctx.treesText}）` : ""}`,
           date: ctx.assessedOn,
           statusLabel: ctx.isSuspended ? "警示" : ctx.isPending ? "待审" : "已核验",
           statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
@@ -1463,8 +1493,11 @@ const HOUSEHOLD_COMMUNE_COPY: Record<
     rowCommuneContrib: "ĐÓNG GÓP LÔ XÃ:",
     portraitFallbackSub: "THÀNH VIÊN",
     ownerPrefix: "Chủ thể",
-    hhScaleLineFmt: (plots, area, trees) =>
-      trees ? `Quy mô: ${plots} thửa, ${area} ha (${trees})` : `Quy mô: ${plots} thửa, ${area} ha`,
+    hhScaleLineFmt: (plots, area, trees) => {
+      if (plots <= 0 && (area === "0" || !area)) return "Quy mô: Chưa đăng ký thửa canh tác";
+      const plotPart = plots > 0 ? `${plots} thửa, ${area} ha` : `${area} ha`;
+      return trees ? `Quy mô: ${plotPart} (${trees})` : `Quy mô: ${plotPart}`;
+    },
     communeContribSectionTitle: "ĐÓNG GÓP LÔ HÀNG TRÊN ĐỊA BÀN XÃ",
     communeContribTotalFmt: (lots, kg) => `ĐÃ GHI NHẬN: ${lots} LÔ, ${kg} KG`,
     communeHouseholdWideFmt: (lots, kg) => `Toàn hộ: ${lots} lô (${kg} kg)`,
@@ -1499,8 +1532,12 @@ const HOUSEHOLD_COMMUNE_COPY: Record<
     rowCommuneContrib: "COMMUNE LOTS:",
     portraitFallbackSub: "MEMBER",
     ownerPrefix: "Grower",
-    hhScaleLineFmt: (plots, area, trees) =>
-      trees ? `Scale: ${plots} plots, ${area} ha (${trees})` : `Scale: ${plots} plots, ${area} ha`,
+    hhScaleLineFmt: (plots, area, trees) => {
+      if (plots <= 0 && (area === "0" || !area)) return "Scale: No registered plots yet";
+      const plotUnit = plots === 1 ? "1 plot" : `${plots} plots`;
+      const plotPart = plots > 0 ? `${plotUnit}, ${area} ha` : `${area} ha`;
+      return trees ? `Scale: ${plotPart} (${trees})` : `Scale: ${plotPart}`;
+    },
     communeContribSectionTitle: "RECORDED COMMUNE LOT CONTRIBUTIONS",
     communeContribTotalFmt: (lots, kg) => `RECORDED: ${lots} LOTS, ${kg} KG`,
     communeHouseholdWideFmt: (lots, kg) => `Household total: ${lots} lots (${kg} kg)`,
@@ -1535,8 +1572,11 @@ const HOUSEHOLD_COMMUNE_COPY: Record<
     rowCommuneContrib: "乡域出货累计:",
     portraitFallbackSub: "成员户",
     ownerPrefix: "种植主体",
-    hhScaleLineFmt: (plots, area, trees) =>
-      trees ? `规模：${plots} 个地块，${area} 公顷（${trees}）` : `规模：${plots} 个地块，${area} 公顷`,
+    hhScaleLineFmt: (plots, area, trees) => {
+      if (plots <= 0 && (area === "0" || !area)) return "规模：暂未登记地块";
+      const plotPart = plots > 0 ? `${plots} 个地块，${area} 公顷` : `${area} 公顷`;
+      return trees ? `规模：${plotPart}（${trees}）` : `规模：${plotPart}`;
+    },
     communeContribSectionTitle: "乡域系统已登记出货批次供货记录",
     communeContribTotalFmt: (lots, kg) => `累计登记：${lots} 批次，${kg} KG`,
     communeHouseholdWideFmt: (lots, kg) => `全户累计：${lots} 批（${kg} kg）`,
@@ -1719,7 +1759,7 @@ const DOSSIER_EXTENDED_COPY: Record<
     colMaxQuota: string;
     colUsed: string;
     colRemain: string;
-    orchardScaleFmt: (areaText: string, treesText: string) => string;
+    orchardScaleFmt: (areaText: string, treesText: string | null) => string;
     labsTitle: string;
     colLabCert: string;
     colSampleDate: string;
@@ -1766,6 +1806,11 @@ const DOSSIER_EXTENDED_COPY: Record<
     diaryLate: string;
     diaryWarn: string;
     gpsShort: string;
+    signboardShort: string;
+    trustHighShort: string;
+    trustReviewShort: string;
+    offlineSyncShort: string;
+    hashShortFmt: (prefix: string) => string;
     viewFieldPhotoBtn: string;
     emptyDiaries: string;
     minutesTitle: string;
@@ -1812,7 +1857,7 @@ const DOSSIER_EXTENDED_COPY: Record<
     colMaxQuota: "TRẦN CẢ VỤ",
     colUsed: "ĐÃ XUẤT",
     colRemain: "CÒN LẠI",
-    orchardScaleFmt: (area, trees) => `${area} ha, ${trees} cây`,
+    orchardScaleFmt: (area, trees) => (trees ? `${area} ha, ${trees} cây` : `${area} ha`),
     labsTitle: "KẾT QUẢ KIỂM NGỰA MẪU".replace("NGỰA", "NGHIỆM"),
     colLabCert: "SỐ PHIẾU",
     colSampleDate: "NGÀY MẪU",
@@ -1858,7 +1903,12 @@ const DOSSIER_EXTENDED_COPY: Record<
     verifiedByFmt: (who, dt) => (dt ? `${who} (${dt})` : who),
     diaryLate: "Bổ sung sau",
     diaryWarn: "Vượt ngưỡng",
-    gpsShort: "Tại vườn",
+    gpsShort: "Khớp GPS thửa",
+    signboardShort: "Khớp QR thửa",
+    trustHighShort: "Xác thực thực địa cao",
+    trustReviewShort: "Cần đối chiếu thực địa",
+    offlineSyncShort: "Ghi ngoại tuyến, đã đồng bộ",
+    hashShortFmt: (p) => `Niêm phong: ${p}`,
     viewFieldPhotoBtn: "Xem ảnh",
     emptyDiaries: "Chưa có nhật ký canh tác.",
     minutesTitle: "BIÊN BẢN KIỂM TRA THỰC ĐỊA",
@@ -1904,7 +1954,7 @@ const DOSSIER_EXTENDED_COPY: Record<
     colMaxQuota: "SEASON CAP",
     colUsed: "USED",
     colRemain: "REMAINING",
-    orchardScaleFmt: (area, trees) => `${area} ha, ${trees} trees`,
+    orchardScaleFmt: (area, trees) => (trees ? `${area} ha, ${trees} trees` : `${area} ha`),
     labsTitle: "LAB TEST RESULTS",
     colLabCert: "REPORT NO",
     colSampleDate: "SAMPLED",
@@ -1950,7 +2000,12 @@ const DOSSIER_EXTENDED_COPY: Record<
     verifiedByFmt: (who, dt) => (dt ? `${who} (${dt})` : who),
     diaryLate: "Logged later",
     diaryWarn: "Over limit",
-    gpsShort: "On-site GPS",
+    gpsShort: "In-plot GPS",
+    signboardShort: "Plot QR matched",
+    trustHighShort: "High field assurance",
+    trustReviewShort: "Field check advised",
+    offlineSyncShort: "Offline captured & synced",
+    hashShortFmt: (p) => `Seal: ${p}`,
     viewFieldPhotoBtn: "View photo",
     emptyDiaries: "No cultivation logs.",
     minutesTitle: "FIELD INSPECTION MINUTES",
@@ -1996,7 +2051,7 @@ const DOSSIER_EXTENDED_COPY: Record<
     colMaxQuota: "产季上限",
     colUsed: "已出货",
     colRemain: "剩余额度",
-    orchardScaleFmt: (area, trees) => `${area} 公顷, ${trees} 株`,
+    orchardScaleFmt: (area, trees) => (trees ? `${area} 公顷, ${trees} 株` : `${area} 公顷`),
     labsTitle: "实验室检测结果",
     colLabCert: "报告编号",
     colSampleDate: "采样日期",
@@ -2042,7 +2097,12 @@ const DOSSIER_EXTENDED_COPY: Record<
     verifiedByFmt: (who, dt) => (dt ? `${who}（${dt}）` : who),
     diaryLate: "事后补录",
     diaryWarn: "超标预警",
-    gpsShort: "果园定位",
+    gpsShort: "地块内GPS核实",
+    signboardShort: "地块二维码一致",
+    trustHighShort: "高可信现场核验",
+    trustReviewShort: "建议现场复核",
+    offlineSyncShort: "离线采集已同步",
+    hashShortFmt: (p) => `防伪哈希: ${p}`,
     viewFieldPhotoBtn: "查看照片",
     emptyDiaries: "暂无农事记录。",
     minutesTitle: "现场巡检笔录",
@@ -2495,6 +2555,13 @@ export default function TraceView() {
     setSuppressTempGrant(false);
     setAuditPass(passToken);
     setSelectedView(grantedTier);
+    toast.success(
+      lang === "en"
+        ? "Extended dossier unlocked"
+        : lang === "zh"
+          ? "已开启详细档案权限"
+          : "Đã mở quyền xem hồ sơ chi tiết",
+    );
   };
 
   const handleClearAuditPass = () => {
@@ -2516,6 +2583,13 @@ export default function TraceView() {
     setSuppressTempGrant(true);
     setAuditPass(null);
     setSelectedView(null);
+    toast.success(
+      lang === "en"
+        ? "Audit pass cleared"
+        : lang === "zh"
+          ? "已退出核验卡模式"
+          : "Đã thoát chế độ thẻ thẩm định",
+    );
   };
 
   const [prevCode, setPrevCode] = useState(code);
@@ -2909,6 +2983,13 @@ export default function TraceView() {
     }
     if (ok) {
       setCopied(true);
+      toast.success(
+        lang === "en"
+          ? "Traceability link copied"
+          : lang === "zh"
+            ? "已复制溯源链接"
+            : "Đã sao chép liên kết truy xuất",
+      );
       setTimeout(() => setCopied(false), 2500);
     }
   };
@@ -3567,14 +3648,28 @@ export default function TraceView() {
                   ? plotSb.areaHa
                   : (mb?.totalAreaHa ?? 0);
               const plotTreeCount = isHouseholdDossier
-                ? hhDossier && hhDossier.totalTrees > 0
+                ? hhDossier?.totalTrees && hhDossier.totalTrees > 0
                   ? hhDossier.totalTrees
-                  : (farmerProf?.totalTrees ?? mb?.totalTreeCount ?? 0)
-                : plotSb && plotSb.treeCount > 0
+                  : farmerProf?.totalTrees && farmerProf.totalTrees > 0
+                    ? farmerProf.totalTrees
+                    : (mb?.totalTreeCount ?? 0)
+                : plotSb?.treeCount && plotSb.treeCount > 0
                   ? plotSb.treeCount
                   : (mb?.totalTreeCount ?? 0);
               const hhPlotCount =
-                hhDossier?.plotCount ?? farmerProf?.plotCount ?? 1;
+                hhDossier?.plotCount ?? farmerProf?.plotCount ?? 0;
+              const displayPucCode =
+                pub.growingZone.pucCode || getTraceEmptyText("notRegistered", lang);
+              const displayPhcCode =
+                pub.packhouse.code || getTraceEmptyText("notUpdated", lang);
+              const sealDiaryTotal =
+                pub.integritySeal &&
+                  pub.integritySeal.journalCount !== undefined &&
+                  pub.integritySeal.sprayCount !== undefined
+                  ? pub.integritySeal.journalCount + pub.integritySeal.sprayCount
+                  : (pub.integritySeal?.verifiedDiaryRecords ?? 0) +
+                  (pub.integritySeal?.selfDeclaredDiaryRecords ?? 0);
+              const sealMinuteCount = pub.integritySeal?.minuteCount ?? 0;
               const rawVillageSource = isHouseholdDossier
                 ? hhDossier?.villageName || farmerProf?.villageName
                 : plotSb?.villageName || farmerProf?.villageName;
@@ -3624,9 +3719,13 @@ export default function TraceView() {
                     );
 
               const scaleSubline = isHouseholdDossier
-                ? plotTreeCount > 0
-                  ? `${hhPlotCount} thửa, ${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
-                  : localizedVariety
+                ? hhPlotCount > 0 && plotTreeCount > 0
+                  ? `${formatTracePlotsUnit(hhPlotCount, lang)}, ${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
+                  : hhPlotCount > 0
+                    ? `${formatTracePlotsUnit(hhPlotCount, lang)}, ${localizedVariety}`
+                    : plotTreeCount > 0
+                      ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}, ${localizedVariety}`
+                      : localizedVariety
                 : isPlotDossier
                   ? plotTreeCount > 0
                     ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}, ${localizedVariety}`
@@ -3656,7 +3755,7 @@ export default function TraceView() {
                     plotTreeCount > 0
                       ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
                       : null,
-                  assessedOn: mb?.assessedOn ?? pub.growingZone.validUntil ?? null,
+                  assessedOn: mb?.assessedOn ?? null,
                   lastCareOn: (isHouseholdDossier ? hhDossier?.lastCareOn : plotSb?.lastCareOn) ?? null,
                   lastInspOn: (isHouseholdDossier ? hhDossier?.lastInspectionOn : plotSb?.lastInspectionOn) ?? null,
                   minuteCode: (isHouseholdDossier ? hhDossier?.latestMinuteCode : plotSb?.latestMinuteCode) ?? null,
@@ -4156,13 +4255,14 @@ export default function TraceView() {
                           ) : null}
                         </div>
                         <div className="tr-doc-party-code">
-                          PUC: {pub.growingZone.pucCode} (
-                          {localizeZoneStatusLabel(
-                            pub.growingZone.status,
-                            pub.growingZone.statusLabel,
-                            lang,
-                          )}
-                          )
+                          PUC: {displayPucCode}
+                          {pub.growingZone.pucCode
+                            ? ` (${localizeZoneStatusLabel(
+                              pub.growingZone.status,
+                              pub.growingZone.statusLabel,
+                              lang,
+                            )})`
+                            : ""}
                         </div>
                         {pub.growingZone.gaccCode && (
                           <div className="tr-doc-party-code-sub">
@@ -4198,23 +4298,25 @@ export default function TraceView() {
                                     lang,
                                   )}
                                 </span>
-                                <span>
-                                  {docCopy.validUntilPrefix}:{" "}
-                                  {formatTraceDate(pub.growingZone.validUntil, lang)}
-                                </span>
+                                {pub.growingZone.validUntil && (
+                                  <span>
+                                    {docCopy.validUntilPrefix}:{" "}
+                                    {formatTraceDate(pub.growingZone.validUntil, lang)}
+                                  </span>
+                                )}
                               </div>
                               <div className="tr-doc-party-code">
-                                PUC: {pub.growingZone.pucCode}
+                                PUC: {displayPucCode}
                                 {pub.growingZone.additionalZoneCount > 0
                                   ? t.zone.linkedZonesSuffix(pub.growingZone.additionalZoneCount)
-                                  : ""}{" "}
-                                (
-                                {localizeZoneStatusLabel(
-                                  pub.growingZone.status,
-                                  pub.growingZone.statusLabel,
-                                  lang,
-                                )}
-                                )
+                                  : ""}
+                                {pub.growingZone.pucCode
+                                  ? ` (${localizeZoneStatusLabel(
+                                    pub.growingZone.status,
+                                    pub.growingZone.statusLabel,
+                                    lang,
+                                  )})`
+                                  : ""}
                               </div>
                               {pub.growingZone.gaccCode && (
                                 <div className="tr-doc-party-code-sub">
@@ -4287,7 +4389,9 @@ export default function TraceView() {
                           {localizePackhouseName(pub.packhouse.name, lang)}
                         </strong>
                         <div className="tr-doc-party-lines">
-                          <span>{localizeAddress(pub.packhouse.address, lang)}</span>
+                          {pub.packhouse.address && (
+                            <span>{localizeAddress(pub.packhouse.address, lang)}</span>
+                          )}
                           {pub.lotIdentity.brandName && (
                             <span>
                               {docCopy.brandPrefix}: {pub.lotIdentity.brandName}
@@ -4299,13 +4403,14 @@ export default function TraceView() {
                           <span>{t.processPhyto.standardValue}</span>
                         </div>
                         <div className="tr-doc-party-code">
-                          PHC: {pub.packhouse.code} (
-                          {localizePackhouseStatusLabel(
-                            pub.packhouse.status,
-                            pub.packhouse.statusLabel,
-                            lang,
-                          )}
-                          )
+                          PHC: {displayPhcCode}
+                          {pub.packhouse.code
+                            ? ` (${localizePackhouseStatusLabel(
+                              pub.packhouse.status,
+                              pub.packhouse.statusLabel,
+                              lang,
+                            )})`
+                            : ""}
                         </div>
                         {pub.packhouse.gaccCode && (
                           <div className="tr-doc-party-code-sub">
@@ -4455,7 +4560,9 @@ export default function TraceView() {
                                 </td>
                                 <td className="col-plot">
                                   {contribTier === "public" || !row.plotCode ? (
-                                    <span className="tr-doc-contrib-mono">{row.pucCode}</span>
+                                    <span className="tr-doc-contrib-mono">
+                                      {row.pucCode || displayPucCode}
+                                    </span>
                                   ) : (
                                     <>
                                       {plotLink ? (
@@ -4476,8 +4583,8 @@ export default function TraceView() {
                                       )}
                                       <span className="tr-doc-item-sub">
                                         {row.cadastralLabel
-                                          ? `${row.cadastralLabel}, PUC: ${row.pucCode}`
-                                          : `PUC: ${row.pucCode}`}
+                                          ? `${row.cadastralLabel}, PUC: ${row.pucCode || displayPucCode}`
+                                          : `PUC: ${row.pucCode || displayPucCode}`}
                                       </span>
                                       {hasAuthGis && authPlotEntry && (
                                         <button
@@ -4537,7 +4644,7 @@ export default function TraceView() {
                       : ""
                     }`;
                   const ledgerRightMeta = isOrchardOrHousehold
-                    ? `${activePrimaryPrefix}: ${plotCode} / PUC: ${pub.growingZone.pucCode}`
+                    ? `${activePrimaryPrefix}: ${plotCode} / PUC: ${displayPucCode}`
                     : isBoxDossier || isFruitDossier
                       ? `${activePrimaryPrefix}: ${unitPrimaryCode}${hasDistinctParentLot
                         ? ` / ${unitCopy.parentLotPrefix}: ${pub.lotIdentity.lotCode}`
@@ -4731,7 +4838,7 @@ export default function TraceView() {
                         <dl className="tr-doc-kv-totals">
                           <div className="tr-doc-kv-row">
                             <dt>{plotCopy.rowPucCode}</dt>
-                            <dd>{pub.growingZone.pucCode}</dd>
+                            <dd>{displayPucCode}</dd>
                           </div>
                           {(pub.integritySeal?.totalSealedRecords ?? 0) > 0 && (
                             <div className="tr-doc-kv-row">
@@ -4741,9 +4848,10 @@ export default function TraceView() {
                                   ? docCopy.journalReviewText
                                   : pub.integritySeal!.verifiedDiaryRecords !== undefined
                                     ? docCopy.journalBreakdownFmt(
-                                      pub.integritySeal!.totalSealedRecords,
+                                      sealDiaryTotal,
                                       pub.integritySeal!.verifiedDiaryRecords,
                                       pub.integritySeal!.selfDeclaredDiaryRecords ?? 0,
+                                      sealMinuteCount,
                                     )
                                     : hhCommuneCopy.sealedRecordsCountFmt(
                                       pub.integritySeal!.totalSealedRecords,
@@ -4829,9 +4937,10 @@ export default function TraceView() {
                                   ? docCopy.journalReviewText
                                   : pub.integritySeal!.verifiedDiaryRecords !== undefined
                                     ? docCopy.journalBreakdownFmt(
-                                      pub.integritySeal!.totalSealedRecords,
+                                      sealDiaryTotal,
                                       pub.integritySeal!.verifiedDiaryRecords,
                                       pub.integritySeal!.selfDeclaredDiaryRecords ?? 0,
+                                      sealMinuteCount,
                                     )
                                     : hhCommuneCopy.sealedRecordsCountFmt(
                                       pub.integritySeal!.totalSealedRecords,
@@ -4888,14 +4997,14 @@ export default function TraceView() {
                         communeContrib.totalLots,
                         formatTraceNumber(communeContrib.totalContributedKg, lang),
                       )}${hasHhHigherTotal && communeContrib.householdTotalLots
-                          ? ` / ${hhCommuneCopy.communeHouseholdWideFmt(
-                            communeContrib.householdTotalLots,
-                            formatTraceNumber(
-                              communeContrib.householdTotalContributedKg!,
-                              lang,
-                            ),
-                          )}`
-                          : ""
+                        ? ` / ${hhCommuneCopy.communeHouseholdWideFmt(
+                          communeContrib.householdTotalLots,
+                          formatTraceNumber(
+                            communeContrib.householdTotalContributedKg!,
+                            lang,
+                          ),
+                        )}`
+                        : ""
                         }`;
 
                       return {
@@ -4992,7 +5101,7 @@ export default function TraceView() {
                                         <strong>{cl.plotCode}</strong>
                                       )
                                     ) : (
-                                      <span>{pub.growingZone.pucCode}</span>
+                                      <span>{displayPucCode}</span>
                                     )}
                                   </td>
                                   <td className="col-date is-tabular">
@@ -5118,7 +5227,7 @@ export default function TraceView() {
                                       node: (
                                         <tr>
                                           <td className="col-plot-code is-tabular">
-                                            <strong>{pub.growingZone.pucCode}</strong>
+                                            <strong>{displayPucCode}</strong>
                                           </td>
                                           <td className="col-orchard">
                                             {extCopy.zoneTotalLabel}
@@ -5178,7 +5287,9 @@ export default function TraceView() {
                                           <td className="col-orchard is-tabular">
                                             {extCopy.orchardScaleFmt(
                                               formatTraceNumber(pq.areaHa, lang),
-                                              formatTraceNumber(pq.treeCount, lang),
+                                              pq.treeCount > 0
+                                                ? formatTraceNumber(pq.treeCount, lang)
+                                                : null,
                                             )}
                                           </td>
                                           <td className="col-cap is-tabular">
@@ -5362,18 +5473,24 @@ export default function TraceView() {
                                   ? `/trace/${encodeURIComponent(d.householdCode)}`
                                   : null;
                               const isCoopVerified = d.verificationStatus === "verified";
+                              const isHighTrust = isCoopVerified || d.trustLevel === 1;
+                              const isReviewTrust = !isCoopVerified && d.trustLevel === 3;
                               const statusTone = mrlFailed
                                 ? "is-danger"
-                                : d.isLateEntry
+                                : d.isLateEntry || isReviewTrust
                                   ? "is-warn"
-                                  : isCoopVerified
+                                  : isHighTrust
                                     ? "is-ok"
                                     : "is-muted";
                               const statusText = mrlFailed
                                 ? extCopy.diaryWarn
                                 : isCoopVerified
                                   ? extCopy.diaryHtxVerified
-                                  : extCopy.diarySelfDeclared;
+                                  : isReviewTrust
+                                    ? extCopy.trustReviewShort
+                                    : d.trustLevel === 1
+                                      ? extCopy.trustHighShort
+                                      : extCopy.diarySelfDeclared;
                               const verifyMetaText =
                                 isCoopVerified && (d.verifiedByLabel || d.verifiedAt)
                                   ? extCopy.verifiedByFmt(
@@ -5444,14 +5561,28 @@ export default function TraceView() {
                                           {verifyMetaText}
                                         </span>
                                       )}
-                                      {d.isLateEntry && (
+                                      {d.isLateEntry ? (
                                         <span className="tr-doc-status-sub">
                                           {extCopy.diaryLate}
+                                        </span>
+                                      ) : d.offlineQueued ? (
+                                        <span className="tr-doc-status-sub">
+                                          {extCopy.offlineSyncShort}
+                                        </span>
+                                      ) : null}
+                                      {d.signboardQrVerified && (
+                                        <span className="tr-doc-status-sub">
+                                          {extCopy.signboardShort}
                                         </span>
                                       )}
                                       {d.gpsVerified && (
                                         <span className="tr-doc-status-sub">
                                           {extCopy.gpsShort}
+                                        </span>
+                                      )}
+                                      {d.recordHash && (
+                                        <span className="tr-doc-status-sub is-tabular">
+                                          {extCopy.hashShortFmt(`${d.recordHash.slice(0, 10)}...`)}
                                         </span>
                                       )}
                                     </td>
@@ -5630,18 +5761,24 @@ export default function TraceView() {
                                   : null,
                               ].filter(Boolean);
                               const isCoopVerified = d.verificationStatus === "verified";
+                              const isHighTrust = isCoopVerified || d.trustLevel === 1;
+                              const isReviewTrust = !isCoopVerified && d.trustLevel === 3;
                               const statusTone = mrlFailed
                                 ? "is-danger"
-                                : d.isLateEntry
+                                : d.isLateEntry || isReviewTrust
                                   ? "is-warn"
-                                  : isCoopVerified
+                                  : isHighTrust
                                     ? "is-ok"
                                     : "is-muted";
                               const statusText = mrlFailed
                                 ? extCopy.diaryWarn
                                 : isCoopVerified
                                   ? extCopy.diaryHtxVerified
-                                  : extCopy.diarySelfDeclared;
+                                  : isReviewTrust
+                                    ? extCopy.trustReviewShort
+                                    : d.trustLevel === 1
+                                      ? extCopy.trustHighShort
+                                      : extCopy.diarySelfDeclared;
                               const verifierDisplay = d.verifiedByName || d.verifiedByLabel;
                               const verifyMetaText =
                                 isCoopVerified && (verifierDisplay || d.verifiedAt)
@@ -5701,14 +5838,28 @@ export default function TraceView() {
                                           {verifyMetaText}
                                         </span>
                                       )}
-                                      {d.isLateEntry && (
+                                      {d.isLateEntry ? (
                                         <span className="tr-doc-status-sub">
                                           {extCopy.diaryLate}
+                                        </span>
+                                      ) : d.offlineQueued ? (
+                                        <span className="tr-doc-status-sub">
+                                          {extCopy.offlineSyncShort}
+                                        </span>
+                                      ) : null}
+                                      {d.signboardQrVerified && (
+                                        <span className="tr-doc-status-sub">
+                                          {extCopy.signboardShort}
                                         </span>
                                       )}
                                       {d.gpsVerified && (
                                         <span className="tr-doc-status-sub">
                                           {extCopy.gpsShort}
+                                        </span>
+                                      )}
+                                      {d.recordHash && (
+                                        <span className="tr-doc-status-sub is-tabular">
+                                          {extCopy.hashShortFmt(`${d.recordHash.slice(0, 10)}...`)}
                                         </span>
                                       )}
                                     </td>
@@ -5939,7 +6090,7 @@ export default function TraceView() {
                         </strong>
                         {isOrchardOrHousehold ? (
                           <>
-                            <p>PUC: {pub.growingZone.pucCode}</p>
+                            <p>PUC: {displayPucCode}</p>
                             {(isHouseholdDossier
                               ? hhDossier?.latestMinuteCode
                               : plotSb?.latestMinuteCode) && (
@@ -5960,7 +6111,7 @@ export default function TraceView() {
                         ) : (
                           <>
                             <p>
-                              PUC: {pub.growingZone.pucCode} / PHC: {pub.packhouse.code}
+                              PUC: {displayPucCode} / PHC: {displayPhcCode}
                             </p>
                             {firstLab && (
                               <p>

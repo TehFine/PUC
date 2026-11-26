@@ -11,6 +11,7 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, MRL_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
+import { describeFieldEvidence, FieldTrustBadge } from "@/components/portal/shared/FieldEvidenceCapture";
 import { formatDate, formatDateTime, formatDiaryEditor, formatDiaryRole } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { MrlStatus, SprayRow } from "@/types/journal";
@@ -38,6 +39,15 @@ export function SprayDetailModal({
   const hasMedia = Boolean(record.photoUrls?.length || record.photoUrl);
   const [verifying, setVerifying] = useState(false);
   const isVerified = record.verificationStatus === "verified";
+  const trustInfo = describeFieldEvidence({
+    trustLevel: record.trustLevel,
+    trustFlags: record.trustFlags,
+    verificationStatus: record.verificationStatus,
+    gpsVerified: record.gpsVerified,
+    signboardQrVerified: record.signboardQrVerified,
+    offlineQueued: record.offlineQueued,
+    captureSource: record.captureSource,
+  });
 
   const handleToggleVerify = async () => {
     setVerifying(true);
@@ -116,6 +126,26 @@ export function SprayDetailModal({
           </div>
         </div>
         <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mức tin cậy thực địa</span>
+          <div className="admin-detail-list-value">
+            <FieldTrustBadge
+              trustLevel={record.trustLevel}
+              trustFlags={record.trustFlags}
+              verificationStatus={record.verificationStatus}
+              gpsVerified={record.gpsVerified}
+              signboardQrVerified={record.signboardQrVerified}
+              offlineQueued={record.offlineQueued}
+              captureSource={record.captureSource}
+            />
+          </div>
+        </div>
+        {trustInfo.evidenceNotes.length > 0 && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Bằng chứng đối chiếu</span>
+            <div className="admin-detail-list-value">{trustInfo.evidenceNotes.join(", ")}</div>
+          </div>
+        )}
+        <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Ngày phun tại vườn</span>
           <div className="admin-detail-list-value">{formatDate(record.sprayedOn)}</div>
         </div>
@@ -187,6 +217,28 @@ export function SprayDetailModal({
               </div>
             )}
           </>
+        )}
+        {(record.latitude != null || record.longitude != null) && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Tọa độ GPS</span>
+            <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {record.latitude?.toFixed(5)}, {record.longitude?.toFixed(5)}
+              {record.gpsAccuracyM != null ? ` (sai số ${Math.round(record.gpsAccuracyM)} m)` : ""}
+              {record.gpsVerified
+                ? ", khớp ranh giới thửa"
+                : record.gpsDistanceM != null
+                  ? `, cách ranh giới ${Math.round(record.gpsDistanceM)} m`
+                  : ""}
+            </div>
+          </div>
+        )}
+        {record.recordHash && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Mã băm niêm phong</span>
+            <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+              {record.recordHash.slice(0, 20)}...
+            </div>
+          </div>
         )}
       </div>
 
@@ -276,13 +328,13 @@ export default function SprayFormModal({
       payload,
       mediaGroups: media.hasFiles
         ? [
-            {
-              slotKey: "photos",
-              purpose: "journal",
-              items: media.items,
-              binding: { arrayField: "photoIds", primaryField: "photoId" },
-            },
-          ]
+          {
+            slotKey: "photos",
+            purpose: "journal",
+            items: media.items,
+            binding: { arrayField: "photoIds", primaryField: "photoId" },
+          },
+        ]
         : [],
       onProgress: media.setUploadProgress,
     });
@@ -338,7 +390,7 @@ export default function SprayFormModal({
     const res = await save.run(payload);
     if (!res) return;
     if (res.mode === "queued") {
-      toast.success("Mạng yếu: đã lưu bản ghi phun thuốc vào hàng đợi đồng bộ tự động.");
+      toast.success("Đã lưu phun thuốc vào máy, tự gửi khi có sóng");
       onClose();
       return;
     }

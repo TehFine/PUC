@@ -10,6 +10,7 @@ import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
 import { usePersistedRecordSelection, usePersistedState } from "@/lib/back-navigation";
 import {
+  buildClientEvidenceClockMeta,
   clearWorkingFieldDraft,
   type OfflineFieldDraft,
   saveOfflineFieldDraft,
@@ -40,6 +41,11 @@ import {
   useMultiPhotoPicker,
   useProgressiveCount,
 } from "./shared/controls";
+import {
+  describeFieldEvidence,
+  FieldTrustBadge,
+  PlotSignboardQrScannerModal,
+} from "./shared/FieldEvidenceCapture";
 import { RadialPngIcon } from "./RadialIcons";
 import type { PortalAction } from "./PortalSearch";
 import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
@@ -425,12 +431,28 @@ function UnifiedDiaryForm({
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(
     initialDraft?.coords ?? null,
   );
-  const [gpsStatus, setGpsStatus] = useState<string | null>(
-    initialDraft?.coords
-      ? `Đã định vị: ${initialDraft.coords.latitude.toFixed(5)}, ${initialDraft.coords.longitude.toFixed(5)}`
-      : null,
+  const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(initialDraft?.gpsAccuracyM ?? null);
+  const [signboardQrToken, setSignboardQrToken] = useState<string | null>(initialDraft?.signboardQrToken ?? null);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(() => {
+    if (initialDraft?.coords) {
+      return `Đã định vị: ${initialDraft.coords.latitude.toFixed(5)}, ${initialDraft.coords.longitude.toFixed(5)}`;
+    }
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      return "Đang bắt tín hiệu vệ tinh GPS tại vườn (không cần sóng 4G)...";
+    }
+    return "Thiết bị không hỗ trợ định vị vệ tinh GPS";
+  });
+  const [locating, setLocating] = useState(
+    () => !initialDraft?.coords && typeof navigator !== "undefined" && Boolean(navigator.geolocation),
   );
-  const [locating, setLocating] = useState(false);
+  const gpsWatchIdRef = useRef<number | null>(null);
+  const gpsWatchTimerRef = useRef<number | null>(null);
+  const bestAccuracyRef = useRef<number>(
+    initialDraft?.gpsAccuracyM != null && Number.isFinite(initialDraft.gpsAccuracyM)
+      ? initialDraft.gpsAccuracyM
+      : Number.POSITIVE_INFINITY,
+  );
   const media = useMultiPhotoPicker("journal", {
     maxFiles: 8,
     allowVideo: true,
@@ -441,11 +463,103 @@ function UnifiedDiaryForm({
 
   const effectivePlot = plotCode || defaultPlotCode;
 
+  const clearGpsWatchHandles = () => {
+    if (gpsWatchTimerRef.current !== null) {
+      window.clearTimeout(gpsWatchTimerRef.current);
+      gpsWatchTimerRef.current = null;
+    }
+    if (gpsWatchIdRef.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+      gpsWatchIdRef.current = null;
+    }
+  };
+
+  const stopGpsWatch = () => {
+    clearGpsWatchHandles();
+    setLocating(false);
+  };
+
+  const attachGpsSatelliteSubscription = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    clearGpsWatchHandles();
+
+    gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const latitude = Number(pos.coords.latitude.toFixed(6));
+        const longitude = Number(pos.coords.longitude.toFixed(6));
+        const acc =
+          Number.isFinite(pos.coords.accuracy) && pos.coords.accuracy >= 0
+            ? Math.round(pos.coords.accuracy * 10) / 10
+            : null;
+        if (acc === null || acc <= bestAccuracyRef.current) {
+          if (acc !== null) bestAccuracyRef.current = acc;
+          setCoords({ latitude, longitude });
+          setGpsAccuracyM(acc);
+          setGpsStatus(
+            acc !== null
+              ? `Đã khóa vệ tinh: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (sai số ${Math.round(acc)} m)`
+              : `Đã định vị: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          );
+        }
+        // Khi độ chính xác đạt dưới 18m dưới tán cây thì dừng thu vệ tinh để tiết kiệm pin cho điện thoại
+        if (acc !== null && acc <= 18) {
+          stopGpsWatch();
+        }
+      },
+      (err) => {
+        stopGpsWatch();
+        setCoords((prev) => {
+          if (!prev) {
+            setGpsStatus(
+              err.code === err.PERMISSION_DENIED
+                ? "Chưa cấp quyền vị trí GPS trên trình duyệt"
+                : "Chưa khóa được vệ tinh GPS dưới tán cây, có thể quét bảng QR tại thửa vườn",
+            );
+          }
+          return prev;
+        });
+      },
+      { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 },
+    );
+
+    gpsWatchTimerRef.current = window.setTimeout(() => {
+      stopGpsWatch();
+    }, 60000);
+  };
+
+  const startGpsWatch = (resetBest = false) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGpsStatus("Thiết bị không hỗ trợ định vị vệ tinh GPS");
+      return;
+    }
+    if (resetBest) {
+      bestAccuracyRef.current = Number.POSITIVE_INFINITY;
+    }
+    setLocating(true);
+    setGpsStatus("Đang bắt tín hiệu vệ tinh GPS tại vườn (không cần sóng 4G)...");
+    attachGpsSatelliteSubscription();
+  };
+
+  // Khởi động thu nhận vệ tinh GNSS (tối đa 60 giây cho cold-start không có sóng 4G) ngay khi mở biểu mẫu ghi nhật ký
+  useEffect(() => {
+    if (!initialDraft?.coords) {
+      attachGpsSatelliteSubscription();
+    }
+    return () => {
+      clearGpsWatchHandles();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Tự động bảo vệ ngầm bản đang nhập xuống bộ nhớ máy (sau 500ms) ngay khi nông hộ chụp ảnh:
   // nếu sóng yếu, trình duyệt bị đóng hoặc điện thoại thu hồi RAM lúc mở Máy ảnh, vào lại Ghi nhật ký vẫn còn nguyên hình.
   useEffect(() => {
     if (saving) return;
     if (!media.hasFiles) return;
+    const clockSnap = buildClientEvidenceClockMeta({
+      capturedPerfNow: media.firstCapturedMeta.capturedPerfNow,
+      capturedAtIso: draftCapturedMeta.capturedAtIso ?? media.firstCapturedMeta.capturedAtIso,
+    });
     const timer = window.setTimeout(() => {
       void saveOfflineFieldDraft({
         isAutoWorkingDraft: true,
@@ -461,7 +575,12 @@ function UnifiedDiaryForm({
         areaHa,
         source,
         coords,
-        capturedAtIso: draftCapturedMeta.capturedAtIso,
+        gpsAccuracyM,
+        captureSource: media.primaryCaptureSource,
+        signboardQrToken,
+        timeAnchorToken: initialDraft?.timeAnchorToken ?? clockSnap.timeAnchorToken ?? null,
+        monotonicElapsedMs: initialDraft?.monotonicElapsedMs ?? clockSnap.monotonicElapsedMs ?? null,
+        capturedAtIso: draftCapturedMeta.capturedAtIso ?? clockSnap.clientCapturedAt,
         capturedDateVn: draftCapturedMeta.capturedDateVn,
         items: media.items,
       }).catch(() => undefined);
@@ -470,8 +589,12 @@ function UnifiedDiaryForm({
   }, [
     saving,
     draftCapturedMeta,
+    initialDraft?.timeAnchorToken,
+    initialDraft?.monotonicElapsedMs,
     media.hasFiles,
     media.items,
+    media.primaryCaptureSource,
+    media.firstCapturedMeta,
     effectivePlot,
     entryOn,
     activity,
@@ -484,6 +607,8 @@ function UnifiedDiaryForm({
     areaHa,
     source,
     coords,
+    gpsAccuracyM,
+    signboardQrToken,
   ]);
 
   const handleDiscardAndCancel = () => {
@@ -589,6 +714,9 @@ function UnifiedDiaryForm({
   }, [fertilizerRows]);
 
   const handlePlotChange = (nextCode: string) => {
+    if (nextCode !== plotCode) {
+      setSignboardQrToken(null);
+    }
     setPlotCode(nextCode);
     if (!areaTouched) {
       const matched = plotsList.find((p) => p.code === nextCode);
@@ -597,32 +725,7 @@ function UnifiedDiaryForm({
   };
 
   const getGps = () => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setCoords(null);
-      setGpsStatus("Thiết bị không hỗ trợ GPS");
-      return;
-    }
-    setLocating(true);
-    setGpsStatus(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const latitude = Number(pos.coords.latitude.toFixed(6));
-        const longitude = Number(pos.coords.longitude.toFixed(6));
-        setCoords({ latitude, longitude });
-        setGpsStatus(`Đã định vị: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
-        setLocating(false);
-      },
-      (err) => {
-        setLocating(false);
-        setCoords(null);
-        setGpsStatus(
-          err.code === err.PERMISSION_DENIED
-            ? "Chưa cấp quyền vị trí GPS"
-            : "Không lấy được tín hiệu GPS",
-        );
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
-    );
+    startGpsWatch(true);
   };
 
   const lateReasonOk = !isLateOver48h || lateReason.trim().length >= 5;
@@ -694,7 +797,16 @@ function UnifiedDiaryForm({
 
     setSaving(true);
     setError(null);
+    stopGpsWatch();
     try {
+      const clockMeta = buildClientEvidenceClockMeta({
+        capturedPerfNow: media.firstCapturedMeta.capturedPerfNow,
+        capturedAtIso: draftCapturedMeta.capturedAtIso ?? media.firstCapturedMeta.capturedAtIso,
+      });
+      const resolvedCaptureSource = initialDraft?.captureSource ?? media.primaryCaptureSource;
+      const resolvedAnchorToken = initialDraft?.timeAnchorToken ?? clockMeta.timeAnchorToken;
+      const resolvedMonotonicMs = initialDraft?.monotonicElapsedMs ?? clockMeta.monotonicElapsedMs;
+
       if (isSprayActivity) {
         const sprayBody: Omit<CreateSprayBody, "photoId" | "photoIds"> = {
           sprayedOn: entryOn,
@@ -704,6 +816,14 @@ function UnifiedDiaryForm({
           source: source.trim() || undefined,
           plotCode: finalPlot,
           note: detail.trim() || undefined,
+          latitude: coords?.latitude,
+          longitude: coords?.longitude,
+          gpsAccuracyM: gpsAccuracyM ?? undefined,
+          captureSource: resolvedCaptureSource,
+          clientCapturedAt: clockMeta.clientCapturedAt,
+          timeAnchorToken: resolvedAnchorToken,
+          monotonicElapsedMs: resolvedMonotonicMs ?? undefined,
+          signboardQrToken: signboardQrToken ?? undefined,
           lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
         };
         const outcome = await submitFieldRecordWithOfflineQueue<PortalSprayRecord>({
@@ -722,15 +842,15 @@ function UnifiedDiaryForm({
           ],
           portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
           onProgress: media.setUploadProgress,
-          capturedAtIso: draftCapturedMeta.capturedAtIso,
+          capturedAtIso: clockMeta.clientCapturedAt,
           capturedDateVn: draftCapturedMeta.capturedDateVn,
         });
         await clearWorkingFieldDraft();
         if (outcome.mode === "synced") {
           invalidatePortal("journal", "spray", "violations", "overview");
-          toast.success("Đã lưu nhật ký phun thuốc lên hệ thống.");
+          toast.success("Đã lưu nhật ký phun thuốc");
         } else {
-          toast.success("Đã lưu trên điện thoại, hệ thống tự đồng bộ khi có sóng ổn định.");
+          toast.success("Đã lưu vào máy, tự gửi khi có sóng");
         }
         onDone();
         return;
@@ -755,6 +875,12 @@ function UnifiedDiaryForm({
         detail: composedDetail,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
+        gpsAccuracyM: gpsAccuracyM ?? undefined,
+        captureSource: resolvedCaptureSource,
+        clientCapturedAt: clockMeta.clientCapturedAt,
+        timeAnchorToken: resolvedAnchorToken,
+        monotonicElapsedMs: resolvedMonotonicMs ?? undefined,
+        signboardQrToken: signboardQrToken ?? undefined,
         lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
       };
       const outcome = await submitFieldRecordWithOfflineQueue<PortalJournalEntry>({
@@ -776,15 +902,15 @@ function UnifiedDiaryForm({
         ],
         portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
         onProgress: media.setUploadProgress,
-        capturedAtIso: draftCapturedMeta.capturedAtIso,
+        capturedAtIso: clockMeta.clientCapturedAt,
         capturedDateVn: draftCapturedMeta.capturedDateVn,
       });
       await clearWorkingFieldDraft();
       if (outcome.mode === "synced") {
         invalidatePortal("journal", "spray", "violations", "overview");
-        toast.success("Đã lưu nhật ký canh tác lên hệ thống.");
+        toast.success("Đã lưu nhật ký canh tác");
       } else {
-        toast.success("Đã lưu trên điện thoại, hệ thống tự đồng bộ khi có sóng ổn định.");
+        toast.success("Đã lưu vào máy, tự gửi khi có sóng");
       }
       onDone();
     } catch (err) {
@@ -844,11 +970,50 @@ function UnifiedDiaryForm({
                 id="pj-plot"
                 placeholder="Nhập mã thửa đất"
                 value={plotCode}
-                onChange={(e) => setPlotCode(e.target.value)}
+                onChange={(e) => {
+                  setSignboardQrToken(null);
+                  setPlotCode(e.target.value);
+                }}
                 required
               />
             )}
           </Field>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: "9px 12px",
+            borderRadius: 6,
+            border: "1px solid #d4d4d2",
+            background: signboardQrToken ? "#f3f7ee" : "#f7f7f5",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 180, flex: 1 }}>
+            <strong style={{ fontSize: 13, color: signboardQrToken ? "#15803d" : "#14372f" }}>
+              {signboardQrToken
+                ? `Đã xác thực bảng QR tại Thửa ${effectivePlot}`
+                : "Xác thực bảng QR cắm tại đầu thửa (khuyến khích khi rẫy khuất GPS)"}
+            </strong>
+            <span style={{ fontSize: 12, color: "#5f6d66" }}>
+              {signboardQrToken
+                ? "Bằng chứng có mặt thực địa tại vườn đã được đính kèm vào nhật ký."
+                : "Quét ngoại tuyến không cần 4G để tự động chọn đúng thửa và đạt mức tin cậy cao nhất."}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="pt-gps-btn"
+            onClick={() => setQrScannerOpen(true)}
+            disabled={saving}
+            style={{ flexShrink: 0 }}
+          >
+            <span>{signboardQrToken ? "Quét lại QR" : "Quét QR biển vườn"}</span>
+          </button>
         </div>
 
         {dateBoundNotice && (
@@ -1099,43 +1264,58 @@ function UnifiedDiaryForm({
           />
         </Field>
 
-        {!isSprayActivity && (
-          <div className="pt-journal-gps-card">
-            <div className="pt-journal-gps-text">
-              <span className="pt-journal-gps-title">Tọa độ GPS vườn (tùy chọn)</span>
-              <span className="pt-journal-gps-desc">
-                {coords
-                  ? `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
-                  : gpsStatus || "Chưa định vị"}
-              </span>
-            </div>
-            <button
-              type="button"
-              className={`pt-gps-btn ${coords ? "is-active" : ""}`}
-              onClick={getGps}
-              disabled={locating || saving}
-              title={coords ? `Đã định vị: ${coords.latitude}, ${coords.longitude}` : "Lấy vị trí định vị của vườn hiện tại"}
-            >
-              <RadialPngIcon src="/map-pin.png" size={16} className="pt-gps-icon" />
-              <span>{locating ? "Đang lấy GPS…" : coords ? "Cập nhật GPS" : "Định vị vườn"}</span>
-            </button>
+        <div className="pt-journal-gps-card">
+          <div className="pt-journal-gps-text">
+            <span className="pt-journal-gps-title">Tọa độ vệ tinh GPS tại vườn</span>
+            <span className="pt-journal-gps-desc" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {coords
+                ? `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}${gpsAccuracyM != null ? ` (sai số ${Math.round(gpsAccuracyM)} m)` : ""}`
+                : gpsStatus || "Đang chờ tín hiệu vệ tinh GPS"}
+            </span>
           </div>
-        )}
+          <button
+            type="button"
+            className={`pt-gps-btn ${coords ? "is-active" : ""}`}
+            onClick={getGps}
+            disabled={locating || saving}
+            title={coords ? `Đã định vị: ${coords.latitude}, ${coords.longitude}` : "Bắt lại tín hiệu định vị vệ tinh tại vườn"}
+          >
+            <RadialPngIcon src="/map-pin.png" size={16} className="pt-gps-icon" />
+            <span>{locating ? "Đang dò vệ tinh…" : coords ? "Lấy lại GPS" : "Định vị vườn"}</span>
+          </button>
+        </div>
 
         <MultiPhotoField
           id="pj-photo-input"
-          label={isSprayActivity ? "Ảnh phun thuốc, nhãn thuốc" : "Ảnh, video hiện trường"}
+          label={isSprayActivity ? "Ảnh hiện trường phun thuốc và nhãn thuốc" : "Ảnh, video chụp trực tiếp hiện trường"}
           picker={media}
           required
-          description="Tối đa 8 ảnh hoặc video dưới 90 giây."
-          cameraLabel="Chụp ảnh"
-          galleryLabel="Chọn nhiều ảnh"
-          videoLabel="Thêm video"
+          cameraOnly
+          description="Chụp trực tiếp tại vườn (tối đa 8 ảnh hoặc video dưới 90 giây, tự lưu an toàn khi mất sóng 4G)."
+          cameraLabel="Chụp ảnh hiện trường"
+          videoLabel="Quay video tại vườn"
           disabled={saving}
         />
 
         <InlineError message={error} />
       </form>
+
+      {qrScannerOpen && (
+        <PlotSignboardQrScannerModal
+          plotsList={plotsList}
+          selectedPlotCode={effectivePlot}
+          onVerifiedScan={({ plotCode: scannedPlot, qrToken }) => {
+            setPlotCode(scannedPlot);
+            setSignboardQrToken(qrToken);
+            if (!areaTouched) {
+              const matched = plotsList.find((p) => p.code === scannedPlot);
+              if (matched?.areaHa) setAreaHa(String(matched.areaHa));
+            }
+            toast.success(`Đã xác thực QR Thửa ${scannedPlot}`);
+          }}
+          onClose={() => setQrScannerOpen(false)}
+        />
+      )}
 
       {pickerMode === "pesticide" && (
         <VisualCatalogPickerSheet
@@ -1190,6 +1370,14 @@ function JournalDetailModal({
   const lng = toNumber(entry.longitude);
   const hasRealCoords = lat !== null && lng !== null;
   const allowDelete = canDeleteEntry(entry);
+  const trustInfo = describeFieldEvidence({
+    trustLevel: entry.trustLevel,
+    trustFlags: entry.trustFlags,
+    gpsVerified: entry.gpsVerified,
+    signboardQrVerified: entry.signboardQrVerified,
+    offlineQueued: entry.offlineQueued,
+    captureSource: entry.captureSource,
+  });
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -1198,6 +1386,7 @@ function JournalDetailModal({
       await api.delete(`/portal/journal/${entry.id}`);
       // Xóa nhật ký có thể làm mất bằng chứng khắc phục vi phạm: làm mới cả danh sách vi phạm
       invalidatePortal("journal", "spray", "violations", "overview");
+      toast.success("Đã xóa nhật ký canh tác");
       onDeleted();
     } catch (err) {
       setDeleteError(errorMessage(err, "Không xóa được bản ghi nhật ký."));
@@ -1263,6 +1452,28 @@ function JournalDetailModal({
           <span className="pt-detail-cell-label">Mã ghi nhận</span>
           <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>#NK-{entry.id}</span>
         </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Mức tin cậy thực địa</span>
+          <span className="pt-detail-cell-value">
+            <FieldTrustBadge
+              trustLevel={entry.trustLevel}
+              trustFlags={entry.trustFlags}
+              gpsVerified={entry.gpsVerified}
+              signboardQrVerified={entry.signboardQrVerified}
+              offlineQueued={entry.offlineQueued}
+              captureSource={entry.captureSource}
+              compact
+            />
+          </span>
+        </div>
+        {entry.recordHash && (
+          <div className="pt-detail-cell">
+            <span className="pt-detail-cell-label">Mã niêm phong dữ liệu</span>
+            <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+              {entry.recordHash.slice(0, 16)}...
+            </span>
+          </div>
+        )}
         {(entry.updatedByName || entry.updatedAt) && (
           <>
             <div className="pt-detail-cell">
@@ -1307,6 +1518,15 @@ function JournalDetailModal({
                 : ""}
             </div>
           </div>
+        </div>
+      )}
+
+      {trustInfo.evidenceNotes.length > 0 && (
+        <div className="pt-detail-cell" style={{ marginBottom: 8 }}>
+          <span className="pt-detail-cell-label">Chi tiết bằng chứng hiện trường</span>
+          <span className="pt-detail-cell-value" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            {trustInfo.evidenceNotes.join(", ")}
+          </span>
         </div>
       )}
 
@@ -1389,6 +1609,17 @@ function SprayDetailModal({
   const isPass = record.mrlStatus === "pass";
   const isBanned = record.pesticideStatus === "banned";
   const allowDelete = canDeleteSpray(record);
+  const sLat = toNumber(record.latitude);
+  const sLng = toNumber(record.longitude);
+  const hasSprayCoords = sLat !== null && sLng !== null;
+  const sprayTrustInfo = describeFieldEvidence({
+    trustLevel: record.trustLevel,
+    trustFlags: record.trustFlags,
+    gpsVerified: record.gpsVerified,
+    signboardQrVerified: record.signboardQrVerified,
+    offlineQueued: record.offlineQueued,
+    captureSource: record.captureSource,
+  });
 
   const safeDateIso =
     record.isolationEndsOn ||
@@ -1402,6 +1633,7 @@ function SprayDetailModal({
     try {
       await api.delete(`/portal/spray/${record.id}`);
       invalidatePortal("spray", "journal", "overview", "violations");
+      toast.success("Đã xóa bản ghi phun thuốc");
       onDeleted();
     } catch (err) {
       setDeleteError(errorMessage(err, "Không xóa được bản ghi phun thuốc."));
@@ -1471,6 +1703,28 @@ function SprayDetailModal({
             {record.isolationDays} ngày (thu từ {safeDateIso ? formatDate(safeDateIso) : formatDate(record.sprayedOn)})
           </span>
         </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Mức tin cậy thực địa</span>
+          <span className="pt-detail-cell-value">
+            <FieldTrustBadge
+              trustLevel={record.trustLevel}
+              trustFlags={record.trustFlags}
+              gpsVerified={record.gpsVerified}
+              signboardQrVerified={record.signboardQrVerified}
+              offlineQueued={record.offlineQueued}
+              captureSource={record.captureSource}
+              compact
+            />
+          </span>
+        </div>
+        {record.recordHash && (
+          <div className="pt-detail-cell">
+            <span className="pt-detail-cell-label">Mã niêm phong dữ liệu</span>
+            <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+              {record.recordHash.slice(0, 16)}...
+            </span>
+          </div>
+        )}
         {record.recordedByRole && (
           <div className="pt-detail-cell">
             <span className="pt-detail-cell-label">Người ghi ban đầu</span>
@@ -1497,6 +1751,41 @@ function SprayDetailModal({
           </>
         )}
       </div>
+
+      {hasSprayCoords && (
+        <div className="pt-detail-gps-box">
+          <img
+            src="/location-pin.png"
+            alt=""
+            width={18}
+            height={18}
+            loading="lazy"
+            decoding="async"
+            className="pt-detail-gps-icon"
+            aria-hidden="true"
+          />
+          <div>
+            <div className="pt-detail-gps-title">
+              Tọa độ GPS thực địa{record.gpsVerified ? " - Khớp ranh giới GIS thửa vườn" : ""}
+            </div>
+            <div className="pt-detail-gps-coords" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {sLat.toFixed(5)}, {sLng.toFixed(5)}
+              {!record.gpsVerified && record.gpsDistanceM != null
+                ? ` (cách ranh giới ${Math.round(Number(record.gpsDistanceM))} m)`
+                : ""}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sprayTrustInfo.evidenceNotes.length > 0 && (
+        <div className="pt-detail-cell" style={{ marginBottom: 8 }}>
+          <span className="pt-detail-cell-label">Chi tiết bằng chứng hiện trường</span>
+          <span className="pt-detail-cell-value" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            {sprayTrustInfo.evidenceNotes.join(", ")}
+          </span>
+        </div>
+      )}
 
       <div className="pt-detail-section">
         <h4 className="pt-detail-section-title">Nguồn gốc và ghi chú</h4>
@@ -1722,6 +2011,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         const entry = item.entry;
                         const lateDays = entry.lateDeclarationDays ?? 0;
                         const subNotes: string[] = [];
+                        if (entry.trustLevel === 3) subNotes.push("Cần cán bộ xác minh");
                         if (lateDays > 0) subNotes.push(`Khai chậm ${lateDays} ngày`);
                         if (entry.updatedByName) {
                           subNotes.push(`Đã sửa bởi ${formatDiaryEditor(entry.updatedByName, entry.updatedByRole)}`);
@@ -1775,6 +2065,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                       const inPhi = remPhi !== null && remPhi > 0;
                       const lateDays = record.lateDeclarationDays ?? 0;
                       const subNotes: string[] = [];
+                      if (record.trustLevel === 3) subNotes.push("Cần cán bộ xác minh");
                       if (inPhi) {
                         subNotes.push(`Cách ly còn ${remPhi} ngày`);
                       } else if (lateDays > 0) {

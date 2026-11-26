@@ -10,6 +10,7 @@ import {
   validatePickedFile,
 } from "@/components/portal/shared/media";
 import { getNetworkQualitySnapshot } from "@/lib/network";
+import { toast } from "@/components/ui/Toast";
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_LOGOUT_EVENT,
@@ -32,25 +33,33 @@ const STORE_OUTBOX = "outbox";
 const STORE_SNAPSHOTS = "read_snapshots";
 const STORE_DRAFTS = "field_drafts";
 const AUTH_SNAPSHOT_STORAGE_KEY = "puc:offline-auth-session:v1";
-/** Phiên ngoại tuyến chỉ giữ tối đa 48 giờ trên thiết bị (thiết bị dùng chung tại HTX). */
-const AUTH_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60_000;
-const MAX_READ_SNAPSHOTS = 90;
-/** Giới hạn tuổi thọ (7 ngày) và số lượng tối đa (24 bản) của Kho giữ hình ngoài rẫy để chống đầy bộ nhớ máy cũ. */
-const MAX_DRAFT_AGE_MS = 7 * 24 * 60 * 60_000;
+const TIME_ANCHOR_STORAGE_KEY = "puc:time-anchor:v1";
+/** Phiên ngoại tuyến dành riêng cho nông hộ đi rẫy dài ngày giữ tối đa 14 ngày trên thiết bị. */
+const AUTH_SNAPSHOT_MAX_AGE_MS = 14 * 24 * 60 * 60_000;
+const MAX_READ_SNAPSHOTS = 120;
+/** Giới hạn tuổi thọ (14 ngày) và số lượng tối đa (24 bản) của Kho giữ hình ngoài rẫy để chống đầy bộ nhớ máy cũ. */
+const MAX_DRAFT_AGE_MS = 14 * 24 * 60 * 60_000;
 const MAX_TOTAL_DRAFTS = 24;
 /**
  * Danh sách trắng (allowlist) duy nhất các đường dẫn dữ liệu canh tác tại vườn được phép lưu bản chụp đọc ngoại tuyến
  * trên thiết bị của nông hộ; mọi phân hệ quản trị, thanh tra, đối tác, CCCD/SĐT, tài khoản đều bị loại trừ tuyệt đối.
  */
 const FARMER_SAFE_SNAPSHOT_PREFIXES = [
+  "/portal/overview",
   "/portal/home",
+  "/portal/plots",
   "/portal/journal",
   "/portal/spray",
+  "/portal/violations",
+  "/portal/care-protocol",
   "/portal/harvest",
   "/portal/stamps",
   "/portal/requests",
   "/portal/training",
   "/care-protocol",
+  "/pesticides",
+  "/fertilizers",
+  "/varieties",
   "/public/catalog",
   "/public/news",
   "/public/villages",
@@ -84,6 +93,8 @@ export interface OfflineMediaSlot {
   durationSec?: number | null;
   posterDataUrl?: string | null;
   sha256?: string;
+  captureSource?: "in_app_camera" | "camera" | "upload";
+  capturedAtIso?: string;
   blob?: Blob;
   uploadedId?: number;
   uploadedUrl?: string;
@@ -105,6 +116,11 @@ export interface OfflineFieldDraft {
   areaHa: string;
   source: string;
   coords: { latitude: number; longitude: number } | null;
+  gpsAccuracyM?: number | null;
+  captureSource?: "in_app_camera" | "camera" | "upload";
+  signboardQrToken?: string | null;
+  timeAnchorToken?: string | null;
+  monotonicElapsedMs?: number | null;
   capturedAtIso: string;
   capturedDateVn: string;
   updatedAt: number;
@@ -227,6 +243,107 @@ export function clearOfflineAuthSession(): void {
   } catch {
     // ignore
   }
+}
+
+/* ──────────────────────────── Vé neo thời gian máy chủ (Server Time-Bounding + Monotonic Clock) ──────────────────────────── */
+
+interface StoredTimeAnchor {
+  userId: number;
+  token: string;
+  serverTimeMs: number;
+  savedWallMs: number;
+}
+
+let inMemoryTimeAnchor: (StoredTimeAnchor & { savedPerfNow: number }) | null = null;
+
+export function saveServerTimeAnchor(anchor: { token?: string; serverTimeMs?: number } | null | undefined): void {
+  if (typeof window === "undefined" || !anchor?.token || typeof anchor.serverTimeMs !== "number") return;
+  if (getAuthScopeUserRole() !== "farmer") return;
+  const userId = getAuthScopeUserId();
+  if (!userId || userId <= 0) return;
+
+  const savedWallMs = Date.now();
+  const savedPerfNow = typeof performance !== "undefined" ? performance.now() : 0;
+  const record: StoredTimeAnchor = {
+    userId,
+    token: anchor.token,
+    serverTimeMs: anchor.serverTimeMs,
+    savedWallMs,
+  };
+  inMemoryTimeAnchor = { ...record, savedPerfNow };
+  try {
+    window.localStorage.setItem(TIME_ANCHOR_STORAGE_KEY, JSON.stringify(record));
+  } catch {
+    // Bỏ qua nếu bộ nhớ cục bộ bị khóa.
+  }
+}
+
+export function clearServerTimeAnchor(): void {
+  inMemoryTimeAnchor = null;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(TIME_ANCHOR_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function buildClientEvidenceClockMeta(options?: {
+  capturedPerfNow?: number | null;
+  capturedAtIso?: string | null;
+}): {
+  clientCapturedAt: string;
+  timeAnchorToken?: string;
+  monotonicElapsedMs?: number;
+} {
+  const userId = getAuthScopeUserId();
+  const fallbackIso = options?.capturedAtIso || getServerCalibratedDate().toISOString();
+
+  if (
+    inMemoryTimeAnchor &&
+    userId &&
+    inMemoryTimeAnchor.userId === userId &&
+    typeof performance !== "undefined"
+  ) {
+    const refPerf =
+      typeof options?.capturedPerfNow === "number" && Number.isFinite(options.capturedPerfNow)
+        ? options.capturedPerfNow
+        : performance.now();
+    const elapsedMs = Math.max(0, Math.round(refPerf - inMemoryTimeAnchor.savedPerfNow));
+    const calibratedIso = new Date(inMemoryTimeAnchor.serverTimeMs + elapsedMs).toISOString();
+    return {
+      clientCapturedAt: options?.capturedAtIso || calibratedIso,
+      timeAnchorToken: inMemoryTimeAnchor.token,
+      monotonicElapsedMs: elapsedMs,
+    };
+  }
+
+  if (typeof window !== "undefined" && userId && getAuthScopeUserRole() === "farmer") {
+    try {
+      const raw = window.localStorage.getItem(TIME_ANCHOR_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<StoredTimeAnchor>;
+        if (
+          parsed.userId === userId &&
+          typeof parsed.token === "string" &&
+          typeof parsed.serverTimeMs === "number" &&
+          typeof parsed.savedWallMs === "number" &&
+          Date.now() - parsed.savedWallMs <= AUTH_SNAPSHOT_MAX_AGE_MS
+        ) {
+          return {
+            clientCapturedAt: fallbackIso,
+            timeAnchorToken: parsed.token,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    clientCapturedAt: fallbackIso,
+  };
 }
 
 /* ──────────────────────────── Mở kết nối IndexedDB an toàn ──────────────────────────── */
@@ -862,6 +979,11 @@ export interface SaveFieldDraftInput {
   areaHa?: string;
   source?: string;
   coords?: { latitude: number; longitude: number } | null;
+  gpsAccuracyM?: number | null;
+  captureSource?: "in_app_camera" | "camera" | "upload";
+  signboardQrToken?: string | null;
+  timeAnchorToken?: string | null;
+  monotonicElapsedMs?: number | null;
   capturedAtIso?: string;
   capturedDateVn?: string;
   items: Array<{
@@ -873,6 +995,8 @@ export interface SaveFieldDraftInput {
     blob?: Blob;
     precompressed?: boolean;
     sha256?: string;
+    captureSource?: "in_app_camera" | "camera" | "upload";
+    capturedAtIso?: string;
     uploadedId?: number;
     uploadedUrl?: string;
   }>;
@@ -925,6 +1049,11 @@ export async function saveOfflineFieldDraft(input: SaveFieldDraftInput): Promise
     areaHa: input.areaHa ?? "",
     source: input.source ?? "",
     coords: input.coords ?? null,
+    gpsAccuracyM: input.gpsAccuracyM ?? null,
+    captureSource: input.captureSource,
+    signboardQrToken: input.signboardQrToken ?? null,
+    timeAnchorToken: input.timeAnchorToken ?? null,
+    monotonicElapsedMs: input.monotonicElapsedMs ?? null,
     capturedAtIso: nowIso,
     capturedDateVn: dateVn,
     updatedAt: Date.now(),
@@ -973,6 +1102,8 @@ export interface OfflineMediaInputGroup {
     blob?: Blob;
     precompressed?: boolean;
     sha256?: string;
+    captureSource?: "in_app_camera" | "camera" | "upload";
+    capturedAtIso?: string;
     uploadedId?: number;
     uploadedUrl?: string;
   }>;
@@ -1004,6 +1135,8 @@ async function prepareCompressedMediaSlots(
           durationSec: item.durationSec,
           posterDataUrl: item.posterDataUrl,
           sha256: item.sha256,
+          captureSource: item.captureSource,
+          capturedAtIso: item.capturedAtIso,
           uploadedId: item.uploadedId,
           uploadedUrl: item.uploadedUrl,
         });
@@ -1023,6 +1156,8 @@ async function prepareCompressedMediaSlots(
             durationSec: item.durationSec,
             posterDataUrl: item.posterDataUrl,
             sha256: item.sha256,
+            captureSource: item.captureSource,
+            capturedAtIso: item.capturedAtIso,
             uploadedId: item.uploadedId,
             uploadedUrl: item.uploadedUrl,
           });
@@ -1060,6 +1195,8 @@ async function prepareCompressedMediaSlots(
         durationSec: item.durationSec,
         posterDataUrl: item.posterDataUrl,
         sha256,
+        captureSource: item.captureSource,
+        capturedAtIso: item.capturedAtIso,
         blob: compressedBlob,
         uploadedId: hasUploaded ? item.uploadedId : undefined,
         uploadedUrl: hasUploaded ? item.uploadedUrl : undefined,
@@ -1258,7 +1395,7 @@ export async function submitFieldRecordWithOfflineQueue<TResponse = unknown>(
     }
 
     const withMedia = applyMediaIdsToPayload(options.payload, slots, bindings);
-    const finalPayload = enrichOfflineLateReason(item, withMedia);
+    const finalPayload = enrichPortalFieldEvidence(item, enrichOfflineLateReason(item, withMedia), false);
     if (!owner.isOwner()) throw new OfflineAuthChangedError();
 
     const data = await apiRequest<TResponse>(options.endpoint, {
@@ -1323,6 +1460,8 @@ const BACKDATE_AWARE_ENDPOINTS = new Set([
   "/spray",
 ]);
 
+const PORTAL_EVIDENCE_ENDPOINTS = new Set(["/portal/journal", "/portal/spray"]);
+
 function enrichOfflineLateReason(item: OfflineOutboxItem, payload: Record<string, unknown>): Record<string, unknown> {
   if (!BACKDATE_AWARE_ENDPOINTS.has(item.endpoint)) return payload;
   const existingReason = typeof payload.lateReason === "string" ? payload.lateReason.trim() : "";
@@ -1334,6 +1473,27 @@ function enrichOfflineLateReason(item: OfflineOutboxItem, payload: Record<string
   return {
     ...payload,
     lateReason: `Đã chụp ảnh và lưu ngoại tuyến tại vườn lúc ${formatVnDateTime(item.capturedAtIso)}, tự động đồng bộ khi có mạng`,
+  };
+}
+
+/**
+ * Chỉ gắn cờ `offlineQueued` và `clientCapturedAt` cho đúng 2 endpoint cổng nông hộ đã khai báo DTO whitelist
+ * (`/portal/journal`, `/portal/spray`) để tuyệt đối không ảnh hưởng các endpoint quản trị dùng `forbidNonWhitelisted`.
+ */
+function enrichPortalFieldEvidence(
+  item: OfflineOutboxItem,
+  payload: Record<string, unknown>,
+  wasDeferredOutboxSync: boolean,
+): Record<string, unknown> {
+  if (!PORTAL_EVIDENCE_ENDPOINTS.has(item.endpoint)) return payload;
+  const capturedAt =
+    typeof payload.clientCapturedAt === "string" && payload.clientCapturedAt.trim()
+      ? payload.clientCapturedAt
+      : item.capturedAtIso;
+  return {
+    ...payload,
+    clientCapturedAt: capturedAt,
+    offlineQueued: wasDeferredOutboxSync ? true : Boolean(payload.offlineQueued),
   };
 }
 
@@ -1436,7 +1596,7 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
 
         // 2. Ghép ID tệp đã tải & gửi bản ghi kèm X-Idempotency-Key chống ghi trùng
         const withMedia = applyMediaIdsToPayload(item.payload, item.mediaSlots, item.mediaBindings);
-        const finalPayload = enrichOfflineLateReason(item, withMedia);
+        const finalPayload = enrichPortalFieldEvidence(item, enrichOfflineLateReason(item, withMedia), true);
 
         // Kiểm tra lần cuối ngay trước khi gửi: không bao giờ gửi bản ghi của hộ A bằng cookie phiên của hộ B.
         if (!owner.isOwner()) throw new OfflineAuthChangedError();
@@ -1568,6 +1728,11 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
             portalInvalidateHandler(Array.from(portalKeysToRefresh));
           }
           notifyDataMutated();
+          toast.success(
+            syncedInBatch === 1
+              ? "Đã đồng bộ 1 bản ghi lên hệ thống"
+              : `Đã đồng bộ ${syncedInBatch} bản ghi lên hệ thống`,
+          );
           if (clearRecentTimer) clearTimeout(clearRecentTimer);
           clearRecentTimer = setTimeout(() => {
             currentSnapshot = { ...currentSnapshot, recentSyncedCount: 0 };
@@ -1646,12 +1811,14 @@ if (typeof window !== "undefined") {
     const prevUid = activeSyncUserId ?? getAuthScopeUserId();
     resetSyncStateForAuthChange();
     clearOfflineAuthSession();
+    clearServerTimeAnchor();
     void clearAllOfflineReadSnapshots();
     void purgeUserWorkingDraftsOnLogout(prevUid);
   };
   const onScopeChanged = (ev: Event) => {
     const detail = (ev as CustomEvent<{ previous?: number | null; next?: number | null }>).detail;
     if (detail?.previous && detail.previous !== detail.next) {
+      clearServerTimeAnchor();
       void clearAllOfflineReadSnapshots();
       void purgeUserWorkingDraftsOnLogout(detail.previous);
     }

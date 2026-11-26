@@ -136,6 +136,8 @@ function normalizeReportAdminText(raw: string): string {
     .replace(/hợp tác xã/g, "__PUC_HTX_LOWER__");
 
   res = res
+    .replace(/(XÃ\s+EA\s+KH(?:Ă|A)L)\s*(?:[-–,])\s*(?:HUYỆN\s+EA\s+H'?LEO|HUYỆN\s+KR(?:Ô|O)NG\s+B(?:Ú|U)K|XÃ\s+KR(?:Ô|O)NG\s+B(?:Ú|U)K)/g, "$1")
+    .replace(/((?:Xã|xã)\s+Ea\s+Kh(?:ă|a)l)\s*(?:[-–,])\s*(?:Huyện\s+Ea\s+H'?Leo|huyện\s+Ea\s+H'?Leo|Huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k|huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k|Xã\s+Kr(?:ô|o)ng\s+B(?:ú|u)k|xã\s+Kr(?:ô|o)ng\s+B(?:ú|u)k)/g, "$1")
     .replace(/XÃ\s+CƯ\s+NÉ\s*(?:[-–,]|VÀ)\s*(?:HUYỆN\s+)?KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
     .replace(/Xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:Huyện\s+|huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
     .replace(/xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:huyện\s+|Huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
@@ -514,34 +516,34 @@ function buildCultivationLogbookDossierHtml(
     data.rows.length === 0
       ? `<tr><td colspan="${data.headers.length + 1}" class="dos-empty-cell">Chưa có bản ghi nhật ký phù hợp trong khoảng thời gian đã chọn.</td></tr>`
       : data.rows
-          .map((row, rIdx) => {
-            const tds = row
-              .map((cell, cIdx) => {
-                const rawTrim = (cell || "").trim();
-                let statusTone = "";
-                if (/^HTX đã xác minh/i.test(rawTrim) || rawTrim === "Đạt" || rawTrim === "Đủ chuẩn XK") {
-                  statusTone = " dos-status-ok";
-                } else if (/vượt ngưỡng|vi phạm|bị cấm/i.test(rawTrim)) {
-                  statusTone = " dos-status-danger";
-                }
-                const cls = `${colClasses[cIdx]}${statusTone}`.trim();
-                return `<td${cls ? ` class="${cls}"` : ""}>${renderCellHtml(cell, origin)}</td>`;
-              })
-              .join("");
-            return `<tr><td class="col-stt">${rIdx + 1}</td>${tds}</tr>`;
-          })
-          .join("");
+        .map((row, rIdx) => {
+          const tds = row
+            .map((cell, cIdx) => {
+              const rawTrim = (cell || "").trim();
+              let statusTone = "";
+              if (/^HTX đã xác minh/i.test(rawTrim) || rawTrim === "Đạt" || rawTrim === "Đủ chuẩn XK") {
+                statusTone = " dos-status-ok";
+              } else if (/vượt ngưỡng|vi phạm|bị cấm/i.test(rawTrim)) {
+                statusTone = " dos-status-danger";
+              }
+              const cls = `${colClasses[cIdx]}${statusTone}`.trim();
+              return `<td${cls ? ` class="${cls}"` : ""}>${renderCellHtml(cell, origin)}</td>`;
+            })
+            .join("");
+          return `<tr><td class="col-stt">${rIdx + 1}</td>${tds}</tr>`;
+        })
+        .join("");
 
   let partiesHtml = "";
   if (hh) {
     const plotsLine =
       hh.plots.length > 0
         ? hh.plots
-            .map(
-              (p) =>
-                `${p.plotCode} (${p.areaHa} ha${p.variety ? `, ${p.variety}` : ""}${p.plantedYear ? `, trồng ${p.plantedYear}` : ""})`,
-            )
-            .join("; ")
+          .map(
+            (p) =>
+              `${p.plotCode} (${p.areaHa} ha${p.variety ? `, ${p.variety}` : ""}${p.plantedYear ? `, trồng ${p.plantedYear}` : ""})`,
+          )
+          .join("; ")
         : `Tổng ${hh.plotCount} thửa (${hh.areaHa} ha)`;
 
     partiesHtml = `<section class="dos-parties">
@@ -561,13 +563,13 @@ function buildCultivationLogbookDossierHtml(
         <strong class="dos-party-name">${escapeHtml(hh.zoneName)}</strong>
         <div class="dos-party-lines">
           <span>${escapeHtml(
-            normalizeReportAdminText(
-              hh.zoneAddress ||
-                (/^66-PUC-SR0001-/i.test(hh.pucCode) || /ea\s*kh[aă]l/i.test(hh.zoneName)
-                  ? "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk"
-                  : coopSubLine),
-            ),
-          )}</span>
+      normalizeReportAdminText(
+        hh.zoneAddress ||
+        (/^66-PUC-SR0001-/i.test(hh.pucCode) || /ea\s*kh[aă]l/i.test(hh.zoneName)
+          ? "Xã Ea Khăl, Tỉnh Đắk Lắk"
+          : coopSubLine),
+      ),
+    )}</span>
           <span>Tiêu chuẩn: VietGAP và Nghị định thư GACC</span>
           <span class="num">Kỳ trích xuất: ${escapeHtml(dateRangeLabel)}</span>
         </div>
@@ -609,16 +611,14 @@ function buildCultivationLogbookDossierHtml(
       <span class="dos-total-label">Tổng hợp hồ sơ nhật ký</span>
       <div class="dos-hatch-box">
         <strong class="dos-hatch-val">${stats ? stats.totalRecords : Number(data.total) || 0} bản ghi</strong>
-        <span class="dos-hatch-sub">${
-          hasPhotoAppendix
-            ? `Kèm ${preparedPhotos.length} hình ảnh phụ lục đối chiếu`
-            : "Đối chiếu trực tiếp dữ liệu điện tử HTX"
-        }</span>
+        <span class="dos-hatch-sub">${hasPhotoAppendix
+      ? `Kèm ${preparedPhotos.length} hình ảnh phụ lục đối chiếu`
+      : "Đối chiếu trực tiếp dữ liệu điện tử HTX"
+    }</span>
       </div>
     </div>
-    ${
-      stats
-        ? `<dl class="dos-kv-totals">
+    ${stats
+      ? `<dl class="dos-kv-totals">
              <div class="dos-kv-row">
                <dt>HTX đã xác minh</dt>
                <dd class="${stats.verifiedCount > 0 ? "dos-status-ok" : ""}">${stats.verifiedCount} bản ghi</dd>
@@ -633,12 +633,11 @@ function buildCultivationLogbookDossierHtml(
              </div>
              <div class="dos-kv-row is-grand">
                <dt>Tệp minh chứng thực địa</dt>
-               <dd>${stats.fieldPhotoCount} ảnh${stats.videoCount > 0 ? `, ${stats.videoCount} video` : ""}${
-                 stats.invoicePhotoCount > 0 ? `, ${stats.invoicePhotoCount} chứng từ` : ""
-               }</dd>
+               <dd>${stats.fieldPhotoCount} ảnh${stats.videoCount > 0 ? `, ${stats.videoCount} video` : ""}${stats.invoicePhotoCount > 0 ? `, ${stats.invoicePhotoCount} chứng từ` : ""
+      }</dd>
              </div>
            </dl>`
-        : `<div class="dos-summary-note-wrap">
+      : `<div class="dos-summary-note-wrap">
              <p class="dos-summary-note">Dữ liệu nhật ký được ghi nhận thời gian thực trên hệ thống quản lý vùng trồng của Hợp tác xã Cư Né.</p>
            </div>`
     }
@@ -660,34 +659,30 @@ function buildCultivationLogbookDossierHtml(
         <span class="dos-meta-left">Phần II / Phụ lục hình ảnh minh chứng thực địa</span>
         <span class="dos-meta-right">Đối chiếu mã MC tại Phần I (${preparedPhotos.length} ảnh)</span>
       </div>
-      ${
-        fieldPhotos.length > 0
-          ? `<div class="dos-appendix-group">
-               ${
-                 invoicePhotos.length > 0
-                   ? `<div class="dos-appendix-subhead">1. Hình ảnh hiện trường chăm sóc và bảo vệ thực vật (${fieldPhotos.length} ảnh)</div>`
-                   : ""
-               }
+      ${fieldPhotos.length > 0
+        ? `<div class="dos-appendix-group">
+               ${invoicePhotos.length > 0
+          ? `<div class="dos-appendix-subhead">1. Hình ảnh hiện trường chăm sóc và bảo vệ thực vật (${fieldPhotos.length} ảnh)</div>`
+          : ""
+        }
                <div class="dos-evidence-grid ${gridColsClass}">
                  ${fieldPhotos.map(buildDossierPhotoCardHtml).join("")}
                </div>
              </div>`
-          : ""
+        : ""
       }
-      ${
-        invoicePhotos.length > 0
-          ? `<div class="dos-appendix-group">
+      ${invoicePhotos.length > 0
+        ? `<div class="dos-appendix-group">
                <div class="dos-appendix-subhead">${fieldPhotos.length > 0 ? "2." : "1."} Chứng từ và hóa đơn vật tư nông nghiệp lưu nội bộ (${invoicePhotos.length} ảnh)</div>
                <div class="dos-evidence-grid ${gridColsClass}">
                  ${invoicePhotos.map(buildDossierPhotoCardHtml).join("")}
                </div>
              </div>`
-          : ""
+        : ""
       }
-      ${
-        truncatedCount > 0
-          ? `<p class="dos-summary-note">Ghi chú: Còn ${truncatedCount} hình ảnh bổ sung của hộ được lưu trữ nguyên bản trên hệ thống điện tử. Quét mã QR cuối hồ sơ để tra cứu toàn bộ ảnh độ phân giải gốc.</p>`
-          : ""
+      ${truncatedCount > 0
+        ? `<p class="dos-summary-note">Ghi chú: Còn ${truncatedCount} hình ảnh bổ sung của hộ được lưu trữ nguyên bản trên hệ thống điện tử. Quét mã QR cuối hồ sơ để tra cứu toàn bộ ảnh độ phân giải gốc.</p>`
+        : ""
       }
     </section>`;
   }
@@ -701,11 +696,10 @@ function buildCultivationLogbookDossierHtml(
     <section class="dos-attest-grid${hh ? "" : " is-two-cols"}">
       <div class="dos-attest-col is-bordered">
         <strong class="dos-attest-heading">${escapeHtml(leftSigRole)}</strong>
-        <p>${
-          isHouseholdDetail
-            ? "Xác nhận ghi chép trung thực nhật ký canh tác, vật tư sử dụng và tuân thủ thời gian cách ly an toàn trước thu hoạch."
-            : "Tổng hợp đầy đủ từ cơ sở dữ liệu nhật ký điện tử của các hộ thành viên trong kỳ báo cáo."
-        }</p>
+        <p>${isHouseholdDetail
+      ? "Xác nhận ghi chép trung thực nhật ký canh tác, vật tư sử dụng và tuân thủ thời gian cách ly an toàn trước thu hoạch."
+      : "Tổng hợp đầy đủ từ cơ sở dữ liệu nhật ký điện tử của các hộ thành viên trong kỳ báo cáo."
+    }</p>
         <div class="dos-sig-space">(Ký, ghi rõ họ tên)</div>
         ${leftSigName ? `<strong class="dos-sig-name">${leftSigName}</strong>` : ""}
       </div>
@@ -714,22 +708,20 @@ function buildCultivationLogbookDossierHtml(
         <p>Ngày ${day} tháng ${month} năm ${year} - Kiểm tra đối chiếu và lưu trữ hồ sơ quản lý vùng trồng.</p>
         <div class="dos-sig-space">(Ký tên, đóng dấu xác nhận)</div>
       </div>
-      ${
-        hh
-          ? `<div class="dos-sign-col">
+      ${hh
+      ? `<div class="dos-sign-col">
                <span class="dos-sign-kicker">Hồ sơ số trực tuyến</span>
                <div class="dos-qr-wrap">
-                 ${
-                   qrDataUrl
-                     ? `<img src="${escapeHtml(qrDataUrl)}" alt="Mã QR hồ sơ số" class="dos-qr-img" />`
-                     : `<div class="dos-qr-placeholder"></div>`
-                 }
+                 ${qrDataUrl
+        ? `<img src="${escapeHtml(qrDataUrl)}" alt="Mã QR hồ sơ số" class="dos-qr-img" />`
+        : `<div class="dos-qr-placeholder"></div>`
+      }
                </div>
                <strong class="dos-sign-org">HTX Cư Né</strong>
                <a href="${escapeHtml(fullTraceUrl)}" target="_blank" rel="noopener noreferrer" class="dos-sign-code">${escapeHtml(hh.code)}</a>
              </div>`
-          : ""
-      }
+      : ""
+    }
     </section>
     <footer class="dos-footer-bar">
       <span>${escapeHtml(coopLegalRaw)} (${escapeHtml(coopSubLine)})</span>
@@ -1455,10 +1447,9 @@ function buildCultivationLogbookDossierHtml(
 </head>
 <body>
   <div class="print-toolbar">
-    <span class="print-toolbar-info">${
-      isHouseholdDetail
-        ? `Sổ nhật ký nông hộ ${escapeHtml(hh?.code || "")}${hasPhotoAppendix ? ` kèm ${preparedPhotos.length} ảnh minh chứng` : ""}`
-        : `${escapeHtml(report.title)} (${Number(data.total) || 0} bản ghi)`
+    <span class="print-toolbar-info">${isHouseholdDetail
+      ? `Sổ nhật ký nông hộ ${escapeHtml(hh?.code || "")}${hasPhotoAppendix ? ` kèm ${preparedPhotos.length} ảnh minh chứng` : ""}`
+      : `${escapeHtml(report.title)} (${Number(data.total) || 0} bản ghi)`
     }</span>
     <div class="print-toolbar-actions">
       <button type="button" id="report-btn-print" class="print-btn">In sổ / Lưu PDF</button>
@@ -1494,11 +1485,10 @@ function buildCultivationLogbookDossierHtml(
 
             <section class="dos-ledger">
               <div class="dos-meta-strip">
-                <span class="dos-meta-left">${
-                  hasPhotoAppendix
-                    ? "Phần I / Bảng kê nhật ký canh tác theo trình tự thời gian"
-                    : "Bảng kê nhật ký canh tác theo trình tự thời gian"
-                }</span>
+                <span class="dos-meta-left">${hasPhotoAppendix
+      ? "Phần I / Bảng kê nhật ký canh tác theo trình tự thời gian"
+      : "Bảng kê nhật ký canh tác theo trình tự thời gian"
+    }</span>
                 <span class="dos-meta-right">Tổng cộng: ${Number(data.total) || 0} bản ghi</span>
               </div>
               <table class="dos-table">
@@ -1520,9 +1510,8 @@ function buildCultivationLogbookDossierHtml(
           </td>
         </tr>
       </tbody>
-      ${
-        hasPhotoAppendix
-          ? `<tbody class="print-layout-body print-page-break">
+      ${hasPhotoAppendix
+      ? `<tbody class="print-layout-body print-page-break">
                <tr>
                  <td class="print-layout-cell">
                    <div class="dos-appendix-wrap">
@@ -1532,8 +1521,8 @@ function buildCultivationLogbookDossierHtml(
                  </td>
                </tr>
              </tbody>`
-          : ""
-      }
+      : ""
+    }
     </table>
   </main>
 </body>
@@ -1597,13 +1586,13 @@ function buildPrintableReportHtml(
     data.rows.length === 0
       ? `<tr><td colspan="${data.headers.length + 1}" class="empty-cell">Chưa có dữ liệu phù hợp trong khoảng thời gian đã chọn.</td></tr>`
       : data.rows
-          .map(
-            (row, idx) =>
-              `<tr><td class="col-stt">${idx + 1}</td>${row
-                .map((cell) => `<td>${renderCellHtml(cell, origin)}</td>`)
-                .join("")}</tr>`,
-          )
-          .join("");
+        .map(
+          (row, idx) =>
+            `<tr><td class="col-stt">${idx + 1}</td>${row
+              .map((cell) => `<td>${renderCellHtml(cell, origin)}</td>`)
+              .join("")}</tr>`,
+        )
+        .join("");
 
   const stats = data.summaryStats;
   const statsStripHtml = stats
@@ -1628,14 +1617,13 @@ function buildPrintableReportHtml(
           <span class="stat-label">Ảnh hiện trường</span>
           <strong class="stat-val">${stats.fieldPhotoCount}${stats.videoCount > 0 ? ` (${stats.videoCount} video)` : ""}</strong>
         </div>
-        ${
-          stats.invoicePhotoCount > 0
-            ? `<div class="stat-cell">
+        ${stats.invoicePhotoCount > 0
+      ? `<div class="stat-cell">
                  <span class="stat-label">Chứng từ vật tư</span>
                  <strong class="stat-val">${stats.invoicePhotoCount}</strong>
                </div>`
-            : ""
-        }
+      : ""
+    }
       </div>`
     : "";
 
@@ -1646,11 +1634,11 @@ function buildPrintableReportHtml(
     const plotsLine =
       hh.plots.length > 0
         ? hh.plots
-            .map(
-              (p) =>
-                `${p.plotCode} (${p.areaHa} ha${p.variety ? `, ${p.variety}` : ""}${p.plantedYear ? `, trồng ${p.plantedYear}` : ""})`,
-            )
-            .join("; ")
+          .map(
+            (p) =>
+              `${p.plotCode} (${p.areaHa} ha${p.variety ? `, ${p.variety}` : ""}${p.plantedYear ? `, trồng ${p.plantedYear}` : ""})`,
+          )
+          .join("; ")
         : `Tổng ${hh.plotCount} thửa (${hh.areaHa} ha)`;
 
     householdProfileHtml = `<section class="hh-dossier-box">
@@ -1670,11 +1658,10 @@ function buildPrintableReportHtml(
         </div>
       </div>
       <div class="hh-dossier-qr">
-        ${
-          qrDataUrl
-            ? `<img src="${escapeHtml(qrDataUrl)}" alt="Mã QR hồ sơ số" class="hh-qr-img" />`
-            : `<div class="hh-qr-placeholder">QR HỒ SƠ SỐ</div>`
-        }
+        ${qrDataUrl
+        ? `<img src="${escapeHtml(qrDataUrl)}" alt="Mã QR hồ sơ số" class="hh-qr-img" />`
+        : `<div class="hh-qr-placeholder">QR HỒ SƠ SỐ</div>`
+      }
         <div class="hh-qr-caption">Hồ sơ truy xuất trực tuyến</div>
         <a href="${escapeHtml(fullTraceUrl)}" target="_blank" rel="noopener noreferrer" class="hh-qr-path">${escapeHtml(safeTracePath)}</a>
       </div>
@@ -1694,34 +1681,30 @@ function buildPrintableReportHtml(
         <h2 class="part-heading">Phần II. Phụ lục hình ảnh minh chứng thực địa</h2>
         <span class="part-sub">Mỗi hình ảnh được đánh mã đối chiếu trực tiếp với dòng nhật ký tương ứng tại Phần I</span>
       </div>
-      ${
-        fieldPhotos.length > 0
-          ? `<div class="appendix-group">
-               ${
-                 invoicePhotos.length > 0
-                   ? `<h3 class="appendix-subhead">1. Hình ảnh hiện trường chăm sóc và bảo vệ thực vật (${fieldPhotos.length} ảnh)</h3>`
-                   : ""
-               }
+      ${fieldPhotos.length > 0
+        ? `<div class="appendix-group">
+               ${invoicePhotos.length > 0
+          ? `<h3 class="appendix-subhead">1. Hình ảnh hiện trường chăm sóc và bảo vệ thực vật (${fieldPhotos.length} ảnh)</h3>`
+          : ""
+        }
                <div class="evidence-grid ${gridColsClass}">
                  ${fieldPhotos.map(buildPhotoAppendixCardHtml).join("")}
                </div>
              </div>`
-          : ""
+        : ""
       }
-      ${
-        invoicePhotos.length > 0
-          ? `<div class="appendix-group">
+      ${invoicePhotos.length > 0
+        ? `<div class="appendix-group">
                <h3 class="appendix-subhead">${fieldPhotos.length > 0 ? "2." : "1."} Chứng từ và hóa đơn vật tư nông nghiệp lưu nội bộ (${invoicePhotos.length} ảnh)</h3>
                <div class="evidence-grid ${gridColsClass}">
                  ${invoicePhotos.map(buildPhotoAppendixCardHtml).join("")}
                </div>
              </div>`
-          : ""
+        : ""
       }
-      ${
-        truncatedCount > 0
-          ? `<p class="appendix-note">Ghi chú: Còn ${truncatedCount} hình ảnh bổ sung của hộ được lưu trữ nguyên bản trên hệ thống điện tử. Quét mã QR ở đầu hồ sơ để tra cứu toàn bộ ảnh độ phân giải gốc.</p>`
-          : ""
+      ${truncatedCount > 0
+        ? `<p class="appendix-note">Ghi chú: Còn ${truncatedCount} hình ảnh bổ sung của hộ được lưu trữ nguyên bản trên hệ thống điện tử. Quét mã QR ở đầu hồ sơ để tra cứu toàn bộ ảnh độ phân giải gốc.</p>`
+        : ""
       }
     </section>`;
   }
@@ -2280,10 +2263,9 @@ function buildPrintableReportHtml(
 </head>
 <body>
   <div class="print-toolbar">
-    <span class="print-toolbar-info">${
-      isHouseholdDetail
-        ? `Hồ sơ chi tiết nông hộ ${escapeHtml(hh?.code || "")}${hasPhotoAppendix ? ` kèm ${preparedPhotos.length} ảnh minh chứng` : ""}`
-        : `Báo cáo tổng hợp (${Number(data.total) || 0} bản ghi)`
+    <span class="print-toolbar-info">${isHouseholdDetail
+      ? `Hồ sơ chi tiết nông hộ ${escapeHtml(hh?.code || "")}${hasPhotoAppendix ? ` kèm ${preparedPhotos.length} ảnh minh chứng` : ""}`
+      : `Báo cáo tổng hợp (${Number(data.total) || 0} bản ghi)`
     }</span>
     <div class="print-toolbar-actions">
       <button type="button" id="report-btn-print" class="print-btn">In báo cáo / Lưu PDF</button>
@@ -2315,11 +2297,10 @@ function buildPrintableReportHtml(
             <div class="doc-title-wrap">
               <h1 class="doc-title">${escapeHtml(report.docTitle)}</h1>
               <div class="doc-meta">
-                ${
-                  hh
-                    ? `<strong>Hộ thành viên:</strong> ${escapeHtml(hh.name)} (${escapeHtml(hh.code)}) | <strong>Kỳ trích xuất:</strong> ${escapeHtml(dateRangeLabel)}`
-                    : `<strong>Phạm vi địa bàn:</strong> ${escapeHtml(meta.villageName || "Tất cả thôn / tổ")} | <strong>Kỳ báo cáo:</strong> ${escapeHtml(dateRangeLabel)}`
-                }
+                ${hh
+      ? `<strong>Hộ thành viên:</strong> ${escapeHtml(hh.name)} (${escapeHtml(hh.code)}) | <strong>Kỳ trích xuất:</strong> ${escapeHtml(dateRangeLabel)}`
+      : `<strong>Phạm vi địa bàn:</strong> ${escapeHtml(meta.villageName || "Tất cả thôn / tổ")} | <strong>Kỳ báo cáo:</strong> ${escapeHtml(dateRangeLabel)}`
+    }
               </div>
               <div class="doc-meta">${escapeHtml(report.desc)}</div>
             </div>
@@ -2327,14 +2308,13 @@ function buildPrintableReportHtml(
             ${householdProfileHtml}
             ${statsStripHtml}
 
-            ${
-              hasPhotoAppendix
-                ? `<div class="part-heading-bar">
+            ${hasPhotoAppendix
+      ? `<div class="part-heading-bar">
                      <h2 class="part-heading">Phần I. Bảng kê nhật ký và hồ sơ theo trình tự thời gian</h2>
                      <span class="part-sub">Đơn vị kiểm soát: HTX Cư Né</span>
                    </div>`
-                : ""
-            }
+      : ""
+    }
 
             <table class="data-table">
               <thead>
@@ -2348,17 +2328,15 @@ function buildPrintableReportHtml(
               </tbody>
             </table>
 
-            <div class="doc-summary">Tổng số bản ghi: ${Number(data.total) || 0}${
-              hasPhotoAppendix ? ` | Tổng số hình ảnh phụ lục: ${preparedPhotos.length}` : ""
-            }</div>
+            <div class="doc-summary">Tổng số bản ghi: ${Number(data.total) || 0}${hasPhotoAppendix ? ` | Tổng số hình ảnh phụ lục: ${preparedPhotos.length}` : ""
+    }</div>
             ${summaryModeNoteHtml}
             ${!hasPhotoAppendix ? closingBlockHtml : ""}
           </td>
         </tr>
       </tbody>
-      ${
-        hasPhotoAppendix
-          ? `<tbody class="print-layout-body print-page-break">
+      ${hasPhotoAppendix
+      ? `<tbody class="print-layout-body print-page-break">
                <tr>
                  <td class="print-layout-cell">
                    ${appendixHtml}
@@ -2366,8 +2344,8 @@ function buildPrintableReportHtml(
                  </td>
                </tr>
              </tbody>`
-          : ""
-      }
+      : ""
+    }
     </table>
   </main>
 </body>
@@ -2502,4 +2480,5 @@ export async function renderPrintableReportAsync(
 
   printHtmlViaHiddenIframe(html);
 }
+
 
