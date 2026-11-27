@@ -1,86 +1,123 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { ArrowRight } from "@/components/ui/PublicIcon";
+import { toast } from "@/components/ui/Toast";
+import { api, errorMessage } from "@/lib/api-client";
 import { homePathFor, INTRO_PATH } from "@/lib/routes";
-import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
+
+const HTX_HEAD_PHONE_DISPLAY = "0982 576 648";
+const HTX_HEAD_PHONE_TEL = "0982576648";
 
 export default function LandingFooter({ fromTrace = false }: { fromTrace?: boolean }) {
-  const router = useRouter();
   const { status, session } = useAuth();
-  const [query, setQuery] = useState("");
+  const [partnerEmail, setPartnerEmail] = useState("");
+  const [partnerNote, setPartnerNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const noteInputRef = useRef<HTMLInputElement>(null);
 
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleInquirySubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = query.trim();
-    if (trimmed) {
-      const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
-      if (tokenPathMatch?.[1] && isSafeTraceCode(tokenPathMatch[1])) {
-        router.push(`/t/${encodeURIComponent(tokenPathMatch[1])}`);
-        return;
-      }
-      if (
-        /^[A-Za-z0-9]{12,24}$/.test(trimmed) &&
-        /[a-z]/.test(trimmed) &&
-        /[A-Z0-9]/.test(trimmed) &&
-        isSafeTraceCode(trimmed)
-      ) {
-        router.push(`/t/${encodeURIComponent(trimmed)}`);
-        return;
-      }
-      const candidate = safeDecodeURIComponent(trimmed).trim();
-      if (isSafeTraceCode(candidate)) {
-        router.push(`/trace/${encodeURIComponent(candidate)}`);
-        return;
-      }
-      router.push("/trace");
+    if (submitting) return;
+
+    const cleanEmail = partnerEmail.trim();
+    const cleanNote = partnerNote.trim();
+
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      toast.error("Vui lòng nhập địa chỉ email hợp lệ của đối tác hoặc cơ quan");
       return;
     }
-    if (fromTrace) {
-      const topInput = document.querySelector<HTMLInputElement>(".sw-trace-input");
-      if (topInput) {
-        topInput.scrollIntoView({ behavior: "smooth", block: "center" });
-        topInput.focus({ preventScroll: true });
-      }
+
+    if (cleanNote.length < 5) {
+      noteInputRef.current?.focus();
+      toast.info("Vui lòng nhập tên đơn vị và nội dung liên hệ làm việc");
       return;
     }
-    router.push("/trace");
+
+    setSubmitting(true);
+    try {
+      await api.post("/public/partner-inquiries", {
+        email: cleanEmail,
+        message: cleanNote,
+      });
+      setPartnerEmail("");
+      setPartnerNote("");
+      toast.success("Đã gửi thông tin liên hệ tới Ban quản trị HTX Cư Né");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <footer className="sw-ft" aria-label="Thông tin liên hệ và điều hướng HTX Nông nghiệp Cư Né">
       <div className="sw-ft-inner">
-        {/* Cột 1: Ô tra cứu mã nhanh + bản quyền tối giản */}
+        {/* Cột 1: Hộp gửi email hợp tác đối tác / cơ quan và liên hệ trực tiếp Trưởng HTX */}
         <div className="sw-ft-col sw-ft-col-lead">
-          <form onSubmit={handleSubmit} className="sw-ft-form" role="search">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Nhập mã lô hoặc mã tem QR..."
-              aria-label="Nhập mã lô hoặc mã tem QR để tra cứu nguồn gốc"
-              className="sw-ft-input"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <button
-              type="submit"
-              className="sw-ft-submit"
-              aria-label="Tra cứu nguồn gốc"
-            >
-              <ArrowRight size={15} aria-hidden="true" />
-            </button>
+          <h3 className="sw-ft-heading">Hợp tác và liên hệ làm việc</h3>
+
+          <form
+            onSubmit={(e) => void handleInquirySubmit(e)}
+            className="sw-ft-partner-box"
+            autoComplete="off"
+          >
+            <div className="sw-ft-form">
+              <input
+                type="email"
+                inputMode="email"
+                value={partnerEmail}
+                onChange={(e) => setPartnerEmail(e.target.value)}
+                placeholder="Email đối tác, doanh nghiệp hoặc cơ quan..."
+                aria-label="Địa chỉ email của đối tác, doanh nghiệp hoặc cơ quan"
+                className="sw-ft-input"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={160}
+              />
+            </div>
+
+            <div className="sw-ft-form sw-ft-form-message">
+              <input
+                ref={noteInputRef}
+                type="text"
+                value={partnerNote}
+                onChange={(e) => setPartnerNote(e.target.value)}
+                placeholder="Đơn vị và nội dung đề xuất hợp tác, công tác..."
+                aria-label="Tên đơn vị và nội dung đề xuất hợp tác hoặc làm việc"
+                className="sw-ft-input"
+                autoComplete="off"
+                maxLength={1000}
+              />
+              <button
+                type="submit"
+                className="sw-ft-send-btn"
+                disabled={submitting}
+              >
+                {submitting ? "Đang gửi" : "Gửi tin"}
+              </button>
+            </div>
           </form>
 
-          <p className="sw-ft-copy">
-            Tra cứu nhanh mã lô hàng, mã vùng trồng và tem truy xuất QR.
-          </p>
+          <div className="sw-ft-head-contact">
+            <div className="sw-ft-head-meta">
+              <span className="sw-ft-head-role">Trưởng Hợp tác xã Cư Né</span>
+              <a href={`tel:${HTX_HEAD_PHONE_TEL}`} className="sw-ft-head-phone">
+                {HTX_HEAD_PHONE_DISPLAY}
+              </a>
+            </div>
+            <a
+              href={`tel:${HTX_HEAD_PHONE_TEL}`}
+              className="sw-ft-call-btn"
+              aria-label={`Gọi ngay Trưởng Hợp tác xã Cư Né số ${HTX_HEAD_PHONE_DISPLAY}`}
+            >
+              Gọi ngay
+            </a>
+          </div>
         </div>
 
         {/* Cột 2: Danh mục điều hướng */}
@@ -104,7 +141,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
                 </Link>
               ) : (
                 <Link href="/trace" className="sw-ft-link">
-                  <span>Tra cứu nguồn gốc QR</span>
+                  <span>Tra cứu mã</span>
                 </Link>
               )}
             </li>
