@@ -620,4 +620,39 @@ describe("đăng ký tài khoản hộ dân (/api/auth/register)", () => {
     expect((await htx.post(`/api/registrations/${active.id}/reject`)).status).toBe(404);
     expect((await login(USERS.farmerBinh)).res.status).toBe(200);
   });
+
+  it("tiếp nhận liên hệ hợp tác từ đối tác hoặc cơ quan ở chân trang và gửi thông báo cho Ban quản trị HTX", async () => {
+    const badEmail = await request(app).post("/api/public/partner-inquiries").send({
+      email: "khong-phai-email",
+      message: "Đề xuất thu mua lô sầu riêng xuất khẩu",
+    });
+    expect(badEmail.status).toBe(400);
+
+    const shortMsg = await request(app).post("/api/public/partner-inquiries").send({
+      email: "partner@ agri-export.vn",
+      message: "ngắn",
+    });
+    expect(shortMsg.status).toBe(400);
+
+    const okRes = await request(app).post("/api/public/partner-inquiries").send({
+      email: "doitac.thumua@agri-export.vn",
+      organization: "Công ty XNK Nông sản Tây Nguyên",
+      message: "Đề nghị kết nối thu mua sầu riêng VietGAP niên vụ 2026 tại xã Krông Búk.",
+    });
+    expect(okRes.status).toBe(201);
+    expect(okRes.body.ok).toBe(true);
+    expect(typeof okRes.body.id).toBe("number");
+
+    const htx = await loggedIn(USERS.htx);
+    const notifsRes = await htx.get("/api/notifications");
+    expect(notifsRes.status).toBe(200);
+    const items = notifsRes.body.data as Array<{ title: string; body: string | null }>;
+    expect(
+      items.some(
+        (n) =>
+          n.title.includes("Công ty XNK Nông sản Tây Nguyên") &&
+          (n.body ?? "").includes("doitac.thumua@agri-export.vn"),
+      ),
+    ).toBe(true);
+  });
 });

@@ -1,17 +1,34 @@
 import { Body, Controller, Get, Header, HttpCode, Ip, Param, Post, Query, Req, Res } from "@nestjs/common";
 import { SkipThrottle, Throttle } from "@nestjs/throttler";
 import { Type } from "class-transformer";
-import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsEmail, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
 import type { Request, Response } from "express";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, OptionalAuth, OptionalCurrentUser, Public } from "../auth/auth.decorators";
-import { notFound } from "../common/errors/app.exception";
+import { badRequest, notFound } from "../common/errors/app.exception";
 import { camelRow, camelRows } from "../common/sql/rows";
 import { querySystemScaleOverview } from "../common/sql/stats-sync";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { TraceDeviceGuardService } from "../common/trace-device/trace-device-guard.service";
 import { DatabaseService } from "../database/database.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { TraceabilityService } from "./traceability.service";
+
+export class CreatePartnerInquiryDto {
+  @IsEmail({}, { message: "Địa chỉ email liên hệ không hợp lệ." })
+  @MaxLength(160, { message: "Địa chỉ email tối đa 160 ký tự." })
+  email!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160, { message: "Tên đơn vị tối đa 160 ký tự." })
+  organization?: string;
+
+  @IsString()
+  @MinLength(5, { message: "Vui lòng nhập nội dung hợp tác hoặc làm việc tối thiểu 5 ký tự." })
+  @MaxLength(1000, { message: "Nội dung liên hệ tối đa 1000 ký tự." })
+  message!: string;
+}
 
 export class VerifyFieldGpsDto {
   @Type(() => Number)
@@ -73,6 +90,7 @@ export class PublicController {
     private readonly db: DatabaseService,
     private readonly traceability: TraceabilityService,
     private readonly deviceGuard: TraceDeviceGuardService,
+    private readonly notifications: NotificationsService,
   ) { }
 
   @Public()
@@ -271,6 +289,60 @@ export class PublicController {
       isBackgroundRefresh: bg === "1" || bg === "true",
       suppressTemporaryGrant: noGrant === "1" || noGrant === "true",
     });
+  }
+
+  @Public()
+  @Throttle(RateLimitTier.AUTH_FORGOT_PASSWORD)
+  @Post("partner-inquiries")
+  @Header("Cache-Control", "no-store")
+  async submitPartnerInquiry(
+    @Body() dto: CreatePartnerInquiryDto,
+    @Ip() ip: string,
+    @Req() req: Request,
+  ) {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    const cleanOrg = dto.organization
+      ? dto.organization.replace(/[\u0000-\u001F\u007F]+/g, " ").trim().slice(0, 160)
+      : null;
+    const cleanMessage = dto.message
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]+/g, " ")
+      .trim();
+
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      throw badRequest("Địa chỉ email liên hệ không hợp lệ.");
+    }
+    if (cleanMessage.length < 5) {
+      throw badRequest("Vui lòng nhập nội dung hợp tác hoặc làm việc tối thiểu 5 ký tự.");
+    }
+
+    const rawUa = req.headers["user-agent"];
+    const userAgent = typeof rawUa === "string" ? rawUa.trim().slice(0, 300) : null;
+    const safeIp = typeof ip === "string" && ip.trim() ? ip.trim().slice(0, 64) : null;
+
+    const inserted = await this.db.query<{ id: number }>(
+      `INSERT INTO partner_inquiries (sender_email, organization, message, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [cleanEmail, cleanOrg || null, cleanMessage, safeIp, userAgent],
+    );
+
+    const title = cleanOrg
+      ? `Liên hệ hợp tác từ ${cleanOrg}`
+      : `Liên hệ hợp tác từ ${cleanEmail}`;
+    const body = cleanOrg
+      ? `Đơn vị: ${cleanOrg}. Email phản hồi: ${cleanEmail}. Nội dung: ${cleanMessage}`
+      : `Email phản hồi: ${cleanEmail}. Nội dung: ${cleanMessage}`;
+
+    await this.notifications.notifyRoles(["admin", "htx_head", "htx_deputy", "htx_officer"], {
+      kind: "system",
+      title: title.slice(0, 180),
+      body: body.slice(0, 600),
+    });
+
+    return {
+      ok: true,
+      id: Number(inserted.rows[0]?.id ?? 0),
+    };
   }
 
   /** Đối chứng tọa độ GPS thực địa tại vườn khi quét Bảng QR Thửa Đất (yêu cầu Thẻ Đoàn Thẩm định hoặc tài khoản có phạm vi). */
