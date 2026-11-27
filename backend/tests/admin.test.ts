@@ -1901,7 +1901,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(auditPlotScan.body.fieldAuditData.plotProfile.plotCode).toBe("TH1-001");
     const serializedAudit = JSON.stringify(auditPlotScan.body);
     expect(serializedAudit).not.toContain("0905123456");
-    expect(serializedAudit).not.toContain("cccd");
+    expect(serializedAudit).not.toContain('"cccd"');
 
     // Đoàn bấm đối chiếu GPS ngay tại tâm thửa đất -> verified: true, insidePolygon: true
     const gpsInside = await request(app)

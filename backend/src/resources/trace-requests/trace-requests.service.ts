@@ -116,7 +116,7 @@ interface RawTraceRequestRow extends Record<string, unknown> {
   requested_tier: TraceAccessTier;
   granted_tier: TraceAccessTier | null;
   scope_mode: TraceAccessScopeMode;
-  duration_hours: number;
+  duration_hours: number | string;
   status: "pending" | "approved" | "rejected" | "revoked";
   granted_pass_token: string | null;
   expires_at: Date | string | null;
@@ -539,6 +539,7 @@ export class TraceRequestsService {
     void _omitDeviceFp;
     return {
       ...camelRow(rest),
+      durationHours: Number(row.duration_hours),
       requesterRoleLabel: row.requester_role
         ? ROLE_LABELS_VN[row.requester_role] || row.requester_role
         : null,
@@ -948,7 +949,16 @@ export class TraceRequestsService {
     ) {
       throw forbidden("Không xác định được mã vùng trồng thuộc xã quản lý để mở quyền theo vùng.");
     }
-    const durationHours = dto.durationHours && dto.durationHours > 0 ? dto.durationHours : 24;
+    const durationHours =
+      dto.durationHours && dto.durationHours > 0
+        ? Math.round(Number(dto.durationHours) * 100) / 100
+        : 24;
+    const durationLabel =
+      durationHours < 1
+        ? `${Math.round(durationHours * 60)} phút`
+        : durationHours < 24
+          ? `${Number(durationHours.toFixed(2))} tiếng`
+          : `${Number(durationHours.toFixed(2))} giờ`;
     const grantedPassToken = generateAlphaNumToken(32);
     const reviewNote = dto.note?.trim() || null;
 
@@ -959,7 +969,7 @@ export class TraceRequestsService {
            scope_mode = $3,
            duration_hours = $4,
            granted_pass_token = $5,
-           expires_at = now() + ($4::int || ' hours')::interval,
+           expires_at = now() + ($4::numeric * interval '1 hour'),
            reviewed_by = $6,
            reviewed_by_name = $7,
            reviewed_by_role = $8,
@@ -991,7 +1001,7 @@ export class TraceRequestsService {
       await this.notifications.notifyUsers([Number(updated.requester_user_id)], {
         kind: "approval",
         title: `Đã cấp quyền xem hồ sơ đánh giá (${updated.request_code})`,
-        body: `${user.fullName} (${ROLE_LABELS_VN[user.role] || user.role}) đã phê duyệt mở ${TIER_LABELS_VN[grantedTier]} trong ${durationHours} giờ cho ${kindLabel} ${targetRef}.${reviewNote ? ` Ghi chú: ${reviewNote}` : ""}`,
+        body: `${user.fullName} (${ROLE_LABELS_VN[user.role] || user.role}) đã phê duyệt mở ${TIER_LABELS_VN[grantedTier]} trong ${durationLabel} cho ${kindLabel} ${targetRef}.${reviewNote ? ` Ghi chú: ${reviewNote}` : ""}`,
         link: `/trace/${encodeURIComponent(updated.scanned_code)}`,
       });
     }
@@ -1001,7 +1011,7 @@ export class TraceRequestsService {
       {
         kind: "approval",
         title: `Đã duyệt cấp quyền QR ${updated.request_code}`,
-        body: `${user.fullName} đã mở ${TIER_LABELS_VN[grantedTier]} (${durationHours} giờ) cho đoàn "${updated.organization}" (${updated.requester_name}).`,
+        body: `${user.fullName} đã mở ${TIER_LABELS_VN[grantedTier]} (${durationLabel}) cho đoàn "${updated.organization}" (${updated.requester_name}).`,
         link: `/admin?section=system&sub=trace-requests&id=${updated.id}`,
       },
       { excludeUserId: user.id },
@@ -1012,7 +1022,7 @@ export class TraceRequestsService {
       {
         action: "Phê duyệt cấp quyền truy xuất đột xuất",
         object: updated.request_code,
-        detail: `${updated.requester_name} (${updated.organization}) - Mở ${TIER_LABELS_VN[grantedTier]}, phạm vi: ${scopeMode}, hiệu lực: ${durationHours}h`,
+        detail: `${updated.requester_name} (${updated.organization}) - Mở ${TIER_LABELS_VN[grantedTier]}, phạm vi: ${scopeMode}, hiệu lực: ${durationLabel}`,
       },
     );
 

@@ -2,6 +2,7 @@ import { Transform, Type } from "class-transformer";
 import {
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -120,8 +121,11 @@ export class ApproveTraceAccessRequestDto {
 
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: "Thời hạn cấp quyền phải là số giờ nguyên." })
-  @Min(1, { message: "Thời hạn cấp quyền tối thiểu 1 giờ." })
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 },
+    { message: "Thời hạn cấp quyền không hợp lệ." },
+  )
+  @Min(0.25, { message: "Thời hạn cấp quyền tối thiểu 15 phút." })
   @Max(336, { message: "Thời hạn cấp quyền tối đa 336 giờ (14 ngày)." })
   durationHours?: number;
 

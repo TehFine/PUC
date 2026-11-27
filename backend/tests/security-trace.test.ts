@@ -2651,7 +2651,13 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         [reqCodeB1],
       );
       const reqBId = Number(reqBRow.rows[0].id);
-      expect((await admin.post(`/api/trace-requests/${reqBId}/approve`).send({ durationHours: 2 })).status).toBe(200);
+      expect(
+        (
+          await admin
+            .post(`/api/trace-requests/${reqBId}/approve`)
+            .send({ durationHours: 0.5 })
+        ).status,
+      ).toBe(200);
 
       const warnBWhileActive = await deviceB.post("/api/public/trace-access-requests").send({
         scannedCode: qrTokens.plotA,
