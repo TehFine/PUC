@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
 import SystemAlertBanner from "@/components/ui/SystemAlertBanner";
 import { Toaster } from "@/components/ui/Toast";
+import { DockScrollCenterGuard } from "@/lib/dock-scroll";
 import { KeyboardScrollGuard } from "@/lib/keyboard-scroll";
 import { PERF_BOOTSTRAP_SCRIPT } from "@/lib/perf-bootstrap";
 import { COOP_BRAND, CORE_SEO_KEYWORDS, SITE_URL } from "@/lib/seo";
@@ -97,6 +98,7 @@ export default async function RootLayout({
       <body className={`${baiJamjuree.variable} ${baiJamjuree.className} font-sans antialiased`}>
         <NetworkStatus />
         <KeyboardScrollGuard />
+        <DockScrollCenterGuard />
         <AuthProvider>
           <SystemAlertBanner />
           {children}

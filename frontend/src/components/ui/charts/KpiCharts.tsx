@@ -217,8 +217,8 @@ export function AreaTrend({
   const effectiveHeight = isMini
     ? Math.min(height, caption ? 98 : 112)
     : isCompact
-    ? Math.min(height, caption ? 132 : 142)
-    : height;
+      ? Math.min(height, caption ? 132 : 142)
+      : height;
 
   const plotTop = padTop;
   const plotBottom = effectiveHeight - padBottom;
@@ -560,8 +560,8 @@ export function SmoothLineChart({
   const effectiveHeight = isMini
     ? Math.min(height, 108)
     : isCompact
-    ? Math.min(height, 138)
-    : height;
+      ? Math.min(height, 138)
+      : height;
 
   const padTop = isMini ? 32 : 38;
   const padBottom = isMini ? 20 : 24;
@@ -747,29 +747,53 @@ export function SmoothLineChart({
               );
             })}
 
-            {/* Nhãn trục X chia đều dưới mỗi mốc mã vùng */}
-            {pts.map((p, i) => {
-              const isOn = i === active;
-              return (
-                <text
-                  key={i}
-                  className={isOn ? "vc-x is-on" : "vc-x"}
-                  x={p.x}
-                  y={plotBottom + 16}
-                  textAnchor="middle"
-                  style={{
-                    fontSize: isMini ? 8.5 : isCompact ? 9.5 : 10.5,
-                    fontWeight: isOn ? 700 : 500,
-                    fill: isOn ? "#14372f" : "rgba(20, 55, 47, 0.52)",
-                    cursor: "pointer",
-                    letterSpacing: "-0.01em",
-                  }}
-                  onClick={() => updateHover(i)}
-                >
-                  {axisLabels[i]}
-                </text>
-              );
-            })}
+            {/* Nhãn trục X chia đều dưới mỗi mốc mã vùng (tự ẩn nhãn sát cạnh khi hẹp để không đè chữ) */}
+            {(() => {
+              const charW = isMini ? 5.0 : isCompact ? 5.5 : 6.2;
+              const labelHalfW = axisLabels.map((lbl) => (lbl.length * charW) / 2 + 3);
+              const showX = new Array<boolean>(n).fill(false);
+              if (n > 0) {
+                showX[active] = true;
+                let leftEdge = pts[active].x - labelHalfW[active];
+                for (let i = active - 1; i >= 0; i--) {
+                  if (leftEdge - (pts[i].x + labelHalfW[i]) >= 6) {
+                    showX[i] = true;
+                    leftEdge = pts[i].x - labelHalfW[i];
+                  }
+                }
+                let rightEdge = pts[active].x + labelHalfW[active];
+                for (let i = active + 1; i < n; i++) {
+                  if (pts[i].x - labelHalfW[i] - rightEdge >= 6) {
+                    showX[i] = true;
+                    rightEdge = pts[i].x + labelHalfW[i];
+                  }
+                }
+              }
+
+              return pts.map((p, i) => {
+                if (!showX[i]) return null;
+                const isOn = i === active;
+                return (
+                  <text
+                    key={i}
+                    className={isOn ? "vc-x is-on" : "vc-x"}
+                    x={p.x}
+                    y={plotBottom + 16}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: isMini ? 8.5 : isCompact ? 9.5 : 10.5,
+                      fontWeight: isOn ? 700 : 500,
+                      fill: isOn ? "#14372f" : "rgba(20, 55, 47, 0.52)",
+                      cursor: "pointer",
+                      letterSpacing: "-0.01em",
+                    }}
+                    onClick={() => updateHover(i)}
+                  >
+                    {axisLabels[i]}
+                  </text>
+                );
+              });
+            })()}
 
             {/* Vùng cảm ứng tương tác theo từng mốc */}
             {pts.map((p, i) => {

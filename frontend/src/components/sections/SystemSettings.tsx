@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   ADMIN_SYSTEM_TAB_EVENT,
@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import AccountsTab from "@/components/settings/AccountsTab";
 import { api } from "@/lib/api-client";
 import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import { useAutoCenterDock } from "@/lib/dock-scroll";
 
 const AuditLogTab = dynamic(() => import("@/components/settings/AuditLogTab"));
 const DeletionRequestsTab = dynamic(() => import("@/components/settings/DeletionRequestsTab"));
@@ -96,14 +97,7 @@ export default function SystemSettings() {
     return () => window.removeEventListener(ADMIN_SYSTEM_TAB_EVENT, handler);
   }, [selectTab]);
 
-  const tabBarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const bar = tabBarRef.current;
-    if (!bar) return;
-    const activeBtn = bar.querySelector<HTMLElement>(".tab-btn.active");
-    activeBtn?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [tab]);
+  const tabBarRef = useAutoCenterDock<HTMLDivElement>(tab);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "accounts", label: "Tài khoản" },

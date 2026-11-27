@@ -25,6 +25,7 @@ import {
   useUrlSubTab,
 } from "@/lib/back-navigation";
 import { animatePopupExit } from "@/lib/popup-motion";
+import { useAutoCenterDock } from "@/lib/dock-scroll";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
   ssr: false,
@@ -57,6 +58,7 @@ export default function Zones() {
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetBackdropRef = useRef<HTMLDivElement>(null);
   const sheetHeadRef = useRef<HTMLDivElement>(null);
+  const sheetTabsRef = useAutoCenterDock<HTMLDivElement>(sheet ?? "");
   const backdropDownRef = useRef(false);
   const isClosingSheetRef = useRef(false);
   const features = useMemo(() => plots?.features ?? [], [plots]);
@@ -243,7 +245,7 @@ export default function Zones() {
             </div>
 
             {sheet && (
-              <div className="sheet-tabs" role="tablist" aria-label="Nội dung bảng điều khiển">
+              <div ref={sheetTabsRef} className="sheet-tabs" role="tablist" aria-label="Nội dung bảng điều khiển">
                 <button
                   type="button"
                   role="tab"

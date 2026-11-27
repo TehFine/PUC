@@ -11,6 +11,7 @@ import { useDebounced } from "@/components/admin/shared/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import { ProgressiveListFooter, useProgressiveCount } from "@/components/portal/shared/controls";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import { useAutoCenterDock } from "@/lib/dock-scroll";
 
 const FertilizerFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/FertilizerFormModal")), { ssr: false });
 const PesticideFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/PesticideFormModal")), { ssr: false });
@@ -370,10 +371,11 @@ export default function Catalog() {
 
   const varProgressive = useProgressiveCount(shownVarieties.length, 16, 16, `${debouncedVarQ}|${varCategory}`);
   const visibleVarieties = shownVarieties.slice(0, varProgressive.visibleCount);
+  const catalogTabBarRef = useAutoCenterDock<HTMLDivElement>(tab);
 
   return (
     <div id="section-catalog" className="admin-catalog-section">
-      <div className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
+      <div ref={catalogTabBarRef} className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
         {[
           { id: "protocol", label: "Quy trình 2026-2027" },
           { id: "pesticide", label: "Thuốc BVTV" },
@@ -483,8 +485,8 @@ export default function Catalog() {
                     p.status === "allowed"
                       ? "pt-pest-status-allowed"
                       : p.status === "banned"
-                      ? "pt-pest-status-banned"
-                      : "pt-pest-status-restricted";
+                        ? "pt-pest-status-banned"
+                        : "pt-pest-status-restricted";
 
                   return (
                     <article
@@ -688,13 +690,12 @@ export default function Catalog() {
                         <div className="pt-pest-card-top-row">
                           <h3 className="pt-pest-card-name">{f.name}</h3>
                           <span
-                            className={`pt-pest-mini-status ${
-                              isEncouraged
-                                ? "pt-pest-status-allowed"
-                                : isWarning
+                            className={`pt-pest-mini-status ${isEncouraged
+                              ? "pt-pest-status-allowed"
+                              : isWarning
                                 ? "pt-pest-status-banned"
                                 : "pt-pest-status-restricted"
-                            }`}
+                              }`}
                           >
                             {st.label}
                           </span>

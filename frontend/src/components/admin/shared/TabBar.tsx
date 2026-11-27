@@ -1,5 +1,7 @@
 "use client";
 
+import { useAutoCenterDock } from "@/lib/dock-scroll";
+
 export interface TabItem<T extends string> {
   id: T;
   label: string;
@@ -7,7 +9,7 @@ export interface TabItem<T extends string> {
   pendingBadge?: number | null;
 }
 
-/** Thanh tab dùng class `.tab-bar` / `.tab-btn`. */
+/** Thanh tab dùng class `.tab-bar` / `.tab-btn`, tự động đưa nút đang chọn ra giữa khi cuộn ngang. */
 export default function TabBar<T extends string>({
   tabs,
   active,
@@ -17,8 +19,10 @@ export default function TabBar<T extends string>({
   active: T;
   onChange: (id: T) => void;
 }) {
+  const barRef = useAutoCenterDock<HTMLDivElement>(active);
+
   return (
-    <div className="tab-bar" role="tablist">
+    <div ref={barRef} className="tab-bar" role="tablist">
       {tabs.map(({ id, label, pendingBadge }) => (
         <button
           key={id}

@@ -30,6 +30,7 @@ import {
   usePersistedState,
   useUrlSubTab,
 } from "@/lib/back-navigation";
+import { useAutoCenterDock } from "@/lib/dock-scroll";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -177,6 +178,7 @@ export default function Harvest() {
   const [viewingTraceLogs, setViewingTraceLogs] = usePersistedState("admin:harvest:trace-logs", false);
   const [viewingPlotQuotas, setViewingPlotQuotas] = usePersistedState("admin:harvest:plot-quotas", false);
   const [viewingFieldPasses, setViewingFieldPasses] = usePersistedState("admin:harvest:field-passes", false);
+  const harvestTabBarRef = useAutoCenterDock<HTMLDivElement>(tab);
 
   // 2. Dự báo & tính lịch thu hoạch từ nhật ký chăm sóc
   const [planQ, setPlanQ] = useState("");
@@ -440,7 +442,7 @@ export default function Harvest() {
       </section>
 
       {/* Thanh chuyển tab quy trình chuỗi liên kết */}
-      <div className="tab-bar" style={{ marginTop: 20, marginBottom: 16 }}>
+      <div ref={harvestTabBarRef} className="tab-bar" role="tablist" style={{ marginTop: 20, marginBottom: 16 }}>
         <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => selectTab("lots")}>
           Lô thu hoạch
         </button>
@@ -970,19 +972,15 @@ export default function Harvest() {
                   </tr>
                 </thead>
                 <tbody>
-                  {growingZones.loading ? (
-                    <tr>
-                      <td colSpan={canUpdateHarvest ? 7 : 6} className="empty-state">
-                        Đang tải danh sách mã vùng trồng…
-                      </td>
-                    </tr>
-                  ) : zoneRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={canUpdateHarvest ? 7 : 6} className="empty-state">
-                        Chưa có dữ liệu mã số vùng trồng.
-                      </td>
-                    </tr>
-                  ) : (
+                  <ListStatusRow
+                    colSpan={canUpdateHarvest ? 7 : 6}
+                    loading={growingZones.loading}
+                    error={growingZones.error}
+                    empty={!growingZones.loading && !growingZones.error && zoneRows.length === 0}
+                    emptyText="Chưa có dữ liệu mã số vùng trồng."
+                  />
+                  {!growingZones.loading &&
+                    !growingZones.error &&
                     zoneRows.map((z) => (
                       <tr key={z.code}>
                         <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#166534" }}>{z.code}</td>
@@ -1045,8 +1043,7 @@ export default function Harvest() {
                           </td>
                         )}
                       </tr>
-                    ))
-                  )}
+                    ))}
                 </tbody>
               </table>
             </div>

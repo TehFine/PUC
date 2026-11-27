@@ -374,25 +374,23 @@ export default function InsightLineChart({
     return `${curvePath} L${pts[pts.length - 1].x.toFixed(2)},${plotBottom.toFixed(2)} L${pts[0].x.toFixed(2)},${plotBottom.toFixed(2)} Z`;
   }, [curvePath, pts, plotBottom]);
 
-  // Tính nhãn trục hoành không chồng lấn khi hiển thị 14 hoặc 30 ngày
+  // Tính nhãn trục hoành phân bố đều và không chồng lấn trên cả Laptop và Mobile
   const visibleXIndices = useMemo(() => {
     const visible = new Set<number>();
-    if (n <= 8 || stepX <= 0) {
+    if (n <= 0) return visible;
+    if (n === 1 || stepX <= 0) {
+      visible.add(0);
+      return visible;
+    }
+    const minGapPx = n <= 7 ? (isMobile ? 38 : 46) : isMobile ? 48 : 58;
+    if (stepX >= minGapPx) {
       for (let i = 0; i < n; i++) visible.add(i);
       return visible;
     }
-    const minGapPx = isMobile ? 44 : 54;
-    const stride = Math.max(1, Math.ceil(minGapPx / stepX));
-    // Căn nhịp từ ngày cuối (Hôm nay) lùi về đầu để mốc Hôm nay luôn hiển thị rõ
-    for (let i = n - 1; i >= 0; i -= stride) {
-      visible.add(i);
-    }
-    visible.add(0);
-    // Nếu điểm đầu và điểm kế tiếp quá sát nhau thì ẩn điểm kế tiếp để giữ mốc đầu + mốc cuối
-    for (const idx of Array.from(visible)) {
-      if (idx !== 0 && idx !== n - 1 && idx * stepX < minGapPx * 0.72) {
-        visible.delete(idx);
-      }
+    const plotSpan = stepX * (n - 1);
+    const intervals = Math.max(1, Math.min(n - 1, Math.floor(plotSpan / minGapPx)));
+    for (let k = 0; k <= intervals; k++) {
+      visible.add(Math.round((k * (n - 1)) / intervals));
     }
     return visible;
   }, [n, stepX, isMobile]);
@@ -666,28 +664,35 @@ export default function InsightLineChart({
             <circle cx={activePoint.x} cy={pinY} r={8.5} fill="#ffffff" className="dash-insight-pin" />
             <circle cx={activePoint.x} cy={pinY} r={6.5} fill={`url(#${uid}-dot)`} className="dash-insight-pin" />
 
-            {/* Nhãn ngày tháng trục hoành */}
-            {data.map((pt, i) => {
-              const isSelected = i === activeIdx;
-              if (!visibleXIndices.has(i) && !isSelected) return null;
-              // Khi đang trỏ vào ngày không nằm trên nhịp chia đều, tạm ẩn nhãn chia đều quá sát cạnh bên để không đè chữ
-              if (!isSelected && hoverIdx !== null && n > 8) {
-                const distPx = Math.abs((pts[i]?.x ?? 0) - activePoint.x);
-                if (distPx < (isMobile ? 34 : 40)) return null;
-              }
-              const x = pts[i]?.x ?? plotLeft;
-              return (
-                <text
-                  key={pt.dateIso ?? `${pt.label}-${i}`}
-                  x={x}
-                  y={plotBottom + (isMobile ? 22 : 25)}
-                  textAnchor="middle"
-                  className={`dash-insight-x-label${isSelected ? " is-active" : ""}`}
-                >
-                  {pt.label}
-                </text>
-              );
-            })}
+            {/* Nhãn ngày tháng trục hoành (luôn tránh đè chữ tại cả điểm mặc định lẫn điểm đang trỏ) */}
+            {(() => {
+              const halfLabelW = isMobile ? 17 : 19;
+              const minX = gridLeft + halfLabelW;
+              const maxX = Math.max(minX, width - (isMobile ? 2 : 4) - halfLabelW);
+              const clampX = (rawX: number) => Math.min(Math.max(rawX, minX), maxX);
+              const activeLabelX = clampX(activePoint.x);
+              const minActiveClearance = isMobile ? 40 : 46;
+
+              return data.map((pt, i) => {
+                const isSelected = i === activeIdx;
+                if (!visibleXIndices.has(i) && !isSelected) return null;
+                const x = clampX(pts[i]?.x ?? plotLeft);
+                if (!isSelected && Math.abs(x - activeLabelX) < minActiveClearance) {
+                  return null;
+                }
+                return (
+                  <text
+                    key={pt.dateIso ?? `${pt.label}-${i}`}
+                    x={x}
+                    y={plotBottom + (isMobile ? 22 : 25)}
+                    textAnchor="middle"
+                    className={`dash-insight-x-label${isSelected ? " is-active" : ""}`}
+                  >
+                    {pt.label}
+                  </text>
+                );
+              });
+            })()}
           </svg>
 
           {/* Hộp chú thích nền đen có mũi nhọn trỏ vào nút tròn */}
