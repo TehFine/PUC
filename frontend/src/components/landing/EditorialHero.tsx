@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { toast } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/constants/roles";
 import {
   consumeBackLayerForInPageTarget,
@@ -559,6 +560,7 @@ export default function EditorialHero({
                   className="eh-init-link eh-init-logout-btn"
                   tabIndex={showStickyHeader ? -1 : 0}
                   onClick={() => {
+                    toast.exit("Đã đăng xuất");
                     void logout();
                   }}
                 >
@@ -600,7 +602,7 @@ export default function EditorialHero({
                 className="eh-init-link"
                 tabIndex={showStickyHeader ? -1 : 0}
               >
-                Tra cứu QR
+                Tra cứu mã
               </Link>
               {authenticated ? (
                 <Link
@@ -694,7 +696,7 @@ export default function EditorialHero({
               className="eh-sticky-action"
               tabIndex={showStickyHeader ? 0 : -1}
             >
-              Tra cứu QR
+              Tra cứu mã
             </Link>
             <span className="eh-sticky-sep" aria-hidden="true" />
             {authenticated ? (
@@ -712,6 +714,7 @@ export default function EditorialHero({
                   className="eh-sticky-btn"
                   tabIndex={showStickyHeader ? 0 : -1}
                   onClick={() => {
+                    toast.exit("Đã đăng xuất");
                     void logout();
                   }}
                 >
@@ -824,7 +827,7 @@ export default function EditorialHero({
                   dismissDrawerForRouteChange();
                 }}
               >
-                <span>Tra cứu nguồn gốc QR</span>
+                <span>Tra cứu mã</span>
               </Link>
             </div>
           </nav>
@@ -867,6 +870,7 @@ export default function EditorialHero({
                   onClick={(e) => {
                     e.stopPropagation();
                     dismissDrawerForRouteChange();
+                    toast.exit("Đã đăng xuất");
                     void logout();
                   }}
                 >

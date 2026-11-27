@@ -130,7 +130,7 @@ const COPY: Record<
     cancelBtn: "Hủy",
     submitBtn: "Gửi yêu cầu",
     submittingBtn: "Đang gửi...",
-    headContactLabel: "Liên hệ Trưởng Hợp tác xã:",
+    headContactLabel: "Liên hệ Trưởng HTX:",
     errInvalidName: "Vui lòng nhập họ tên người đại diện hợp lệ (ít nhất 2 chữ cái, không chứa ký tự lạ).",
     errInvalidPhone: "Số điện thoại liên hệ phải gồm đúng 10 chữ số và bắt đầu bằng số 0.",
     errInvalidOrg: "Vui lòng nhập tên đơn vị công tác rõ ràng (ít nhất 2 chữ cái, không chứa ký tự lạ).",
@@ -798,9 +798,7 @@ export default function TraceAccessRequestBanner({
             </div>
 
             <div className="tr-uac-contact">
-              <span className="tr-uac-contact-text">
-                {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
-              </span>
+              <span className="tr-uac-contact-text">{c.headContactLabel}</span>
               <a href="tel:0982576648" className="tr-uac-contact-tel">
                 0982576648
               </a>
@@ -831,9 +829,7 @@ export default function TraceAccessRequestBanner({
             )}
 
             <div className="tr-uac-contact">
-              <span className="tr-uac-contact-text">
-                {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
-              </span>
+              <span className="tr-uac-contact-text">{c.headContactLabel}</span>
               <a href="tel:0982576648" className="tr-uac-contact-tel">
                 0982576648
               </a>
@@ -1000,9 +996,7 @@ export default function TraceAccessRequestBanner({
               </div>
 
               <div className="tr-req-modal-contact">
-                <span className="tr-uac-contact-text">
-                  {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
-                </span>
+                <span className="tr-uac-contact-text">{c.headContactLabel}</span>
                 <a href="tel:0982576648" className="tr-uac-contact-tel">
                   0982576648
                 </a>

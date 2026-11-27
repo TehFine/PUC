@@ -50,6 +50,23 @@ const SCOPE_LABELS: Record<TraceAccessScopeMode, string> = {
   coop: "Toàn bộ lô và thửa HTX",
 };
 
+const TRACE_DURATION_OPTIONS = [
+  { value: "0.25", label: "15 phút" },
+  { value: "0.5", label: "30 phút" },
+  { value: "1", label: "1 tiếng" },
+  { value: "2", label: "2 tiếng" },
+  { value: "3", label: "3 tiếng" },
+  { value: "4", label: "4 tiếng" },
+  { value: "6", label: "6 tiếng" },
+  { value: "8", label: "8 tiếng" },
+  { value: "12", label: "12 tiếng" },
+  { value: "24", label: "24 giờ (1 ngày)" },
+  { value: "48", label: "48 giờ (2 ngày)" },
+  { value: "72", label: "72 giờ (3 ngày)" },
+  { value: "168", label: "7 ngày (168 giờ)" },
+  { value: "336", label: "14 ngày (336 giờ)" },
+];
+
 function formatDateTimeVn(isoOrRaw: string | null | undefined): string {
   if (!isoOrRaw) return "-";
   const d = new Date(isoOrRaw);
@@ -184,7 +201,7 @@ export default function TraceAccessRequestsTab({
           : "record"
         : row.scopeMode ?? (row.pucCode ? "zone" : "record");
     setScopeMode(defaultScope);
-    setDurationHours(String(row.durationHours || 24));
+    setDurationHours(String(Number(row.durationHours || 24)));
     setReviewNote("");
     setNoteError(null);
     setConfirmingRevoke(false);
@@ -210,8 +227,11 @@ export default function TraceAccessRequestsTab({
   };
 
   const approveMut = useMutation(async (req: TraceAccessRequestRecord) => {
-    const parsedHours = Math.round(Number(durationHours));
-    const safeHours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 336 ? parsedHours : 24;
+    const parsedHours = Math.round(Number(durationHours) * 100) / 100;
+    const safeHours =
+      Number.isFinite(parsedHours) && parsedHours >= 0.25 && parsedHours <= 336
+        ? parsedHours
+        : 24;
     return api.post(`/trace-requests/${req.id}/approve`, {
       grantedTier,
       scopeMode,
@@ -585,13 +605,7 @@ export default function TraceAccessRequestsTab({
                     label="Thời hạn"
                     value={durationHours}
                     onChange={setDurationHours}
-                    options={[
-                      { value: "4", label: "4 giờ" },
-                      { value: "12", label: "12 giờ" },
-                      { value: "24", label: "24 giờ" },
-                      { value: "48", label: "48 giờ" },
-                      { value: "72", label: "72 giờ" },
-                    ]}
+                    options={TRACE_DURATION_OPTIONS}
                   />
                 </div>
 

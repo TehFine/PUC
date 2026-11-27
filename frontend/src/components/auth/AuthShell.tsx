@@ -174,7 +174,7 @@ export default function AuthShell({
               Trang giới thiệu
             </Link>
             <Link href="/trace" className="auth-top-link is-trace">
-              Tra cứu QR
+              Tra cứu mã
             </Link>
             {!hideSwitch && (
               <>
@@ -255,28 +255,21 @@ export default function AuthShell({
       {/* ─── Chân trang tối giản màu nền đá #f3f2ee đồng bộ Landing Page ─── */}
       <footer className="auth-foot">
         <div className="auth-foot-inner">
-          <div className="auth-foot-meta">
-            <p className="auth-foot-copy">
-              © 2026 HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
-            </p>
-            <span className="auth-foot-meta-sep" aria-hidden="true" />
-            <p className="auth-foot-credit">
-              <span>Thiết kế và phát triển: Đặng Văn Thế</span>
-              <span className="auth-foot-credit-sep" aria-hidden="true" />
-              <a href="tel:0366663778" className="auth-foot-credit-tel">
-                0366 663 778
-              </a>
-            </p>
+          <div className="auth-foot-trace">
+            <Link href="/trace" className="auth-foot-trace-link">
+              Tra cứu mã
+            </Link>
           </div>
-          <nav className="auth-foot-links" aria-label="Liên kết chân trang">
-            <Link href={INTRO_PATH} className="auth-foot-link">
-              Trang giới thiệu
-            </Link>
-            <span className="auth-foot-dot" aria-hidden="true" />
-            <Link href="/trace" className="auth-foot-link">
-              Tra cứu QR
-            </Link>
-          </nav>
+          <p className="auth-foot-copy">
+            © 2026 HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
+          </p>
+          <p className="auth-foot-credit">
+            <span>Thiết kế và phát triển: Đặng Văn Thế</span>
+            <span className="auth-foot-credit-sep" aria-hidden="true" />
+            <a href="tel:0366663778" className="auth-foot-credit-tel">
+              0366 663 778
+            </a>
+          </p>
         </div>
       </footer>
     </div>

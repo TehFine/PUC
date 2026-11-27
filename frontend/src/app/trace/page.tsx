@@ -523,7 +523,6 @@ export default function TraceLookupPage() {
           <header className="sw-grid sw-sec-head">
             <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
             <div className="sw-cell sw-col-2-3 sw-head-main">
-              <span className="sw-sec-index">01 / Phân quyền bảo mật</span>
               <h2 id="tieuchuan-title" className="sw-sec-title">
                 Ba cấp độ khi quét cùng một mã QR
               </h2>

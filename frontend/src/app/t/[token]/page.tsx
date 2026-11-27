@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import TraceView from "@/app/trace/[code]/TraceView";
 
 export async function generateMetadata({
@@ -34,25 +35,7 @@ async function DynamicMarker() {
 
 export default function AntiCounterfeitQrTokenPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          style={{
-            minHeight: "100dvh",
-            background: "#fafaf9",
-            textAlign: "center",
-            padding: "96px 20px",
-            color: "#666662",
-            fontSize: 14.5,
-            fontWeight: 500,
-            fontFamily:
-              'var(--font-bai-jamjuree), "Bai Jamjuree", "PingFang SC", "Microsoft YaHei", Arial, Helvetica, sans-serif',
-          }}
-        >
-          Đang tải hồ sơ truy xuất nguồn gốc... / Loading traceability dossier... / 正在加载溯源核验档案...
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton label="Đang tải hồ sơ truy xuất nguồn gốc…" />}>
       <DynamicMarker />
       <TraceView />
     </Suspense>

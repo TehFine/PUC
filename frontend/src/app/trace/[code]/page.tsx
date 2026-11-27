@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
+import { PageSkeleton } from "@/components/ui/Skeleton";
 import { safeDecodeURIComponent } from "@/utils/url-safety";
 import { getTraceLoadingLabel, inferTraceKindFromCode } from "./trace-i18n";
 import TraceView from "./TraceView";
@@ -41,23 +42,7 @@ async function DynamicMarker() {
 
 export default function TracePage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          style={{
-            minHeight: "100dvh",
-            background: "#fafaf9",
-            textAlign: "center",
-            padding: "96px 20px",
-            color: "#666662",
-            fontSize: 14.5,
-            fontWeight: 500,
-          }}
-        >
-          {getTraceLoadingLabel("generic", "vi")}
-        </div>
-      }
-    >
+    <Suspense fallback={<PageSkeleton label={getTraceLoadingLabel("generic", "vi")} />}>
       <DynamicMarker />
       <TraceView />
     </Suspense>

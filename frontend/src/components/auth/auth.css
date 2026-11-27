@@ -1,7 +1,7 @@
 /* ==========================================================================
    CỔNG XÁC THỰC THÀNH VIÊN (/login, /register, /forgot-password)
    Phong cách Lưới Kiến Trúc Thụy Sĩ Tối Giản (Swiss Architectural Editorial)
-   Đồng bộ 100% hệ quy chiếu thị giác với Landing Page & Cổng Tra cứu QR
+   Đồng bộ 100% hệ quy chiếu thị giác với Landing Page & Cổng Tra cứu mã
    ========================================================================== */
 
 .auth-root {
@@ -1274,19 +1274,34 @@ select.auth-input {
 }
 
 .auth-foot-inner {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px 24px;
   flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.auth-foot-meta {
-  display: flex;
+.auth-foot-trace {
+  display: none;
+}
+
+.auth-foot-trace-link {
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.006em;
+  color: #1f1f1d;
+  white-space: nowrap;
+  transition: opacity 0.16s ease;
+}
+
+.auth-foot-trace-link:hover {
+  opacity: 0.68;
 }
 
 .auth-foot-copy {
@@ -1299,7 +1314,6 @@ select.auth-input {
   font-variant-numeric: tabular-nums;
 }
 
-.auth-foot-meta-sep,
 .auth-foot-credit-sep {
   width: 1px;
   height: 10px;
@@ -1333,37 +1347,6 @@ select.auth-input {
   color: #121212;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.auth-foot-links {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  column-gap: 12px;
-  row-gap: 8px;
-  flex-wrap: wrap;
-}
-
-.auth-foot-dot {
-  width: 8px;
-  height: 1px;
-  border-radius: 0;
-  background: #9c9b94;
-  flex-shrink: 0;
-}
-
-.auth-foot-link {
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: -0.006em;
-  color: #2b2b28;
-  white-space: nowrap;
-  transition: opacity 0.16s ease;
-}
-
-.auth-foot-link:hover {
-  opacity: 0.65;
 }
 
 /* ─── Tương thích Laptop chiều cao thấp (1366×768 / 125% Windows) ─── */
@@ -1420,6 +1403,16 @@ select.auth-input {
   .auth-top-link {
     font-size: 14px;
     color: var(--au-ink);
+  }
+
+  .auth-foot-trace {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #dfddd5;
   }
 
   .auth-grid {
@@ -1533,33 +1526,19 @@ select.auth-input {
   }
 
   .auth-foot {
-    padding: 26px var(--au-edge-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    padding: 20px var(--au-edge-x) calc(24px + env(safe-area-inset-bottom, 0px));
   }
 
   .auth-foot-inner {
-    flex-direction: column-reverse;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 14px;
-  }
-
-  .auth-foot-links {
-    width: 100%;
-    padding-bottom: 14px;
-    border-bottom: 1px solid #dfddd5;
-    column-gap: 10px;
-    row-gap: 8px;
-  }
-
-  .auth-foot-meta {
     flex-direction: column;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
   }
 
-  .auth-foot-meta-sep {
-    display: none;
+  .auth-foot-trace {
+    margin-bottom: 6px;
   }
 
   .auth-foot-copy,
@@ -1626,20 +1605,21 @@ select.auth-input {
     --au-edge-x: 10px;
   }
 
+  .auth-topbar-actions {
+    gap: 10px;
+  }
+
   .auth-top-link {
+    font-size: 12.5px;
+  }
+
+  .auth-top-cta {
+    padding: 0 10px;
     font-size: 12.5px;
   }
 
   .auth-top-sep {
     display: none;
-  }
-
-  .auth-foot-links {
-    column-gap: 7px;
-  }
-
-  .auth-foot-link {
-    font-size: 11.5px;
   }
 
   .auth-mob-spread-top {

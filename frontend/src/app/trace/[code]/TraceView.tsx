@@ -2583,7 +2583,7 @@ export default function TraceView() {
     setSuppressTempGrant(true);
     setAuditPass(null);
     setSelectedView(null);
-    toast.success(
+    toast.exit(
       lang === "en"
         ? "Audit pass cleared"
         : lang === "zh"
@@ -3200,6 +3200,13 @@ export default function TraceView() {
         // Bỏ qua lỗi xóa sessionStorage
       }
     }
+    toast.exit(
+      lang === "en"
+        ? "Signed out"
+        : lang === "zh"
+          ? "已退出登录"
+          : "Đã đăng xuất",
+    );
     try {
       await logout();
     } catch {
@@ -3289,8 +3296,7 @@ export default function TraceView() {
                   ? "联系合作社社长："
                   : lang === "en"
                     ? "Contact Cooperative Head:"
-                    : "Liên hệ Trưởng Hợp tác xã:"}{" "}
-                <strong>Trần Đặng Sáu</strong>,
+                    : "Liên hệ Trưởng HTX:"}
               </span>
               <a href="tel:0982576648" className="tr-uac-contact-tel">
                 0982576648
