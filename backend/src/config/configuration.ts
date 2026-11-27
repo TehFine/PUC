@@ -195,6 +195,22 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  // Ở môi trường phát triển cục bộ, khi cổng 3000 bận thì `next dev` tự động nhảy sang 3001..3010;
+  // bổ sung sẵn dải cổng loopback cục bộ để OriginGuard không chặn nhầm trình duyệt trên máy dev.
+  if (
+    env.NODE_ENV === NodeEnv.Development &&
+    corsOrigins.some((origin) => /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin))
+  ) {
+    for (let devPort = 3000; devPort <= 3010; devPort += 1) {
+      for (const devHost of ["localhost", "127.0.0.1"]) {
+        const candidate = `http://${devHost}:${devPort}`;
+        if (!corsOrigins.includes(candidate)) {
+          corsOrigins.push(candidate);
+        }
+      }
+    }
+  }
+
   const isLocalDb = (() => {
     try {
       const host = new URL(env.DATABASE_URL).hostname.toLowerCase();
