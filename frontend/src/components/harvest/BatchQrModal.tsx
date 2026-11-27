@@ -17,7 +17,7 @@ import {
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
-import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
+import { buildExcelXlsxBlob, triggerBlobDownload } from "@/utils/download";
 
 export interface BatchQrLot {
   id?: number;
@@ -247,7 +247,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const fruitCount = items.filter((it) => it.itemType === "fruit").length;
   const filteredItems = items.filter((it) => it.itemType === itemType);
 
-  const handleExportCsv = () => {
+  const handleExportExcel = () => {
     if (filteredItems.length === 0) return;
     const baseUrl = getPublicBaseUrl();
     const headers = [
@@ -279,9 +279,9 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         `${baseUrl}/t/${encodeURIComponent(tokenOrSerial)}`,
       ];
     });
-    const blob = buildUtf8CsvBlob(headers, rows);
-    triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.csv`);
-    toast.success("Đã tải tệp CSV danh sách tem");
+    const blob = buildExcelXlsxBlob(headers, rows, "Danh sách tem");
+    triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.xlsx`);
+    toast.success("Đã xuất Excel danh sách tem");
   };
 
   const handlePrint = () => {
@@ -386,10 +386,10 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               <button
                 type="button"
                 className="bqr-btn bqr-btn-secondary"
-                onClick={handleExportCsv}
+                onClick={handleExportExcel}
                 disabled={filteredItems.length === 0}
               >
-                Xuất CSV
+                Xuất Excel
               </button>
               <button
                 type="button"
@@ -806,22 +806,23 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         .batch-qr-type-switch {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 4px;
-          background: #f3f5f4;
-          border: 1px solid #e2e5e3;
+          gap: 2px;
+          background: #ededec;
+          border: none;
           padding: 3px;
-          border-radius: 6px;
+          border-radius: 8px;
         }
 
         .type-btn {
-          height: 34px;
+          height: 36px;
           padding: 0 10px;
           font-size: 13px;
           font-weight: 600;
-          border: 1px solid transparent;
+          border: none;
+          outline: none;
           background: transparent;
-          color: #5f6d66;
-          border-radius: 4px;
+          color: #6e7471;
+          border-radius: 5.5px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
@@ -829,17 +830,20 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           text-align: center;
           white-space: nowrap;
           font-variant-numeric: tabular-nums;
-          transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+          box-shadow: none;
+          transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
         }
 
         .type-btn:hover:not(.active) {
+          background: rgba(255, 255, 255, 0.5);
           color: #14372f;
         }
 
         .type-btn.active {
           background: #ffffff;
           color: #14372f;
-          border-color: #d4d4d2;
+          box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+                      0 1px 2px rgba(15, 23, 42, 0.06);
         }
 
         .batch-qr-actions {

@@ -13,7 +13,7 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
 import { describeFieldEvidence, FieldTrustBadge } from "@/components/portal/shared/FieldEvidenceCapture";
-import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
+import { buildExcelXlsxBlob, triggerBlobDownload } from "@/utils/download";
 import { formatDate, formatDateTime, formatDiaryEditor } from "@/utils/format";
 import {
   openPrintProgressWindow,
@@ -520,7 +520,7 @@ export function HouseholdLogbookExportModal({
   const [to, setTo] = useState(todayIso());
   const [includePhotos, setIncludePhotos] = useState(true);
   const [includeInvoices, setIncludeInvoices] = useState(false);
-  const [busyMode, setBusyMode] = useState<"PDF" | "CSV" | null>(null);
+  const [busyMode, setBusyMode] = useState<"PDF" | "EXCEL" | null>(null);
   const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -581,7 +581,7 @@ export function HouseholdLogbookExportModal({
   const effectiveFrom = timeScope === "range" ? from : "";
   const effectiveTo = timeScope === "range" ? to : "";
 
-  const handleExport = async (mode: "PDF" | "CSV") => {
+  const handleExport = async (mode: "PDF" | "EXCEL") => {
     if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
       setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
       return;
@@ -641,9 +641,9 @@ export function HouseholdLogbookExportModal({
       } else {
         const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
         const dateSuffix = effectiveTo || todayIso();
-        const blob = buildUtf8CsvBlob(data.headers, data.rows);
-        triggerBlobDownload(blob, `so-nhat-ky${hhSuffix}-${dateSuffix}.csv`);
-        toast.success(`Đã tải CSV sổ nhật ký (${data.total} bản ghi)`);
+        const blob = buildExcelXlsxBlob(data.headers, data.rows, "Sổ nhật ký hộ dân");
+        triggerBlobDownload(blob, `so-nhat-ky${hhSuffix}-${dateSuffix}.xlsx`);
+        toast.success(`Đã xuất Excel sổ nhật ký (${data.total} bản ghi)`);
         onClose();
       }
     } catch (err) {
@@ -677,10 +677,10 @@ export function HouseholdLogbookExportModal({
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => void handleExport("CSV")}
+            onClick={() => void handleExport("EXCEL")}
             disabled={busyMode !== null}
           >
-            {busyMode === "CSV" ? "Đang tải…" : "Tải CSV"}
+            {busyMode === "EXCEL" ? "Đang xuất…" : "Xuất Excel"}
           </button>
           <button
             type="button"

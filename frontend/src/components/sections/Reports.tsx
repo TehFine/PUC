@@ -12,7 +12,7 @@ import { api, errorMessage } from "@/lib/api-client";
 import { usePersistedRecordSelection, usePersistedState } from "@/lib/back-navigation";
 import type { HouseholdDto } from "@/types/api";
 import type { VillageRecord } from "@/types/catalog";
-import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
+import { buildExcelXlsxBlob, triggerBlobDownload } from "@/utils/download";
 import {
   openPrintProgressWindow,
   renderPrintableReportAsync,
@@ -37,7 +37,7 @@ const REPORTS: ReportSpec[] = [
     title: "Sổ nhật ký hộ dân",
     docTitle: "Sổ nhật ký canh tác điện tử nông hộ (VietGAP / GACC)",
     desc: "Tổng hợp sổ nhật ký theo hộ kèm phụ lục ảnh thực địa chuẩn A4.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
     supportsPhotoAppendix: true,
   },
   {
@@ -46,7 +46,7 @@ const REPORTS: ReportSpec[] = [
     title: "Hộ vùng trồng",
     docTitle: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
     desc: "Danh sách chủ hộ, số thửa, diện tích và đường dẫn hồ sơ số.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
   },
   {
     id: "journal",
@@ -54,7 +54,7 @@ const REPORTS: ReportSpec[] = [
     title: "Nhật ký canh tác",
     docTitle: "Báo cáo nhật ký canh tác điện tử",
     desc: "Lịch sử chăm sóc, bón phân, tưới nước và trạng thái xác minh.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
     supportsPhotoAppendix: true,
   },
   {
@@ -63,7 +63,7 @@ const REPORTS: ReportSpec[] = [
     title: "Nhật ký phun thuốc",
     docTitle: "Báo cáo nhật ký phun thuốc BVTV",
     desc: "Thuốc sử dụng, liều pha, ngày cách ly và minh chứng tại vườn.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
     supportsPhotoAppendix: true,
   },
   {
@@ -72,7 +72,7 @@ const REPORTS: ReportSpec[] = [
     title: "Kiểm nghiệm mẫu",
     docTitle: "Báo cáo kết quả kiểm nghiệm an toàn thực phẩm",
     desc: "Kết quả tồn dư BVTV, Cadimi và Vàng O.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
   },
   {
     id: "violations",
@@ -80,7 +80,7 @@ const REPORTS: ReportSpec[] = [
     title: "Vi phạm quy trình",
     docTitle: "Báo cáo vi phạm và kết quả khắc phục",
     desc: "Cảnh báo sai phạm, phản hồi hộ dân và ảnh khắc phục.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
     supportsPhotoAppendix: true,
   },
   {
@@ -89,7 +89,7 @@ const REPORTS: ReportSpec[] = [
     title: "Lô hàng xuất khẩu",
     docTitle: "Báo cáo thống kê lô thu hoạch và xuất khẩu",
     desc: "Sản lượng thu mua, đóng gói và xuất khẩu.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
   },
   {
     id: "training-registrations",
@@ -97,7 +97,7 @@ const REPORTS: ReportSpec[] = [
     title: "Điểm danh tập huấn",
     docTitle: "Báo cáo đăng ký và điểm danh lớp tập huấn",
     desc: "Danh sách đăng ký và điểm danh tập huấn.",
-    formats: ["Xuất CSV", "In / PDF"],
+    formats: ["Xuất Excel", "In / PDF"],
   },
 ];
 
@@ -124,10 +124,10 @@ export default function Reports() {
     "admin:reports:include-invoices",
     false,
   );
-  const [format, setFormat] = usePersistedState<"CSV" | "PDF">(
+  const [format, setFormat] = usePersistedState<"EXCEL" | "PDF">(
     "admin:reports:format",
-    "CSV",
-    (v): v is "CSV" | "PDF" => v === "CSV" || v === "PDF",
+    "EXCEL",
+    (v): v is "EXCEL" | "PDF" => v === "EXCEL" || v === "PDF",
   );
   const [downloading, setDownloading] = useState(false);
   const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
@@ -221,7 +221,7 @@ export default function Reports() {
     };
   }, [selectedReport, from, to, villageId, effectiveHouseholdId, dateRangeError]);
 
-  const handleExport = async (report: ReportSpec, targetFormat: "CSV" | "PDF") => {
+  const handleExport = async (report: ReportSpec, targetFormat: "EXCEL" | "PDF") => {
     if (from && to && from > to) {
       setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
       return;
@@ -281,10 +281,10 @@ export default function Reports() {
         setSelectedReport(null);
       } else {
         const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
-        const blob = buildUtf8CsvBlob(data.headers, data.rows);
-        triggerBlobDownload(blob, `bao-cao-${report.type}${hhSuffix}-${to || todayIso()}.csv`);
+        const blob = buildExcelXlsxBlob(data.headers, data.rows, report.title);
+        triggerBlobDownload(blob, `bao-cao-${report.type}${hhSuffix}-${to || todayIso()}.xlsx`);
 
-        toast.success(`Đã tải xuống CSV "${report.title}" (${formatVn(data.total, 0)} bản ghi).`);
+        toast.success(`Đã xuất Excel "${report.title}" (${formatVn(data.total, 0)} bản ghi).`);
         setSelectedReport(null);
       }
     } catch (err) {
@@ -330,7 +330,7 @@ export default function Reports() {
       }
       return "Đang xuất...";
     }
-    return format === "PDF" ? "Xuất PDF" : "Tải CSV";
+    return format === "PDF" ? "Xuất PDF" : "Xuất Excel";
   };
 
   return (
@@ -415,14 +415,14 @@ export default function Reports() {
             className="report-card"
             onClick={() => {
               setError(null);
-              setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "CSV");
+              setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "EXCEL");
               setSelectedReport(r);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 setError(null);
-                setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "CSV");
+                setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "EXCEL");
                 setSelectedReport(r);
               }
             }}
@@ -442,7 +442,7 @@ export default function Reports() {
                     onClick={(e) => {
                       e.stopPropagation();
                       setError(null);
-                      setFormat(isPdf ? "PDF" : "CSV");
+                      setFormat(isPdf ? "PDF" : "EXCEL");
                       setSelectedReport(r);
                     }}
                   >
@@ -541,14 +541,14 @@ export default function Reports() {
           <div className="form-group">
             <label>Định dạng xuất</label>
             <div className="format-btns">
-              {(["CSV", "PDF"] as const).map((f) => (
+              {(["EXCEL", "PDF"] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
                   className={`fmt-btn ${format === f ? "active" : ""}`}
                   onClick={() => setFormat(f)}
                 >
-                  {f === "CSV" ? "Tệp CSV" : "Bản in PDF"}
+                  {f === "EXCEL" ? "Tệp Excel" : "Bản in PDF"}
                 </button>
               ))}
             </div>
