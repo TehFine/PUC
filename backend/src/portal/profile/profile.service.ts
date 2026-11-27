@@ -10,7 +10,6 @@ import { notFound } from "../../common/errors/app.exception";
 import { camelRow, publicAttachmentUrlSql } from "../../common/sql/rows";
 import { hasPublicColumn } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
-import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { type ClientContext, householdIdOf, plotsTableExists } from "../common/portal-context";
 
@@ -21,7 +20,6 @@ export class ProfileService {
     private readonly db: DatabaseService,
     private readonly uploads: UploadsService,
     private readonly audit: AuditService,
-    private readonly notifications: NotificationsService,
   ) { }
 
   async profile(user: AuthUser) {
@@ -97,15 +95,6 @@ export class ProfileService {
       },
     );
 
-    await this.notifications.notifyOversightForHousehold(householdId, {
-      kind: "system",
-      title: nextAvatarId
-        ? `Hộ ${hhRow.name} vừa cập nhật ảnh đại diện`
-        : `Hộ ${hhRow.name} đã gỡ ảnh đại diện`,
-      body: `Mã hộ ${hhRow.code}`,
-      link: `/admin?section=households&householdId=${householdId}`,
-    });
-
     return { avatarUrl: hhRow.avatar_url };
   }
 
@@ -131,15 +120,6 @@ export class ProfileService {
           : "Ẩn tên hộ trên trang quét QR công khai (chỉ hiện tên HTX)",
       },
     );
-
-    await this.notifications.notifyOversightForHousehold(householdId, {
-      kind: "system",
-      title: `Hộ ${hhRow.name} cập nhật hiển thị QR công khai`,
-      body: publicTraceConsent
-        ? `Đồng ý hiển thị tên hộ (${hhRow.code}) trên hồ sơ QR công khai.`
-        : `Ẩn tên hộ (${hhRow.code}) trên hồ sơ QR công khai.`,
-      link: `/admin?section=households&householdId=${householdId}`,
-    });
 
     return { publicTraceConsent: hhRow.public_trace_consent };
   }

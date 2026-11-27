@@ -1105,10 +1105,18 @@ export class AuthService {
     if (updated.rowCount === 0) {
       throw new AppException(429, "Tài khoản tạm khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
     }
-    await Promise.all([
+    const [, clearedResets] = await Promise.all([
       this.revokeAllSessions(user.id),
-      this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [user.id]),
+      this.db.query<{ id: number }>(
+        "DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending' RETURNING id",
+        [user.id],
+      ),
     ]);
+    if (clearedResets.rows.length > 0) {
+      await this.notifications.resolveByLinks(
+        clearedResets.rows.map((r) => `/admin?section=registrations&id=${r.id}`),
+      );
+    }
     await this.audit.write({ ip, user }, { action: "Đổi mật khẩu", object: user.username });
   }
 
@@ -1221,23 +1229,6 @@ export class AuthService {
         detail: emailChanged ? (nextEmail ? "Liên kết email Google mới" : "Gỡ liên kết email") : `Họ tên: ${nextName}`,
       },
     );
-
-    if (user.role === "farmer" && user.householdId) {
-      await this.notifications.notifyOversightForHousehold(
-        user.householdId,
-        {
-          kind: "system",
-          title: `Nông hộ ${nextName} vừa cập nhật thông tin tài khoản`,
-          body: emailChanged
-            ? nextEmail
-              ? "Đã cập nhật địa chỉ email liên kết đăng nhập."
-              : "Đã gỡ địa chỉ email liên kết."
-            : `Cập nhật tên hiển thị: ${nextName}.`,
-          link: `/admin?section=households&householdId=${user.householdId}`,
-        },
-        { excludeUserId: user.id },
-      );
-    }
 
     return this.sessionOf({
       ...user,
@@ -1377,12 +1368,6 @@ export class AuthService {
       { action: "Đặt lại mật khẩu (xác minh CCCD)", object: eligible.username, detail: "Đã thu hồi phiên và gỡ email liên kết OAuth" },
       { id: eligible.id, name: eligible.full_name },
     );
-    await this.notifications.notifyRoles(["admin", "htx_head", "htx_deputy", "support_specialist"], {
-      kind: "system",
-      title: `Nông hộ ${eligible.full_name} vừa tự đặt lại mật khẩu bằng CCCD`,
-      body: `Tài khoản ${eligible.username} đã được đặt lại mật khẩu qua đối chiếu CCCD và thu hồi toàn bộ phiên đăng nhập trước đó.`,
-      link: `/admin?section=households&householdId=${eligible.household_id}`,
-    });
 
     return { ok: true, mode: "instant" };
   }

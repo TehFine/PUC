@@ -1238,4 +1238,64 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       await admin.delete(`/api/journal/${createdStaffJ.body.id}`);
     });
   });
+
+  describe("phân tách thông báo tới quản trị viên: bỏ thao tác cá nhân, giữ thông báo ghi nhật ký", () => {
+    it("thao tác cá nhân của nông hộ không bắn thông báo lên quản trị viên, còn ghi nhật ký canh tác báo ngay", async () => {
+      const an = await loggedIn(USERS.farmerAn);
+      const admin = await loggedIn(USERS.admin);
+
+      const { rows: adminRows } = await db.query<{ id: number }>(
+        "SELECT id FROM users WHERE lower(username) = lower($1) LIMIT 1",
+        [USERS.admin],
+      );
+      const adminId = Number(adminRows[0].id);
+
+      const { rows: maxBeforePersonal } = await db.query<{ max_id: number }>(
+        "SELECT COALESCE(MAX(id), 0)::int AS max_id FROM notifications WHERE user_id = $1",
+        [adminId],
+      );
+      const baselineId = maxBeforePersonal[0].max_id;
+
+      // 1. Nông hộ tự cập nhật thông tin cá nhân, ảnh đại diện, tùy chọn hiển thị QR
+      const avatarId = await uploadFile(an, "avatar", TINY_JPEG, "avatar-ca-nhan.jpg");
+      expect((await an.patch("/api/portal/profile/avatar").send({ avatarId })).status).toBe(200);
+      expect((await an.patch("/api/portal/profile/avatar").send({ avatarId: null })).status).toBe(200);
+      expect((await an.patch("/api/portal/profile/trace-consent").send({ publicTraceConsent: true })).status).toBe(200);
+      expect((await an.patch("/api/portal/profile/trace-consent").send({ publicTraceConsent: false })).status).toBe(200);
+      expect((await an.patch("/api/auth/profile").send({ fullName: "Nguyễn Văn An" })).status).toBe(200);
+
+      const { rows: afterPersonalNotifs } = await db.query<{ title: string }>(
+        "SELECT title FROM notifications WHERE user_id = $1 AND id > $2",
+        [adminId, baselineId],
+      );
+      expect(afterPersonalNotifs).toHaveLength(0);
+
+      // 2. Nông hộ ghi nhật ký canh tác -> thông báo ngay tới quản trị viên
+      const anPlots = await an.get("/api/portal/plots");
+      const plotCode: string = anPlots.body.data?.[0]?.code ?? "CN-T1-01";
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+      const journalImgId = await uploadFile(an, "journal", TINY_JPEG, "nhat-ky-moi.jpg");
+
+      const createdJ = await an.post("/api/portal/journal").send({
+        entryOn: todayStr,
+        plotCode,
+        activity: "Bón phân hữu cơ định kỳ",
+        detail: "Bón quanh tán sau mưa",
+        photoIds: [journalImgId],
+      });
+      expect(createdJ.status).toBe(201);
+
+      const { rows: afterJournalNotifs } = await db.query<{ title: string; body: string }>(
+        "SELECT title, body FROM notifications WHERE user_id = $1 AND id > $2",
+        [adminId, baselineId],
+      );
+      expect(
+        afterJournalNotifs.some(
+          (n) => n.title.includes("mới cập nhật nhật ký canh tác") && n.body.includes("Bón phân hữu cơ định kỳ"),
+        ),
+      ).toBe(true);
+
+      await admin.delete(`/api/journal/${createdJ.body.id}`);
+    });
+  });
 });

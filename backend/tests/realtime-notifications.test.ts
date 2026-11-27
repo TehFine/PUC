@@ -228,24 +228,44 @@ describe("luồng thông báo và đồng bộ pending thời gian thực (SSE R
     let createdDeclId = 0;
     let createdLabId = 0;
     let createdMinuteId = 0;
+    let createdJournalId = 0;
     let registeredPendingUserId = 0;
 
     try {
-      // 1. Nông hộ cập nhật tùy chọn hiển thị tên trên QR -> cả Cán bộ HTX và Cán bộ Thôn 1 nhận SSE ngay
+      // 1a. Thao tác cá nhân (tùy chọn hiển thị tên trên QR) KHÔNG bắn thông báo chuông lên cán bộ / quản trị viên
       htxEvents.length = 0;
       villageEvents.length = 0;
       const consentRes = await farmerSession.agent
         .patch("/api/portal/profile/trace-consent")
         .send({ publicTraceConsent: true });
       expect(consentRes.status).toBe(200);
+      expect(htxEvents.some((e) => e.type === "notification")).toBe(false);
+      expect(villageEvents.some((e) => e.type === "notification")).toBe(false);
+
+      // 1b. Nông hộ ghi nhật ký canh tác -> cả Cán bộ HTX và Cán bộ Thôn 1 nhận thông báo SSE tức thì
+      const jPhotoRes = await farmerSession.agent
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", TINY_JPEG, "journal-rt.jpg");
+      expect(jPhotoRes.status).toBe(201);
+      const todayForJournal = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+      const journalRes = await farmerSession.agent.post("/api/portal/journal").send({
+        entryOn: todayForJournal,
+        plotCode: "TH1-001",
+        activity: "Tưới nước giữ ẩm gốc",
+        detail: "Kiểm thử thông báo realtime nhật ký",
+        photoIds: [jPhotoRes.body.id],
+      });
+      expect(journalRes.status).toBe(201);
+      createdJournalId = Number(journalRes.body.id);
       expect(
         htxEvents.some(
-          (e) => e.type === "notification" && e.item.link === "/admin?section=households&householdId=1",
+          (e) => e.type === "notification" && e.item.kind === "protocol" && e.item.link === "/admin?section=journal",
         ),
       ).toBe(true);
       expect(
         villageEvents.some(
-          (e) => e.type === "notification" && e.item.link === "/admin?section=households&householdId=1",
+          (e) => e.type === "notification" && e.item.kind === "protocol" && e.item.link === "/admin?section=journal",
         ),
       ).toBe(true);
 
@@ -408,6 +428,10 @@ describe("luồng thông báo và đồng bộ pending thời gian thực (SSE R
       if (createdLabId) {
         await db.query("DELETE FROM lab_tests WHERE id = $1", [createdLabId]);
       }
+      if (createdJournalId) {
+        await db.query("DELETE FROM journal_entries WHERE id = $1", [createdJournalId]);
+      }
+      await db.query("UPDATE households SET public_trace_consent = false WHERE id = 1");
       if (registeredPendingUserId) {
         await db.query("DELETE FROM users WHERE id = $1 AND status = 'pending'", [
           registeredPendingUserId,
