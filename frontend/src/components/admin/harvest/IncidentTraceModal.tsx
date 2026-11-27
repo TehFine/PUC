@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatVn } from "@/components/admin/catalog/form-utils";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { api, errorMessage } from "@/lib/api-client";
 
@@ -243,7 +244,9 @@ export default function IncidentTraceModal({
                 {plotResult.affectedLots.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="empty-state">
-                      Không có lô hàng nào bị ảnh hưởng.
+                      <ContextualEmptyBox variant="box" compact>
+                        Không có lô hàng nào bị ảnh hưởng.
+                      </ContextualEmptyBox>
                     </td>
                   </tr>
                 ) : (
@@ -333,7 +336,9 @@ export default function IncidentTraceModal({
                 {lotResult.sourceParcels.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="empty-state">
-                      Lô hàng này chưa ghi nhận chi tiết thửa nguồn đóng góp.
+                      <ContextualEmptyBox variant="folder" compact>
+                        Lô hàng này chưa ghi nhận chi tiết thửa nguồn đóng góp.
+                      </ContextualEmptyBox>
                     </td>
                   </tr>
                 ) : (

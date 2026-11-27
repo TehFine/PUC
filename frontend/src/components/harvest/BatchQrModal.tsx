@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useTr
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { toast } from "@/components/ui/Toast";
 import { useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
@@ -482,7 +483,9 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               <div className="batch-qr-loading no-print">Đang tải danh sách tem...</div>
             ) : filteredItems.length === 0 ? (
               <div className="batch-qr-empty no-print">
-                Chưa có tem {itemType === "fruit" ? "quả" : "thùng"} nào. Chọn thông số ở trên và bấm <strong>Tạo tem</strong>.
+                <ContextualEmptyBox variant="tickets" compact>
+                  Chưa có tem {itemType === "fruit" ? "quả" : "thùng"} nào. Chọn thông số ở trên và bấm <strong>Tạo tem</strong>.
+                </ContextualEmptyBox>
               </div>
             ) : (
               <div className={`print-sheet print-sheet-${itemType}`}>

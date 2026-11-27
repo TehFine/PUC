@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
+import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { toNumber, toText } from "@/components/admin/catalog/form-utils";
 import { FormGrid, NumberField, SelectField, TextAreaField, TextField } from "@/components/ui/form/fields";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
@@ -135,25 +136,15 @@ export function StampListModal({
             </tr>
           </thead>
           <tbody>
-            {state.loading ? (
-              <tr>
-                <td colSpan={7} className="empty-state">
-                  Đang tải danh sách tem…
-                </td>
-              </tr>
-            ) : state.error ? (
-              <tr>
-                <td colSpan={7} className="empty-state" style={{ color: "#b73c20" }}>
-                  {state.error}
-                </td>
-              </tr>
-            ) : stamps.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="empty-state">
-                  Không có dữ liệu tem.
-                </td>
-              </tr>
-            ) : (
+            <ListStatusRow
+              colSpan={7}
+              loading={state.loading}
+              error={state.error}
+              empty={!state.loading && !state.error && stamps.length === 0}
+              emptyText="Không có dữ liệu tem."
+            />
+            {!state.loading &&
+              !state.error &&
               stamps.map((s) => (
                 <tr key={s.id}>
                   <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700 }}>{s.serialCode}</td>
@@ -184,8 +175,7 @@ export function StampListModal({
                     </span>
                   </td>
                 </tr>
-              ))
-            )}
+              ))}
           </tbody>
         </table>
       </div>

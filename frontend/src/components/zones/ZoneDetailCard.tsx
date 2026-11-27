@@ -1,3 +1,4 @@
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { formatHa } from "@/utils/plot-utils";
 import type { PlotFeature } from "@/types/geo";
 import PlotRow from "./PlotRow";
@@ -47,9 +48,9 @@ export default function ZoneDetailCard({ zone, plots, onSelectPlot }: ZoneDetail
 
           <div className="zones-zone-list">
             {plots.length === 0 && (
-              <div className="empty-state" style={{ padding: 20 }}>
+              <ContextualEmptyBox variant="folder" compact>
                 Chưa có thửa trong vùng này
-              </div>
+              </ContextualEmptyBox>
             )}
             {plots.map((feature) => (
               <PlotRow

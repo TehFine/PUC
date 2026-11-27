@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { toast } from "@/components/ui/Toast";
 import { useApi } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
@@ -526,8 +527,10 @@ export default function SystemAlertsTab() {
             )}
             {!loading && !error && rows.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 24, color: "#64748b" }}>
-                  Chưa có thông báo sự cố hoặc bảo trì nào được phát.
+                <td colSpan={7} className="empty-state">
+                  <ContextualEmptyBox variant="notify">
+                    Chưa có thông báo sự cố hoặc bảo trì nào được phát.
+                  </ContextualEmptyBox>
                 </td>
               </tr>
             )}

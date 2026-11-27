@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { QrCode } from "@/components/ui/PublicIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
@@ -90,7 +91,9 @@ export default function PlotsTable({
             {!loading && features.length === 0 && (
               <tr>
                 <td colSpan={11} style={emptyCellStyle}>
-                  Chưa có thửa đất. Dùng nút “Vẽ thửa” trên bản đồ hoặc nhập GeoJSON địa chính.
+                  <ContextualEmptyBox variant="folder">
+                    Chưa có thửa đất. Dùng nút “Vẽ thửa” trên bản đồ hoặc nhập GeoJSON địa chính.
+                  </ContextualEmptyBox>
                 </td>
               </tr>
             )}

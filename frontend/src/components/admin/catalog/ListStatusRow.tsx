@@ -1,9 +1,11 @@
 "use client";
 
-import { AppleLoadingPill, Skeleton } from "@/components/ui/Skeleton";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { LoadingToastBridge } from "@/components/ui/Toast";
 
 /**
- * Một hàng trạng thái trong <tbody>: đang tải (con quay Apple + skeleton) / lỗi / không có dữ liệu.
+ * Một hàng trạng thái trong <tbody>: đang tải (dòng skeleton giữ khung, thông báo nằm ở Toast) / lỗi / không có dữ liệu.
  * Trả về null khi đã có dữ liệu để hiển thị.
  */
 export default function ListStatusRow({
@@ -41,11 +43,7 @@ export default function ListStatusRow({
     const widths = ["65%", "80%", "55%", "72%"];
     return (
       <>
-        <tr>
-          <td colSpan={colSpan} style={{ padding: "14px 16px 6px", borderBottom: "none", textAlign: "center" }} role="status">
-            <AppleLoadingPill label="Đang tải dữ liệu…" />
-          </td>
-        </tr>
+        <LoadingToastBridge label="Đang tải dữ liệu…" />
         {Array.from({ length: 4 }, (_, rowIdx) => (
           <tr key={`sk-${rowIdx}`} aria-hidden="true">
             {Array.from({ length: colSpan }, (__, colIdx) => (
@@ -66,7 +64,7 @@ export default function ListStatusRow({
     return (
       <tr>
         <td colSpan={colSpan} className="empty-state">
-          {emptyText}
+          <ContextualEmptyBox>{emptyText}</ContextualEmptyBox>
         </td>
       </tr>
     );

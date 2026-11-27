@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { formatVn, toNumber } from "@/components/admin/catalog/form-utils";
 import { FormGrid, NumberField, SelectField, TextField } from "@/components/ui/form/fields";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
@@ -231,25 +232,15 @@ export default function LotContributionsModal({
             </tr>
           </thead>
           <tbody>
-            {contribState.loading ? (
-              <tr>
-                <td colSpan={canEdit ? 6 : 5} className="empty-state">
-                  Đang tải danh sách…
-                </td>
-              </tr>
-            ) : contribState.error ? (
-              <tr>
-                <td colSpan={canEdit ? 6 : 5} className="empty-state" style={{ color: "#b73c20" }}>
-                  {contribState.error}
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={canEdit ? 6 : 5} className="empty-state">
-                  Chưa có hộ đóng góp nào trong lô này.
-                </td>
-              </tr>
-            ) : (
+            <ListStatusRow
+              colSpan={canEdit ? 6 : 5}
+              loading={contribState.loading}
+              error={contribState.error}
+              empty={!contribState.loading && !contribState.error && rows.length === 0}
+              emptyText="Chưa có hộ đóng góp nào trong lô này."
+            />
+            {!contribState.loading &&
+              !contribState.error &&
               rows.map((item) => (
                 <tr key={item.id}>
                   <td
@@ -291,8 +282,7 @@ export default function LotContributionsModal({
                     </td>
                   )}
                 </tr>
-              ))
-            )}
+              ))}
           </tbody>
         </table>
       </div>

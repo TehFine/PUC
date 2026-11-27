@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import type { PlotFeature } from "@/types/geo";
 import PlotRow from "./PlotRow";
 
@@ -58,9 +59,9 @@ export default function AllPlotsCard({ features, zoneCount, onSelectPlot }: AllP
 
       <div className="zones-zone-list">
         {filtered.length === 0 ? (
-          <div className="empty-state" style={{ padding: "18px 8px" }}>
+          <ContextualEmptyBox variant="folder" compact>
             Không tìm thấy hộ hoặc thửa đất phù hợp.
-          </div>
+          </ContextualEmptyBox>
         ) : (
           filtered.map((feature) => (
             <PlotRow

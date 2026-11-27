@@ -1,5 +1,6 @@
 "use client";
 
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 
 /** Hộp trạng thái cho vùng không phải bảng (lưới thẻ, danh sách): đang tải (Apple spinner + skeleton) / lỗi / trống. */
@@ -31,6 +32,12 @@ export default function BlockState({
   if (loading && empty) {
     return <SkeletonCards count={3} label="Đang tải dữ liệu…" />;
   }
-  if (empty) return <div className="card empty-state">{emptyText}</div>;
+  if (empty) {
+    return (
+      <div className="card empty-state">
+        <ContextualEmptyBox>{emptyText}</ContextualEmptyBox>
+      </div>
+    );
+  }
   return null;
 }

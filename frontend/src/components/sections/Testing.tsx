@@ -31,7 +31,7 @@ const LabTestFormModal = dynamic(
 );
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
 import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
-import { Microscope } from "@/components/ui/PublicIcon";
+import { EmptyStateArt } from "@/components/ui/EmptyStateArt";
 import { useApiList } from "@/hooks/use-api";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
@@ -151,7 +151,7 @@ export default function Testing() {
     <>
       {isCompletelyEmpty ? (
         <section className="admin-empty-stage" aria-label="Trạng thái phiếu kiểm nghiệm">
-          <Microscope size={42} className="admin-empty-stage-icon" />
+          <EmptyStateArt variant="clipboard" />
           <h2 className="admin-empty-stage-title">Chưa có phiếu kiểm nghiệm</h2>
           <p className="admin-empty-stage-desc">
             {canCreate
