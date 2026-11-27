@@ -204,7 +204,7 @@ export function prependRealtimeNotification(item: NotificationItem): void {
   if (existingItems.some((n) => Number(n.id) === Number(item.id))) {
     return;
   }
-  const merged = [item, ...existingItems].slice(0, 50);
+  const merged = [item, ...existingItems].slice(0, 100);
   const unreadCount = current
     ? Math.max(merged.filter((n) => !n.readAt).length, (current.unread ?? 0) + (item.readAt ? 0 : 1))
     : item.readAt
@@ -214,18 +214,35 @@ export function prependRealtimeNotification(item: NotificationItem): void {
   emitCacheSync(NOTIFICATIONS_PATH);
 }
 
-/** Đánh dấu đã đọc tức thì trên bộ nhớ đệm thông báo trước khi đối chiếu nền với máy chủ. */
-export function optimisticMarkNotificationRead(id?: number): void {
+/** Đọc danh sách thông báo đang lưu trong bộ nhớ đệm hiện tại của phiên làm việc. */
+export function getCachedNotificationItems(): NotificationItem[] {
+  if (getAuthScopeUserId() === null) return EMPTY_ARRAY;
+  const current = cache.get(scopedPortalKey(NOTIFICATIONS_PATH))?.data as NotificationList | undefined;
+  return Array.isArray(current?.data) ? current.data : EMPTY_ARRAY;
+}
+
+/** Đánh dấu đã đọc tức thì (một, nhiều hoặc toàn bộ) trên bộ nhớ đệm thông báo trước khi đối chiếu nền với máy chủ. */
+export function optimisticMarkNotificationRead(ids?: number | number[]): void {
   if (getAuthScopeUserId() === null) return;
   const cacheKey = scopedPortalKey(NOTIFICATIONS_PATH);
   const current = cache.get(cacheKey)?.data as NotificationList | undefined;
   if (!current || !Array.isArray(current.data)) return;
+  const idSet =
+    ids === undefined
+      ? null
+      : new Set(
+          (Array.isArray(ids) ? ids : [ids])
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v)),
+        );
+  if (idSet !== null && idSet.size === 0) return;
+
   bumpKeyEpoch(cacheKey);
   inflight.delete(cacheKey);
   const nowIso = new Date().toISOString();
   let newlyMarkedCount = 0;
   const nextData = current.data.map((n) => {
-    if (id === undefined || Number(n.id) === Number(id)) {
+    if (idSet === null || idSet.has(Number(n.id))) {
       if (!n.readAt) {
         newlyMarkedCount += 1;
         return { ...n, readAt: nowIso };
@@ -234,10 +251,11 @@ export function optimisticMarkNotificationRead(id?: number): void {
     }
     return n;
   });
+  if (idSet !== null && newlyMarkedCount === 0) return;
   const prevUnread =
     typeof current.unread === "number" ? current.unread : current.data.filter((n) => !n.readAt).length;
   const nextUnread =
-    id === undefined
+    idSet === null
       ? 0
       : Math.max(nextData.filter((n) => !n.readAt).length, Math.max(0, prevUnread - newlyMarkedCount));
   setCacheEntry(cacheKey, { data: nextData, unread: nextUnread } satisfies NotificationList, 0);

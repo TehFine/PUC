@@ -7,6 +7,7 @@ import { refreshMountedApiQueries } from "@/hooks/use-api";
 import {
   invalidateQueries,
   NOTIFICATIONS_PATH,
+  optimisticMarkNotificationRead,
   portalPath,
   prependRealtimeNotification,
   type PortalKey,
@@ -31,7 +32,7 @@ interface RealtimeNotificationPayload {
 
 type RealtimeStreamMessage =
   | { type: "notification"; item: RealtimeNotificationPayload }
-  | { type: "notifications-sync" }
+  | { type: "notifications-sync"; readIds?: number[]; readAll?: boolean }
   | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean }
   | { type: "data-sync"; tags: string[] };
 
@@ -246,6 +247,11 @@ function handleStreamData(raw: string): void {
   }
 
   if (parsed.type === "notifications-sync") {
+    if (parsed.readAll) {
+      optimisticMarkNotificationRead();
+    } else if (Array.isArray(parsed.readIds) && parsed.readIds.length > 0) {
+      optimisticMarkNotificationRead(parsed.readIds);
+    }
     invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
     notifyCountsChanged();
     return;
