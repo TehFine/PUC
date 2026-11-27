@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import InsightLineChart, { type InsightPoint } from "@/components/ui/charts/InsightLineChart";
@@ -17,15 +16,9 @@ import {
 import { formatVn, percent } from "@/components/admin/shared/form-utils";
 import { badgeOf, SCHEDULE_KIND } from "@/components/admin/shared/labels";
 import { getServerCalibratedDate } from "@/lib/api-client";
-import { lazyChunk } from "@/lib/lazy-chunk";
 import { formatDate } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { HouseholdStatus } from "@/types/households";
-
-const BroadcastNoticeModal = dynamic(
-  () => lazyChunk(() => import("@/components/admin/households/BroadcastNoticeModal")),
-  { ssr: false },
-);
 
 type ActivityRangeDays = 7 | 14 | 30;
 
@@ -141,7 +134,6 @@ function useSmoothNumber(target: number, decimals = 0): number {
 export default function Dashboard() {
   const { can } = useAuth();
   const canViewActivityChart = can("journal", "read") || can("spray", "read");
-  const canBroadcastNotice = can("system-alerts", "create");
   const canReadHouseholds = can("households", "read");
   const canReadPlots = can("plots", "read");
   const canReadHarvest = can("harvest", "read");
@@ -163,35 +155,7 @@ export default function Dashboard() {
   const canViewHarvestCard = canReadHarvest || canReadTesting;
 
   const [rangeDays, setRangeDays] = useState<ActivityRangeDays>(7);
-  const [dateStr, setDateStr] = useState("");
-  const [fullDateStr, setFullDateStr] = useState("");
-  const [broadcasting, setBroadcasting] = useState(false);
   const { data: summary, loading, error, refresh } = useApi<DashboardSummary>("/dashboard/summary");
-
-  useEffect(() => {
-    const updateClockDate = () => {
-      const now = getServerCalibratedDate();
-      setDateStr(
-        now.toLocaleDateString("vi-VN", {
-          timeZone: "Asia/Ho_Chi_Minh",
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        }),
-      );
-      setFullDateStr(
-        now.toLocaleDateString("vi-VN", {
-          timeZone: "Asia/Ho_Chi_Minh",
-          weekday: "long",
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        }),
-      );
-    };
-    const id = setTimeout(updateClockDate, 0);
-    return () => clearTimeout(id);
-  }, []);
 
   // Đồng bộ tức thì khi có sự kiện thay đổi số đếm quản trị (ngoài luồng SSE data-sync tự động)
   useEffect(() => onCountsChanged(() => refreshMountedApiQueries("/dashboard")), []);
@@ -368,28 +332,6 @@ export default function Dashboard() {
 
   return (
     <>
-      {(dateStr || canBroadcastNotice) && (
-        <div className="page-header dash-header">
-          <div className="dash-header-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {canBroadcastNotice && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setBroadcasting(true)}
-                style={{ minHeight: 36 }}
-              >
-                Thông báo toàn hộ
-              </button>
-            )}
-            {dateStr && (
-              <div className="dash-date-badge" title={fullDateStr || dateStr} suppressHydrationWarning>
-                <span>{dateStr}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {error && !summary && (
         <BlockState loading={loading} error={error} empty={false} onRetry={() => void refresh()} />
       )}
@@ -848,10 +790,6 @@ export default function Dashboard() {
             );
           })()}
         </div>
-      )}
-
-      {broadcasting && (
-        <BroadcastNoticeModal onClose={() => setBroadcasting(false)} />
       )}
     </>
   );

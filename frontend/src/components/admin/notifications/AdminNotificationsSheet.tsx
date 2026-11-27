@@ -300,22 +300,24 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                 </button>
               )}
 
-              <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(2, minmax(132px, 1fr))", gap: 8, width: "100%", fontVariantNumeric: "tabular-nums" }}>
+              <div className="tab-bar" role="tablist" aria-label="Bộ lọc thông báo" style={{ marginBottom: 0 }}>
                 <button
                   type="button"
-                  className={`btn btn-sm btn-filter-toggle ${filter === "unread" ? "is-active" : ""}`}
-                  aria-pressed={filter === "unread"}
+                  role="tab"
+                  aria-selected={filter === "unread"}
+                  className={`tab-btn ${filter === "unread" ? "active" : ""}`}
                   onClick={() => setFilter("unread")}
-                  style={{ justifyContent: "center", minHeight: 36 }}
+                  style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   Chưa đọc ({unread})
                 </button>
                 <button
                   type="button"
-                  className={`btn btn-sm btn-filter-toggle ${filter === "read" ? "is-active" : ""}`}
-                  aria-pressed={filter === "read"}
+                  role="tab"
+                  aria-selected={filter === "read"}
+                  className={`tab-btn ${filter === "read" ? "active" : ""}`}
                   onClick={() => setFilter("read")}
-                  style={{ justifyContent: "center", minHeight: 36 }}
+                  style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   Đã đọc ({readItems.length})
                 </button>

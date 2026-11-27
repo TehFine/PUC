@@ -249,19 +249,21 @@ export default function FieldAuditPassesModal({
         </button>
       }
     >
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div className="tab-bar" role="tablist" aria-label="Chế độ cấu hình thẩm định" style={{ marginBottom: 14 }}>
         <button
           type="button"
-          className={`btn btn-sm btn-filter-toggle ${activeTab === "passes" ? "is-active" : ""}`}
-          aria-pressed={activeTab === "passes"}
+          role="tab"
+          aria-selected={activeTab === "passes"}
+          className={`tab-btn ${activeTab === "passes" ? "active" : ""}`}
           onClick={() => setActiveTab("passes")}
         >
           1. Cấp Thẻ Đoàn Thẩm định Thực địa (Đối tác / Tỉnh)
         </button>
         <button
           type="button"
-          className={`btn btn-sm btn-filter-toggle ${activeTab === "endorsement" ? "is-active" : ""}`}
-          aria-pressed={activeTab === "endorsement"}
+          role="tab"
+          aria-selected={activeTab === "endorsement"}
+          className={`tab-btn ${activeTab === "endorsement" ? "active" : ""}`}
           onClick={() => setActiveTab("endorsement")}
         >
           2. Cấu hình Bảo chứng UBND Xã &amp; Cổng Tỉnh
