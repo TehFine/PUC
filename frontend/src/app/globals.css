@@ -2725,10 +2725,12 @@ input[type="date"].filter-select {
   align-items: center;
   gap: 2px;
   padding: var(--map-dock-padding);
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid var(--border);
+  background: #ededec;
+  border: none;
+  outline: none;
   border-radius: var(--map-dock-radius);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1),
+              0 1px 3px rgba(15, 23, 42, 0.06);
   pointer-events: auto;
 }
 
@@ -2745,7 +2747,7 @@ input[type="date"].filter-select {
   width: 100%;
   justify-content: flex-start;
   text-align: left;
-  border-radius: calc(var(--map-dock-radius) - 1px - var(--map-dock-padding));
+  border-radius: 5.5px;
 }
 
 .map-tool {
@@ -2754,28 +2756,38 @@ input[type="date"].filter-select {
   justify-content: center;
   flex: 1 0 auto;
   border: 0;
+  outline: none;
   background: transparent;
   padding: 6px 12px;
-  border-radius: calc(var(--map-dock-radius, 8px) - 1px - var(--map-dock-padding, 3px));
-  color: var(--ink-soft);
+  border-radius: 5.5px;
+  color: #6e7471;
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
+  box-shadow: none;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
   white-space: nowrap;
 }
 
-.map-tool:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+.map-tool:focus,
+.map-tool:focus-visible {
+  outline: none;
+}
+
+.map-tool:hover:not(.active):not(:disabled) {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink);
 }
 
 .map-tool.active {
-  background: var(--ink);
-  color: #fff;
+  background: #ffffff;
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+              0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .map-tool:disabled {
@@ -4201,18 +4213,19 @@ input[type="date"].filter-select {
 .zone-view-count {
   min-width: 16px;
   padding: 1px 5px;
-  border-radius: 9px;
-  background: var(--bg-input);
-  color: var(--text-muted);
+  border-radius: 4px;
+  background: rgba(20, 55, 47, 0.08);
+  color: #5f6d66;
   font-size: 9.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   line-height: 1.5;
   text-align: center;
 }
 
 .zone-view-tab.active .zone-view-count {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: #eef2f0;
+  color: var(--ink);
 }
 
 .zones-workspace {
@@ -4651,8 +4664,9 @@ input[type="date"].filter-select {
     --map-dock-padding: 3px;
     height: 40px;
     box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.97);
-    box-shadow: 0 2px 10px rgba(20, 55, 47, 0.04);
+    background: #ededec;
+    border: none;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
   }
 
   .zones-map-area .map-toolgroup-col {
@@ -6997,42 +7011,54 @@ select.form-input {
 .format-btns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #ededec;
+  border: none;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .fmt-btn {
-  min-height: 40px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border-radius: 5.5px;
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid #d4d4d2;
-  background: #ffffff;
-  color: #4b5953;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #6e7471;
   font-family: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   white-space: nowrap;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  box-shadow: none;
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.fmt-btn:focus,
+.fmt-btn:focus-visible {
+  outline: none;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .fmt-btn:hover:not(.active) {
-    background: #f7f9f8;
-    border-color: #b8c2bd;
+    background: rgba(255, 255, 255, 0.5);
     color: #14372f;
   }
 }
 
 .fmt-btn.active {
-  background: #14372f;
-  border-color: #14372f;
-  color: #ffffff;
+  background: #ffffff;
+  color: #14372f;
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+              0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 /* ─── MISC ────────────────────────────────────── */
@@ -9086,7 +9112,7 @@ code {
     width: auto;
     justify-content: center;
     text-align: center;
-    border-radius: calc(var(--map-dock-radius, 8px) - 1px - var(--map-dock-padding, 3px));
+    border-radius: 5.5px;
   }
 
   .zones-map-area .map-tool {
@@ -9097,7 +9123,7 @@ code {
     line-height: 1.25;
     justify-content: center;
     text-align: center;
-    border-radius: calc(var(--map-dock-radius, 8px) - 1px - var(--map-dock-padding, 3px));
+    border-radius: 5.5px;
   }
 
   .zones-map-area .plotmap-zoom {
@@ -9294,7 +9320,6 @@ code {
   .plotmap-zoom,
   .zones-sidebar,
   .zone-source-card,
-  .map-toolgroup,
   .map-sheet-btn,
   .modal {
     background: #fbfcfa;

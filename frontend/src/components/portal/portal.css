@@ -8828,36 +8828,53 @@ body.pt-body {
 }
 
 .pt-mapmodal-layer-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   min-height: 36px;
-  background: rgba(255, 255, 255, 0.97);
+  background: #ededec;
   padding: 3px;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+  border: none;
+  outline: none;
   gap: 2px;
   box-sizing: border-box;
 }
 
 .pt-mapmodal-pill-btn {
   border: none;
+  outline: none;
   background: transparent;
-  min-height: 28px;
-  padding: 4px 12px;
-  border-radius: 4px;
+  min-height: 30px;
+  padding: 5px 12px;
+  border-radius: 5.5px;
   font-size: 12px;
-  font-weight: 650;
-  color: #475569;
+  font-weight: 600;
+  color: #6e7471;
   cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  box-shadow: none;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
   white-space: nowrap;
 }
 
+.pt-mapmodal-pill-btn:focus,
+.pt-mapmodal-pill-btn:focus-visible {
+  outline: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pt-mapmodal-pill-btn:hover:not(.is-active) {
+    background: rgba(255, 255, 255, 0.5);
+    color: #14372f;
+  }
+}
+
 .pt-mapmodal-pill-btn.is-active {
-  background: #065f46;
-  color: #ffffff;
-  box-shadow: none;
+  background: #ffffff;
+  color: #14372f;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+              0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .pt-mapmodal-round-btn {
