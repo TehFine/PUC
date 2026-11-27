@@ -2076,6 +2076,11 @@ body.pt-body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.pt-spec-row.is-interactive:focus,
+.pt-spec-row.is-interactive:focus-visible {
+  outline: none;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .pt-spec-row.is-interactive:hover {
     opacity: 0.72;
@@ -6363,25 +6368,25 @@ body.pt-body {
   line-height: 1.5;
 }
 
-/* Segmented control (Khung nền xám #ededec bo góc 8px, thẻ trắng nổi đồng tâm 5.5px) */
+/* Segmented control (Đồng bộ 100% với thanh lọc Chưa đọc / Đã đọc trong popup thông báo) */
 .pt-segmented {
   --seg-fade: 28px;
   --seg-fade-l: 0px;
   --seg-fade-r: 0px;
   position: relative;
   display: flex;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
-  height: 42px;
   min-height: 42px;
-  padding: 3px;
+  padding: 0;
   border: none;
+  outline: none;
   border-radius: 8px;
   background: #ededec;
   box-shadow: none;
   box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
-  clip-path: inset(0 round 8px);
   isolation: isolate;
 }
 
@@ -6389,12 +6394,11 @@ body.pt-body {
   position: relative;
   display: flex;
   flex: 1 1 auto;
-  height: 100%;
+  width: 100%;
   min-width: 0;
-  border-radius: 5.5px;
+  border-radius: 8px;
   background: transparent;
   overflow: hidden;
-  clip-path: inset(0 round 5.5px);
 }
 
 .pt-segmented-track {
@@ -6402,9 +6406,8 @@ body.pt-body {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 100%;
   gap: 2px;
-  padding: 0;
+  padding: 3px;
   box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
@@ -6418,7 +6421,7 @@ body.pt-body {
 }
 
 .pt-segmented.has-edge-fade .pt-segmented-track {
-  padding-inline: 0;
+  padding: 3px;
   -webkit-mask-image: linear-gradient(to right,
       transparent 0px,
       rgba(0, 0, 0, 0.019) calc(var(--seg-fade-l) * 0.083),
@@ -6509,12 +6512,12 @@ body.pt-body {
 }
 
 .pt-segmented button {
-  flex: 1 0 auto;
+  flex: 1 1 0;
   min-width: max-content;
-  height: 100%;
+  height: 36px;
   min-height: 36px;
-  padding: 0 16px;
-  border: 0;
+  padding: 6px 14px;
+  border: none;
   outline: none;
   border-radius: 5.5px;
   background: transparent;
@@ -6522,26 +6525,31 @@ body.pt-body {
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
   text-align: center;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   white-space: nowrap;
+  user-select: none;
   box-sizing: border-box;
   box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
   transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .pt-segmented button:hover:not(.active) {
   background: rgba(255, 255, 255, 0.5);
-  color: var(--ink);
+  color: #14372f;
 }
 
 .pt-segmented button.active {
   background: #ffffff;
-  color: var(--ink);
+  color: #14372f;
+  font-weight: 600;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
               0 1px 2px rgba(15, 23, 42, 0.06);
 }
@@ -6558,11 +6566,11 @@ body.pt-body {
   }
 
   .pt-segmented.has-edge-fade .pt-segmented-track {
-    padding-inline: 0;
+    padding: 3px;
   }
 
   .pt-segmented button {
-    padding: 0 15px;
+    padding: 6px 14px;
   }
 
   .pt-diary-segmented {
@@ -10225,6 +10233,58 @@ body.pt-body {
   text-wrap: pretty;
 }
 
+.pt-notif-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 55, 47, 0.12);
+  background: #ffffff;
+}
+
+.pt-notif-detail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(20, 55, 47, 0.08);
+  font-size: 12.5px;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-notif-detail-meta strong {
+  font-weight: 600;
+  color: #14372f;
+}
+
+.pt-notif-detail-title {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.38;
+  color: #121212;
+  text-wrap: pretty;
+}
+
+.pt-notif-detail-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: #2f3a35;
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+
+.pt-notif-detail-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
 @media (max-width: 640px) {
   .pt-notif-toolbar {
     flex-direction: column;
@@ -12432,7 +12492,8 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-hero-shell {
   --spec-line: rgba(60, 60, 67, 0.1);
   background: #ffffff;
-  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  border: none;
+  outline: none;
   border-radius: 8px;
   padding: 4px 20px 18px;
   box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));

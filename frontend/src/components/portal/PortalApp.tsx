@@ -49,6 +49,7 @@ import {
   replaceUrlPreservingState,
   resetOverlayHistoryOnRouteLeave,
   saveWorkspaceUrl,
+  useBackLayer,
   usePersistedState,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
@@ -56,7 +57,7 @@ import { resolveValidPortalRoute } from "@/lib/route-validation";
 import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
-import { formatTime, groupNotificationsByDay } from "@/utils/format";
+import { formatDate, formatTime, groupNotificationsByDay } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { AppNotification, NotificationList, PortalOverview, PortalProfile } from "@/types/portal";
 import dynamic from "next/dynamic";
@@ -188,7 +189,43 @@ const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
 
 function resolveNotificationTarget(item: AppNotification): { tab: PortalTabId; action?: PortalAction } {
   const kind = (item.kind || "").toLowerCase();
-  const link = (item.link || "").toLowerCase();
+  const rawLink = (item.link || "").trim();
+  const link = rawLink.toLowerCase();
+  const title = (item.title || "").toLowerCase();
+
+  const inferLearnAction = (): PortalAction | undefined => {
+    if (link.includes("sub=pesticides") || title.includes("thuốc bvtv") || title.includes("thuốc bảo vệ")) {
+      return "learn-pesticides";
+    }
+    if (link.includes("sub=fertilizers") || title.includes("phân bón")) {
+      return "learn-fertilizers";
+    }
+    if (link.includes("sub=varieties") || title.includes("giống")) {
+      return "learn-varieties";
+    }
+    if (link.includes("sub=diseases") || title.includes("sâu bệnh")) {
+      return "learn-diseases";
+    }
+    if (link.includes("sub=protocol")) {
+      return "learn-protocol";
+    }
+    return undefined;
+  };
+
+  if (rawLink.startsWith("/portal")) {
+    const qIdx = rawLink.indexOf("?");
+    if (qIdx >= 0) {
+      const parsed = resolveValidPortalRoute(new URLSearchParams(rawLink.slice(qIdx)));
+      if (parsed) {
+        return {
+          tab: parsed.tab,
+          action: parsed.tab === "learn" ? inferLearnAction() : undefined,
+        };
+      }
+    }
+    return { tab: "home" };
+  }
+
   if (kind === "protocol" || link.includes("view=protocol") || link.includes("care-protocol")) {
     return { tab: "diary" };
   }
@@ -205,9 +242,37 @@ function resolveNotificationTarget(item: AppNotification): { tab: PortalTabId; a
   if (link.includes("inspect") || link.includes("lab") || link.includes("schedule")) {
     return { tab: "inspection" };
   }
-  if (link.includes("learn") || link.includes("training")) return { tab: "learn" };
+  if (link.includes("learn") || link.includes("training")) {
+    return { tab: "learn", action: inferLearnAction() };
+  }
 
   return { tab: "home" };
+}
+
+function inferBroadcastShortcut(item: AppNotification): { tab: PortalTabId; label: string } | null {
+  const combined = `${item.title || ""} ${item.body || ""}`.toLowerCase();
+  if (
+    combined.includes("nhật ký") ||
+    combined.includes("phun thuốc") ||
+    combined.includes("bón phân") ||
+    combined.includes("tưới nước") ||
+    combined.includes("bvtv")
+  ) {
+    return { tab: "diary", label: "Mở Nhật ký" };
+  }
+  if (combined.includes("kiểm nghiệm") || combined.includes("lấy mẫu") || combined.includes("kiểm tra thực địa")) {
+    return { tab: "inspection", label: "Mở Kiểm nghiệm" };
+  }
+  if (combined.includes("thu hoạch") || combined.includes("tem truy xuất") || combined.includes("mã qr")) {
+    return { tab: "stamps", label: "Mở Thu hoạch" };
+  }
+  if (combined.includes("tập huấn") || combined.includes("quy trình chăm sóc")) {
+    return { tab: "learn", label: "Mở Kiến thức" };
+  }
+  if (combined.includes("thửa đất") || combined.includes("ranh giới")) {
+    return { tab: "plots", label: "Mở Thửa đất" };
+  }
+  return null;
 }
 
 function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
@@ -413,6 +478,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const pendingSearchTargetRef = useRef<PortalSearchTarget | null>(null);
   const [navWheelOpen, setNavWheelOpen] = usePersistedState("portal:nav-open", false);
   const [notifOpen, setNotifOpen] = usePersistedState("portal:notif-open", false);
+  const [selectedNotif, setSelectedNotif] = useState<AppNotification | null>(null);
+  useBackLayer(Boolean(notifOpen && selectedNotif), () => setSelectedNotif(null));
   const [passwordOpen, setPasswordOpen] = usePersistedState("portal:password-open", false);
   const [twoFactorOpen, setTwoFactorOpen] = usePersistedState("portal:2fa-open", false);
   const [sessionsOpen, setSessionsOpen] = usePersistedState("portal:sessions-open", false);
@@ -894,6 +961,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         : unreadNotifItems.length;
   const readCount = readNotifItems.length;
   const visibleNotifItems = notifFilter === "unread" ? unreadNotifItems : readNotifItems;
+  const selectedNotifShortcut = selectedNotif ? inferBroadcastShortcut(selectedNotif) : null;
 
   const normalizedLinkedEmail = linkedEmail ? linkedEmail.trim().toLowerCase() : null;
   const normalizedAccountEmailInput = accountEmailInput.trim() ? accountEmailInput.trim().toLowerCase() : null;
@@ -952,7 +1020,21 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     }
     const rawLink = (item.link || "").trim();
     if (item.kind === "system") {
+      const lowerTitle = (item.title || "").toLowerCase();
+      if (lowerTitle.includes("xác thực 2 lớp") || lowerTitle.includes("otp")) {
+        setSelectedNotif(null);
+        setNotifOpen(false);
+        setTwoFactorOpen(true);
+        return;
+      }
+      if (rawLink === "/login" || lowerTitle.includes("phiên đăng nhập")) {
+        setSelectedNotif(null);
+        setNotifOpen(false);
+        setSessionsOpen(true);
+        return;
+      }
       if (rawLink.startsWith("/portal")) {
+        setSelectedNotif(null);
         setNotifOpen(false);
         const target = resolveNotificationTarget(item);
         navigate(target.tab, target.action);
@@ -960,6 +1042,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       }
       if (rawLink.startsWith("/#") || rawLink.startsWith("/gioi-thieu")) {
         resetOverlayHistoryOnRouteLeave();
+        setSelectedNotif(null);
         setNotifOpen(false);
         const introTarget = rawLink.startsWith("/#")
           ? `${INTRO_PATH}${rawLink.slice(1)}`
@@ -967,11 +1050,11 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         router.push(introTarget);
         return;
       }
-      setNotifOpen(false);
-      setSupportOpen(true);
+      setSelectedNotif(item);
       return;
     }
     const target = resolveNotificationTarget(item);
+    setSelectedNotif(null);
     setNotifOpen(false);
     navigate(target.tab, target.action);
   };
@@ -1048,6 +1131,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               type="button"
               className="pt-notif-btn"
               onClick={() => {
+                setSelectedNotif(null);
                 setNotifOpen(true);
                 invalidateQueries(NOTIFICATIONS_PATH);
               }}
@@ -1470,7 +1554,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 className="pt-profile-logout-btn"
                 onClick={() => {
                   closeProfile();
-                  toast.success(t("Đã đăng xuất"));
+                  toast.exit(t("Đã đăng xuất"));
                   void logout();
                 }}
               >
@@ -1485,31 +1569,84 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       {notifOpen && (
         <Sheet
           variant="drawer"
-          title={t("Thông báo")}
-          onClose={() => setNotifOpen(false)}
+          title={selectedNotif ? t("Chi tiết thông báo") : t("Thông báo")}
+          onClose={() => {
+            setSelectedNotif(null);
+            setNotifOpen(false);
+          }}
           className="pt-notif-sheet"
           footer={
-            <DrawerSummaryFooter
-              actions={
-                unreadCount > 0 ? (
-                  <BusyButton
-                    type="button"
-                    className="pt-drawer-cta"
-                    busy={markingAll}
-                    busyLabel={t("Đang đánh dấu…")}
-                    onClick={() => void handleMarkAllRead()}
-                  >
-                    <span>{t("Đánh dấu đọc hết")}</span>
-                    <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
-                  </BusyButton>
-                ) : (
-                  <DrawerCloseCta label={t("Đã nắm thông tin")} />
-                )
-              }
-            />
+            selectedNotif ? (
+              <DrawerSummaryFooter
+                actions={
+                  selectedNotifShortcut ? (
+                    <div className="pt-notif-detail-actions">
+                      <button
+                        type="button"
+                        className="pt-btn pt-btn-ghost"
+                        onClick={() => setSelectedNotif(null)}
+                      >
+                        {t("Quay lại danh sách")}
+                      </button>
+                      <button
+                        type="button"
+                        className="pt-btn pt-btn-primary"
+                        onClick={() => {
+                          setSelectedNotif(null);
+                          setNotifOpen(false);
+                          navigate(selectedNotifShortcut.tab);
+                        }}
+                      >
+                        {t(selectedNotifShortcut.label)}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pt-drawer-cta"
+                      onClick={() => setSelectedNotif(null)}
+                    >
+                      <span>{t("Quay lại danh sách")}</span>
+                    </button>
+                  )
+                }
+              />
+            ) : (
+              <DrawerSummaryFooter
+                actions={
+                  unreadCount > 0 ? (
+                    <BusyButton
+                      type="button"
+                      className="pt-drawer-cta"
+                      busy={markingAll}
+                      busyLabel={t("Đang đánh dấu…")}
+                      onClick={() => void handleMarkAllRead()}
+                    >
+                      <span>{t("Đánh dấu đọc hết")}</span>
+                      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+                    </BusyButton>
+                  ) : (
+                    <DrawerCloseCta label={t("Đã nắm thông tin")} />
+                  )
+                }
+              />
+            )
           }
         >
-          <div className="pt-stack" style={{ gap: 14 }}>
+          {selectedNotif ? (
+            <div className="pt-notif-detail-card">
+              <div className="pt-notif-detail-meta" data-no-translate="true">
+                <span>{t("Thời gian gửi")}:</span>
+                <strong>
+                  {formatDate(selectedNotif.createdAt)}
+                  {formatTime(selectedNotif.createdAt) ? `, ${formatTime(selectedNotif.createdAt)}` : ""}
+                </strong>
+              </div>
+              <h3 className="pt-notif-detail-title">{selectedNotif.title}</h3>
+              {selectedNotif.body && <p className="pt-notif-detail-body">{selectedNotif.body}</p>}
+            </div>
+          ) : (
+            <div className="pt-stack" style={{ gap: 14 }}>
             {notifItems.length > 0 && (
               <div className="pt-notif-toolbar">
                 <div className="pt-notif-filter-group">
@@ -1549,23 +1686,13 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
             <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
 
             {!notifications.loading && visibleNotifItems.length === 0 && (
-              isDesktopDrawer ? (
-                <p className="pt-drawer-empty-note" style={{ textAlign: "center" }}>
-                  {notifItems.length === 0
-                    ? t("Hiện chưa có thông báo mới nào từ HTX.")
-                    : notifFilter === "unread"
-                      ? t("Bạn đã đọc hết tất cả thông báo.")
-                      : t("Chưa có thông báo nào đã đọc.")}
-                </p>
-              ) : (
-                <EmptyState icon="none">
-                  {notifItems.length === 0
-                    ? "Hiện chưa có thông báo mới nào từ HTX."
-                    : notifFilter === "unread"
-                      ? "Bạn đã đọc hết tất cả thông báo."
-                      : "Chưa có thông báo nào đã đọc."}
-                </EmptyState>
-              )
+              <EmptyState icon="none">
+                {notifItems.length === 0
+                  ? t("Hiện chưa có thông báo mới nào từ HTX.")
+                  : notifFilter === "unread"
+                    ? t("Bạn đã đọc hết tất cả thông báo.")
+                    : t("Chưa có thông báo nào đã đọc.")}
+              </EmptyState>
             )}
 
             {visibleNotifItems.length > 0 && (
@@ -1612,7 +1739,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 ))}
               </div>
             )}
-          </div>
+            </div>
+          )}
         </Sheet>
       )}
 
@@ -1718,7 +1846,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         >
           <ChangePasswordForm
             onSuccess={() => {
-              toast.success(t("Đã đổi mật khẩu, vui lòng đăng nhập lại"));
+              toast.exit(t("Đã đổi mật khẩu, vui lòng đăng nhập lại"));
               setPasswordOpen(false);
               void logout();
             }}

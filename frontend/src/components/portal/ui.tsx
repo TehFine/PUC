@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "@/components/ui/PublicIcon";
+import { ArrowRight } from "@/components/ui/PublicIcon";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
@@ -15,7 +16,7 @@ import {
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
-import { RadialPngIcon } from "./RadialIcons";
+import { centerDockItem } from "@/lib/dock-scroll";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
 export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
@@ -41,55 +42,27 @@ export function Card({ title, action, children }: { title?: string; action?: Rea
   );
 }
 
-const EMPTY_ICONS = {
-  request: Send,
-  learn: GraduationCap,
-  search: Search,
-  diary: NotebookPen,
-  spray: FlaskConical,
-  map: Map,
-  plot: TreePine,
-  harvest: Package,
-  ok: CircleCheck,
-  calendar: CalendarDays,
-  lab: Microscope,
-};
-
-export type EmptyIconName = keyof typeof EMPTY_ICONS | "none" | "recyclebin" | "empty";
+export type EmptyIconName =
+  | "request"
+  | "learn"
+  | "search"
+  | "diary"
+  | "spray"
+  | "map"
+  | "plot"
+  | "harvest"
+  | "ok"
+  | "calendar"
+  | "lab"
+  | "none"
+  | "recyclebin"
+  | "empty";
 
 export function EmptyState({ icon, children }: { icon: EmptyIconName; children: ReactNode }) {
-  if (icon === "none") {
-    return (
-      <div className="pt-empty">
-        <RadialPngIcon src="/none.png" size={44} className="pt-empty-icon" />
-        <p>{children}</p>
-      </div>
-    );
-  }
-  if (icon === "recyclebin") {
-    return (
-      <div className="pt-empty">
-        <RadialPngIcon src="/recyclebin.png" size={34} className="pt-empty-icon" />
-        <p>{children}</p>
-      </div>
-    );
-  }
-  if (icon === "empty") {
-    return (
-      <div className="pt-empty">
-        <RadialPngIcon src="/empty.png" size={32} className="pt-empty-icon" />
-        <p>{children}</p>
-      </div>
-    );
-  }
-  const Icon = EMPTY_ICONS[icon];
   return (
-    <div className="pt-empty">
-      <span className="pt-empty-icon" aria-hidden="true">
-        <Icon />
-      </span>
-      <p>{children}</p>
-    </div>
+    <ContextualEmptyBox iconHint={icon} className="pt-empty">
+      {children}
+    </ContextualEmptyBox>
   );
 }
 
@@ -455,25 +428,16 @@ function useCameraDialFade(
       const overflow = Math.max(0, scrollW - clientW);
       maxScrollRef.current = overflow;
 
-      let scrollTarget: number | null = null;
       if (overflow > 2) {
         const activeBtn = track.querySelector<HTMLElement>(
           '[aria-selected="true"], button.active, button.is-active',
         );
         if (activeBtn) {
-          const raw = activeBtn.offsetLeft + activeBtn.offsetWidth / 2 - clientW / 2;
-          scrollTarget = Math.max(0, Math.min(overflow, raw));
+          const preferInstant =
+            isFirst ||
+            (typeof document !== "undefined" && document.documentElement.dataset.perf === "lite");
+          centerDockItem(track, activeBtn, preferInstant ? "auto" : "smooth");
         }
-      }
-
-      if (scrollTarget !== null && Math.abs(track.scrollLeft - scrollTarget) > 1) {
-        const preferInstant =
-          isFirst ||
-          (typeof document !== "undefined" && document.documentElement.dataset.perf === "lite");
-        track.scrollTo({
-          left: scrollTarget,
-          behavior: preferInstant ? "auto" : "smooth",
-        });
       }
       applyFadeValues(track, overflow);
     });
