@@ -6654,6 +6654,17 @@ body.pt-body {
   height: 115px;
 }
 
+.pt-notif-sheet .pt-empty {
+  min-height: 240px;
+  padding: 44px 20px 46px;
+  background: #ffffff;
+}
+
+.pt-notif-sheet .pt-empty .puc-empty-art {
+  width: 184px;
+  height: 139px;
+}
+
 @media (max-width: 640px) {
   .pt-empty {
     padding: 28px 16px 30px;
@@ -6665,6 +6676,16 @@ body.pt-body {
   .pt-sheet .pt-empty .puc-empty-art {
     width: 148px;
     height: 112px;
+  }
+
+  .pt-notif-sheet .pt-empty {
+    min-height: 210px;
+    padding: 36px 16px 38px;
+  }
+
+  .pt-notif-sheet .pt-empty .puc-empty-art {
+    width: 168px;
+    height: 127px;
   }
 }
 

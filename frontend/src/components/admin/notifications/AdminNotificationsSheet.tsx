@@ -277,6 +277,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
           variant="drawer"
           title="Thông báo"
           onClose={() => setOpen(false)}
+          className="pt-notif-sheet"
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>

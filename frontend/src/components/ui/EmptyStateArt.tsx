@@ -207,6 +207,36 @@ export function EmptyStateArt({
           <stop offset="0%" stopColor="#dfe5f3" />
           <stop offset="100%" stopColor="#eef2fa" />
         </linearGradient>
+        <linearGradient id={id("cloudBack")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#eaedf2" stopOpacity="0.92" />
+          <stop offset="68%" stopColor="#f3f5f8" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={id("cloudFront")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#eef1f5" stopOpacity="0.95" />
+          <stop offset="72%" stopColor="#f7f8fa" stopOpacity="0.52" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={id("bellBody")} x1="26%" y1="10%" x2="78%" y2="94%">
+          <stop offset="0%" stopColor="#f3f5f8" />
+          <stop offset="46%" stopColor="#e5e8ee" />
+          <stop offset="100%" stopColor="#d4d9e2" />
+        </linearGradient>
+        <linearGradient id={id("bellRim")} x1="18%" y1="0%" x2="84%" y2="100%">
+          <stop offset="0%" stopColor="#eceff4" />
+          <stop offset="55%" stopColor="#dfe3eb" />
+          <stop offset="100%" stopColor="#cfd4df" />
+        </linearGradient>
+        <linearGradient id={id("bellClapper")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#c6ccd7" />
+          <stop offset="45%" stopColor="#d8dde6" />
+          <stop offset="100%" stopColor="#e5e8ef" />
+        </linearGradient>
+        <radialGradient id={id("bellShadow")} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#b8c0ce" stopOpacity="0.28" />
+          <stop offset="62%" stopColor="#cfd5e0" stopOpacity="0.1" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
       </defs>
 
       {variant === "box" && (
@@ -233,24 +263,65 @@ export function EmptyStateArt({
 
       {variant === "notify" && (
         <g>
-          <ellipse cx="90" cy="108" rx="48" ry="11" fill={`url(#${id("shadow")})`} />
-          <ellipse cx="40" cy="96" rx="5.5" ry="2.6" fill="#e2e9f3" />
-          <ellipse cx="141" cy="94" rx="5" ry="2.4" fill="#e2e9f3" />
-          {/* Bong bóng thông báo nổi phía trên */}
+          {/* Lớp mây mờ phía sau trải hai bên chân chuông */}
           <path
-            d="M90 16 C106 16 118 24 118 33.5 C118 43 106 51 90 51 C86.5 51 83.2 50.6 80.2 49.8 L72 54.5 L74.2 47.4 C66.8 44.3 62 39.3 62 33.5 C62 24 74 16 90 16 Z"
-            fill={`url(#${id("mid")})`}
+            d="M12 102 C14 91 23 85 33 86 C36 75 47 68 59 71 C65 62 77 58 89 62 C101 57 115 61 122 71 C134 69 145 76 148 86 C158 86 166 92 168 102 Z"
+            fill={`url(#${id("cloudBack")})`}
           />
-          <circle cx="80" cy="33.5" r="2.6" fill="#ffffff" />
-          <circle cx="90" cy="33.5" r="2.6" fill="#ffffff" />
-          <circle cx="100" cy="33.5" r="2.6" fill="#ffffff" />
-          {/* Hộp thông báo mở bên dưới */}
-          <polygon points="54,67 90,56 90,84 54,92" fill={`url(#${id("deep")})`} />
-          <polygon points="90,56 126,67 126,92 90,84" fill={`url(#${id("shade")})`} />
-          <polygon points="54,67 90,80 90,110 54,97" fill={`url(#${id("mid")})`} />
-          <polygon points="90,80 126,67 126,97 90,110" fill={`url(#${id("shade")})`} />
-          <polygon points="54,67 90,80 79,92 41,78" fill={`url(#${id("paper")})`} />
-          <polygon points="90,80 126,67 139,78 101,92" fill={`url(#${id("light")})`} />
+          <path
+            d="M22 106 C26 96 36 91 46 93 C52 84 64 81 74 86 C84 79 98 79 108 86 C118 81 130 84 136 93 C146 91 155 96 159 106 Z"
+            fill={`url(#${id("cloudFront")})`}
+          />
+
+          {/* Ô thoại nhỏ mờ góc trên bên trái quả chuông */}
+          <path
+            d="M49 16 H64.5 A3.5 3.5 0 0 1 68 19.5 V27.5 A3.5 3.5 0 0 1 64.5 31 H61.2 L58.4 34.2 L57.6 31 H49 A3.5 3.5 0 0 1 45.5 27.5 V19.5 A3.5 3.5 0 0 1 49 16 Z"
+            fill="#ebeff4"
+          />
+          <path
+            d="M50.2 21.3 H55.2 L50.4 25.8 H55.4"
+            stroke="#fbfcfd"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M58.2 21.3 H63 L58.4 25.8 H63.2"
+            stroke="#fbfcfd"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Bóng đổ dịu dưới chân chuông */}
+          <ellipse cx="90" cy="110" rx="38" ry="7.5" fill={`url(#${id("bellShadow")})`} />
+
+          {/* Quả lắc tròn dưới đáy chuông */}
+          <ellipse cx="90" cy="96.5" rx="10.2" ry="8.8" fill={`url(#${id("bellClapper")})`} />
+
+          {/* Núm đỉnh chuông 3D */}
+          <circle cx="90" cy="34.5" r="6" fill={`url(#${id("bellBody")})`} />
+
+          {/* Thân chuông 3D bo tròn mềm mại */}
+          <path
+            d="M90 36.5 C74.5 36.5 65.5 47.5 64.5 64.5 C63.9 75.2 61.2 83.2 54.2 89.6 C52.2 91.4 53.3 95 56.4 95.3 Q90 98.2 123.6 95.3 C126.7 95 127.8 91.4 125.8 89.6 C118.8 83.2 116.1 75.2 115.5 64.5 C114.5 47.5 105.5 36.5 90 36.5 Z"
+            fill={`url(#${id("bellBody")})`}
+          />
+
+          {/* Ánh sáng khối mềm bên sườn trái quả chuông */}
+          <path
+            d="M83 42.5 C73.8 45.2 69.2 53.8 68.4 66.8 C67.9 74.2 66.2 80.4 62 85.8"
+            stroke="#f8f9fb"
+            strokeWidth="3.2"
+            strokeLinecap="round"
+            opacity="0.72"
+          />
+
+          {/* Vành miệng chuông dưới dày mịn */}
+          <path
+            d="M55 91.4 Q90 94.6 125 91.4 C126.8 92.8 126.1 95.2 123.5 95.5 Q90 98.6 56.5 95.5 C53.9 95.2 53.2 92.8 55 91.4 Z"
+            fill={`url(#${id("bellRim")})`}
+          />
         </g>
       )}
 
