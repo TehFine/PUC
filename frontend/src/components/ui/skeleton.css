@@ -367,32 +367,22 @@ body:has(.app-header, .pt-topbar) .net-toast {
 }
 
 /* ─── Toast thao tác toàn hệ thống:
-   - Laptop / Desktop (> 768px): nằm gọn ngay dưới thanh Header của từng trang, không viền/outline.
+   - Laptop / Desktop (> 768px): nằm gọn ở góc dưới bên phải màn hình, không viền/outline.
    - Điện thoại (<= 768px): thả từ đỉnh màn hình xuống với kích thước đầy đặn như thông báo trên iPhone. ─── */
 .puc-toast-dock {
   position: fixed;
-  top: var(--puc-toast-desktop-top, 74px);
-  left: 50%;
-  transform: translateX(-50%);
+  right: max(24px, env(safe-area-inset-right, 0px));
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  top: auto;
+  left: auto;
+  transform: none;
   z-index: 10020;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: min(440px, calc(100vw - 32px));
+  align-items: flex-end;
+  gap: 10px;
+  width: min(420px, calc(100vw - 48px));
   pointer-events: none;
-}
-
-body:has(.auth-topbar, .tr-topbar) .puc-toast-dock {
-  --puc-toast-desktop-top: 66px;
-}
-
-body:has(.eh-sticky-bar) .puc-toast-dock {
-  --puc-toast-desktop-top: 68px;
-}
-
-body:has(.app-header, .pt-topbar) .puc-toast-dock {
-  --puc-toast-desktop-top: 74px;
 }
 
 .puc-toast {
@@ -467,7 +457,7 @@ body:has(.app-header, .pt-topbar) .puc-toast-dock {
 .puc-toast.is-leaving {
   animation: none !important;
   pointer-events: none !important;
-  transform: translate3d(0, calc(-100% - 76px), 0);
+  transform: translate3d(0, calc(100% + 28px), 0);
   opacity: 0;
   transition: transform 0.24s cubic-bezier(0.4, 0, 1, 1), opacity 0.18s ease;
 }
@@ -475,7 +465,7 @@ body:has(.app-header, .pt-topbar) .puc-toast-dock {
 @keyframes puc-toast-in-desktop {
   from {
     opacity: 0;
-    transform: translate3d(0, -16px, 0);
+    transform: translate3d(0, 18px, 0);
   }
   to {
     opacity: 1;
@@ -517,6 +507,11 @@ body:has(.app-header, .pt-topbar) .puc-toast-dock {
   }
   .puc-toast-dock {
     top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
+    bottom: auto;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    align-items: center;
     width: min(414px, calc(100vw - 20px));
     gap: 8px;
   }

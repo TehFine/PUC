@@ -1,10 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -26,8 +24,6 @@ interface ToastItem {
 const MAX_ACTIVE_TOASTS = 3;
 const EXIT_DURATION_MS = 250;
 const DEDUPE_WINDOW_MS = 650;
-const HEADER_SELECTOR =
-  ".app-header, .pt-topbar, .eh-sticky-bar, .auth-topbar, .tr-topbar, header";
 
 let items: ToastItem[] = [];
 let nextId = 1;
@@ -96,39 +92,28 @@ function push(tone: ToastTone, rawMessage: string, ttl: number) {
   emit();
 }
 
-/** Thông báo nổi sau mỗi thao tác: trên Mobile thả xuống cỡ banner iPhone, trên Laptop nằm ngay dưới thanh Header. */
+/** Thông báo nổi sau mỗi thao tác: trên Mobile thả xuống cỡ banner iPhone ở đỉnh màn hình, trên Laptop hiển thị gọn ở góc dưới bên phải. */
 export const toast = {
   success: (message: string) => push("success", message, 3000),
   error: (message: string) => push("error", message, 4800),
   info: (message: string) => push("info", message, 3200),
 };
 
-function measureDesktopToastTopPx(): number | null {
-  if (typeof window === "undefined" || typeof document === "undefined") return null;
-  if (window.innerWidth <= 768) return null;
-
-  const candidates = document.querySelectorAll<HTMLElement>(HEADER_SELECTOR);
-  for (const el of candidates) {
-    const style = window.getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden") continue;
-    const rect = el.getBoundingClientRect();
-    // Chỉ lấy thanh header đầu trang thực sự đang hiển thị ở vùng đỉnh màn hình
-    if (rect.height >= 36 && rect.height <= 120 && rect.top >= -4 && rect.top <= 96 && rect.bottom > 0) {
-      return Math.min(156, Math.max(16, Math.round(rect.bottom) + 10));
-    }
-  }
-  return 16;
+function isMobileToastViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth <= 768;
 }
 
 function ToastCard({ item }: { item: ToastItem }) {
-  const [dragY, setDragY] = useState(0);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const isDraggingRef = useRef(false);
-  const dragYRef = useRef(0);
-  const pointerStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pointerStartRef = useRef<{ x: number; y: number; time: number; mobile: boolean } | null>(
+    null,
+  );
   const remainingRef = useRef(item.ttl);
   const startedAtRef = useRef(0);
   const snapTimerRef = useRef<number | undefined>(undefined);
@@ -174,6 +159,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       x: e.clientX,
       y: e.clientY,
       time: performance.now(),
+      mobile: isMobileToastViewport(),
     };
     isDraggingRef.current = true;
     setIsDragging(true);
@@ -186,11 +172,25 @@ function ToastCard({ item }: { item: ToastItem }) {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current || !pointerStartRef.current || item.leaving) return;
-    const deltaY = e.clientY - pointerStartRef.current.y;
-    const nextY = deltaY < 0 ? deltaY : Math.min(8, deltaY * 0.14);
-    dragYRef.current = nextY;
-    setDragY(nextY);
+    const start = pointerStartRef.current;
+    if (!isDraggingRef.current || !start || item.leaving) return;
+    const deltaX = e.clientX - start.x;
+    const deltaY = e.clientY - start.y;
+
+    let nextX = 0;
+    let nextY = 0;
+    if (start.mobile) {
+      // Mobile (ở đỉnh màn hình): vuốt lên để đóng
+      nextY = deltaY < 0 ? deltaY : Math.min(8, deltaY * 0.14);
+    } else {
+      // Laptop (ở góc dưới bên phải): kéo xuống hoặc sang phải để đóng
+      nextX = deltaX > 0 ? deltaX : Math.max(-8, deltaX * 0.12);
+      nextY = deltaY > 0 ? deltaY : Math.max(-8, deltaY * 0.12);
+    }
+
+    const next = { x: nextX, y: nextY };
+    dragOffsetRef.current = next;
+    setDragOffset(next);
   };
 
   const finishGesture = (e: React.PointerEvent<HTMLDivElement>, cancelled: boolean) => {
@@ -204,28 +204,36 @@ function ToastCard({ item }: { item: ToastItem }) {
     }
 
     const start = pointerStartRef.current;
-    const currentY = dragYRef.current;
+    const current = dragOffsetRef.current;
     isDraggingRef.current = false;
     setIsDragging(false);
     pointerStartRef.current = null;
 
     if (!cancelled && start) {
-      const deltaX = Math.abs(e.clientX - start.x);
-      const deltaY = e.clientY - start.y;
+      const rawDeltaX = e.clientX - start.x;
+      const rawDeltaY = e.clientY - start.y;
       const duration = Math.max(1, performance.now() - start.time);
-      const velocityY = deltaY / duration;
-      const isSwipedUp = currentY <= -18 || (deltaY < -8 && velocityY < -0.22);
-      const isTap = deltaX < 6 && Math.abs(deltaY) < 6 && duration < 350;
+      const velocityX = rawDeltaX / duration;
+      const velocityY = rawDeltaY / duration;
+      const isTap = Math.abs(rawDeltaX) < 6 && Math.abs(rawDeltaY) < 6 && duration < 350;
 
-      if (isSwipedUp || isTap) {
+      const isDismissSwipe = start.mobile
+        ? current.y <= -18 || (rawDeltaY < -8 && velocityY < -0.22)
+        : current.y >= 18 ||
+          current.x >= 28 ||
+          (rawDeltaY > 8 && velocityY > 0.22) ||
+          (rawDeltaX > 12 && velocityX > 0.25);
+
+      if (isDismissSwipe || isTap) {
         triggerDismiss();
         return;
       }
     }
 
     setIsSnapping(true);
-    setDragY(0);
-    dragYRef.current = 0;
+    const zero = { x: 0, y: 0 };
+    setDragOffset(zero);
+    dragOffsetRef.current = zero;
     snapTimerRef.current = window.setTimeout(() => {
       setIsSnapping(false);
     }, 240);
@@ -238,12 +246,17 @@ function ToastCard({ item }: { item: ToastItem }) {
     }
   };
 
+  const dismissDistance =
+    dragOffset.y < 0
+      ? Math.abs(dragOffset.y)
+      : Math.max(0, dragOffset.y, dragOffset.x * 0.75);
+
   const inlineGestureStyle: React.CSSProperties | undefined = item.leaving
     ? undefined
     : isDragging
       ? {
-          transform: `translate3d(0, ${dragY}px, 0)`,
-          opacity: dragY < 0 ? Math.max(0.18, 1 + dragY / 88) : 1,
+          transform: `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0)`,
+          opacity: dismissDistance > 0 ? Math.max(0.18, 1 - dismissDistance / 92) : 1,
           transition: "none",
         }
       : isSnapping
@@ -262,8 +275,8 @@ function ToastCard({ item }: { item: ToastItem }) {
     <div
       role={item.tone === "error" ? "alert" : "status"}
       tabIndex={0}
-      aria-label={`${item.message}. Vuốt lên hoặc chạm để đóng.`}
-      title="Vuốt lên hoặc chạm để đóng"
+      aria-label={`${item.message}. Bấm hoặc kéo để đóng.`}
+      title="Bấm hoặc kéo để đóng"
       className={`puc-toast is-${item.tone}${item.leaving ? " is-leaving" : ""}${
         isDragging ? " is-dragging" : ""
       }${isSnapping ? " is-snapping" : ""}`}
@@ -295,39 +308,10 @@ const getSnapshot = () => items;
 /** Đặt một lần ở layout gốc. */
 export function Toaster() {
   const list = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const pathname = usePathname();
-  const dockRef = useRef<HTMLDivElement>(null);
-  const hasItems = list.length > 0;
-
-  useLayoutEffect(() => {
-    if (!hasItems) return;
-    const syncHeaderOffset = () => {
-      const el = dockRef.current;
-      if (!el) return;
-      const topPx = measureDesktopToastTopPx();
-      if (topPx !== null) {
-        el.style.setProperty("--puc-toast-desktop-top", `${topPx}px`);
-      } else {
-        el.style.removeProperty("--puc-toast-desktop-top");
-      }
-    };
-
-    syncHeaderOffset();
-    const raf = window.requestAnimationFrame(syncHeaderOffset);
-    window.addEventListener("resize", syncHeaderOffset, { passive: true });
-    window.addEventListener("scroll", syncHeaderOffset, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", syncHeaderOffset);
-      window.removeEventListener("scroll", syncHeaderOffset);
-    };
-  }, [hasItems, pathname]);
-
-  if (!hasItems) return null;
+  if (list.length === 0) return null;
 
   return (
     <div
-      ref={dockRef}
       className="puc-toast-dock"
       aria-live="polite"
       aria-relevant="additions text"
