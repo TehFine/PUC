@@ -30,52 +30,6 @@
   animation: net-ios-spin 0.85s steps(12, end) infinite;
 }
 
-/* Huy hiệu "Đang tải dữ liệu…" nằm giữa vùng nội dung (ngang) */
-.sk-apple-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sk-apple-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 12px 6px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(20, 55, 47, 0.12);
-  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.06);
-  color: #14372f;
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-}
-
-.sk-apple-pill .sk-apple-spinner {
-  color: #14372f;
-}
-
-.sk-apple-pill.is-hud {
-  min-height: 36px;
-  padding: 8px 14px 8px 12px;
-  background: rgba(20, 55, 47, 0.92);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 28px rgba(10, 28, 24, 0.22);
-  color: #ffffff;
-  font-size: 13px;
-}
-
-.sk-apple-pill.is-hud .sk-apple-spinner {
-  color: #f8f23a;
-}
-
-.sk-apple-pill-text {
-  white-space: nowrap;
-}
-
 .sk {
   --sk-base: rgba(20, 55, 47, 0.08);
   --sk-shine: rgba(255, 255, 255, 0.68);
@@ -103,8 +57,7 @@ html[data-perf="lite"] .sk::after {
   display: none;
   animation: none;
 }
-html[data-perf="lite"] .sk-apple-spinner,
-html[data-perf="lite"] .net-toast-ios-spinner {
+html[data-perf="lite"] .sk-apple-spinner {
   animation-duration: 1.2s;
   animation-timing-function: steps(8, end);
 }
@@ -204,130 +157,11 @@ html[data-perf="lite"] .net-toast-ios-spinner {
   height: 100%;
   min-height: inherit;
 }
-.sk-map-label {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(20, 55, 47, 0.6);
-}
 
 /* Ảnh đang tải: nền tĩnh dịu mắt phía sau, ảnh tải xong sẽ phủ lên.
    Tuyệt đối không chạy animation vô hạn trên img[data-nimg="fill"] để tránh vẽ lại liên tục làm nóng máy. */
 img[data-nimg="fill"] {
   background-color: rgba(20, 55, 47, 0.055);
-}
-
-/* Thẻ thông báo trạng thái mạng (Tối giản: chỉ icon + chữ, không viền bao ngoài, đồng bộ vị trí với Toast) */
-.net-toast {
-  position: fixed;
-  top: var(--net-toast-desktop-top, 74px);
-  left: 50%;
-  z-index: 10000;
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 240px;
-  max-width: min(440px, calc(100vw - 32px));
-  width: max-content;
-  min-height: 46px;
-  padding: 11px 18px 11px 15px;
-  border-radius: 8px;
-  background: #ffffff;
-  border: none !important;
-  outline: none !important;
-  color: #14372f;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.38;
-  box-shadow: 0 8px 26px -4px rgba(20, 55, 47, 0.14),
-              0 2px 8px rgba(20, 55, 47, 0.06);
-  transform: translate(-50%, 0);
-  animation: net-toast-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  transition: box-shadow 0.2s ease;
-}
-
-body:has(.auth-topbar, .tr-topbar) .net-toast {
-  --net-toast-desktop-top: 66px;
-}
-
-body:has(.eh-sticky-bar) .net-toast {
-  --net-toast-desktop-top: 68px;
-}
-
-body:has(.app-header, .pt-topbar) .net-toast {
-  --net-toast-desktop-top: 74px;
-}
-
-.net-toast:hover {
-  box-shadow: 0 12px 30px -4px rgba(20, 55, 47, 0.17),
-              0 4px 10px rgba(20, 55, 47, 0.07);
-}
-
-.net-toast:focus,
-.net-toast:focus-visible,
-.net-toast:active {
-  outline: none !important;
-  border: none !important;
-}
-
-.net-toast-badge {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: #475569;
-}
-
-.net-toast.is-offline .net-toast-badge {
-  color: #dc2626;
-}
-
-.net-toast.is-ok .net-toast-badge {
-  color: #10b981;
-}
-
-.net-toast-text {
-  flex: 1;
-  min-width: 0;
-  color: #111827;
-  font-weight: 500;
-  letter-spacing: normal;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.net-toast.is-dragging {
-  animation: none !important;
-  transition: none !important;
-  cursor: grabbing !important;
-}
-
-.net-toast.is-snapping {
-  animation: none !important;
-}
-
-.net-toast.is-dismissing {
-  animation: none !important;
-  pointer-events: none !important;
-}
-
-.net-toast-ios-spinner {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: currentColor;
-  display: inline-block;
-  animation: net-ios-spin 0.85s steps(12, end) infinite;
 }
 
 @keyframes net-ios-spin {
@@ -353,16 +187,6 @@ body:has(.app-header, .pt-topbar) .net-toast {
   }
   to {
     opacity: 1;
-  }
-}
-@keyframes net-toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -16px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
   }
 }
 
@@ -415,7 +239,8 @@ body:has(.app-header, .pt-topbar) .net-toast {
   animation: puc-toast-in-desktop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.puc-toast.is-error {
+.puc-toast.is-error,
+.puc-toast.is-offline {
   color: #b91c1c;
 }
 
@@ -485,26 +310,6 @@ body:has(.app-header, .pt-topbar) .net-toast {
 }
 
 @media (max-width: 768px) {
-  .net-toast {
-    top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
-    width: min(414px, calc(100vw - 20px));
-    max-width: calc(100vw - 20px);
-    min-width: 0;
-    min-height: 58px;
-    padding: 14px 18px;
-    border-radius: 8px;
-    font-size: 15px;
-    gap: 13px;
-    box-shadow: 0 10px 30px -4px rgba(20, 55, 47, 0.16),
-                0 3px 10px rgba(20, 55, 47, 0.08);
-  }
-  .net-toast-badge .pub-icon {
-    --pub-icon-size: 22px !important;
-  }
-  .net-toast-ios-spinner {
-    width: 21px;
-    height: 21px;
-  }
   .puc-toast-dock {
     top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
     bottom: auto;
@@ -545,7 +350,6 @@ body:has(.app-header, .pt-topbar) .net-toast {
     animation: none !important;
   }
   .sk-group,
-  .net-toast,
   .puc-toast {
     animation-duration: 0.01s !important;
   }

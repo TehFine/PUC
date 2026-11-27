@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { LoadingToastBridge } from "@/components/ui/Toast";
 import "./skeleton.css";
 
 type Size = number | string;
@@ -27,27 +28,6 @@ export function AppleSpinner({
   );
 }
 
-/** Huy hiệu trạng thái đang tải kiểu Apple (kèm con quay 12 nan + nhãn). */
-export function AppleLoadingPill({
-  label = "Đang tải dữ liệu…",
-  hud = false,
-  className = "",
-}: {
-  label?: string;
-  hud?: boolean;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`sk-apple-pill${hud ? " is-hud" : ""} ${className}`.trim()}
-      aria-hidden="true"
-    >
-      <AppleSpinner size={hud ? 20 : 16} />
-      <span className="sk-apple-pill-text">{label}</span>
-    </div>
-  );
-}
-
 /** Một khối giữ chỗ có nhịp sáng. Chỉ trang trí nên ẩn khỏi trình đọc màn hình. */
 export function Skeleton({ w, h, r, circle, className = "" }: { w?: Size; h?: Size; r?: Size; circle?: boolean; className?: string }) {
   const style = {
@@ -70,8 +50,8 @@ export function SkeletonLines({ lines = 3, h = 13 }: { lines?: number; h?: Size 
 }
 
 /**
- * Vỏ bọc cho một cụm skeleton: hiển thị ngay lập tức kèm con quay Apple và khối giữ chỗ
- * để giữ nguyên bố cục trang, tránh cảm giác trang bị đơ hoặc thoát trang.
+ * Vỏ bọc cho một cụm skeleton: trên nền chỉ giữ khối skeleton giữ chỗ bố cục,
+ * còn thông báo trạng thái đang tải được đưa sang Toast toàn hệ thống.
  */
 export function SkeletonGroup({
   label = "Đang tải dữ liệu…",
@@ -87,11 +67,7 @@ export function SkeletonGroup({
   return (
     <div className={`sk-group ${className}`.trim()} role="status" aria-busy="true" aria-live="polite">
       <span className="sk-sr">{label}</span>
-      {showSpinner && (
-        <div className="sk-apple-bar" aria-hidden="true">
-          <AppleLoadingPill label={label} />
-        </div>
-      )}
+      {showSpinner && <LoadingToastBridge label={label} />}
       {children}
     </div>
   );
@@ -147,12 +123,12 @@ export function SkeletonRows({
       <div aria-hidden="true">
         {Array.from({ length: count }, (_, index) => (
           <div key={index} className="sk-row">
-            <Skeleton w={36} h={36} r={10} />
+            <Skeleton w={36} h={36} r={8} />
             <div className="sk-lines">
               <Skeleton h={13} w="60%" />
               <Skeleton h={11} w="38%" />
             </div>
-            <Skeleton w={56} h={22} r={999} />
+            <Skeleton w={56} h={22} r={6} />
           </div>
         ))}
       </div>
@@ -184,14 +160,11 @@ export function SkeletonStats({
   );
 }
 
-/** Khung bản đồ giữ chỗ trong lúc tải thư viện bản đồ (kèm HUD con quay Apple). */
+/** Khung bản đồ giữ chỗ trong lúc tải thư viện bản đồ (thông báo tải hiển thị qua Toast). */
 export function MapSkeleton({ label = "Đang tải bản đồ…" }: { label?: string }) {
   return (
-    <SkeletonGroup label={label} showSpinner={false} className="sk-map">
-      <Skeleton h="100%" r={14} />
-      <span className="sk-map-label" aria-hidden="true">
-        <AppleLoadingPill label={label} hud />
-      </span>
+    <SkeletonGroup label={label} showSpinner className="sk-map">
+      <Skeleton h="100%" r={8} />
     </SkeletonGroup>
   );
 }
@@ -211,7 +184,7 @@ export function PageSkeleton({ label = "Đang tải trang…" }: { label?: strin
       </div>
       <div className="sk-tabs" aria-hidden="true">
         {[88, 76, 82, 90, 70].map((width, index) => (
-          <Skeleton key={index} w={width} h={36} r={999} />
+          <Skeleton key={index} w={width} h={36} r={6} />
         ))}
       </div>
       <SkeletonStats count={4} showSpinner={false} />

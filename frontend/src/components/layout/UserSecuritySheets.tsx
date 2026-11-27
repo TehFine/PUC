@@ -488,10 +488,11 @@ export function ActiveSessionsSheet({
       const res = await api.delete<{ revokedCurrent?: boolean }>(`/auth/sessions/${session.id}`);
       setConfirmRevoke(null);
       if (res?.revokedCurrent || session.isCurrent) {
+        toast.exit("Đã đăng xuất");
         await onRevokedCurrent();
         return;
       }
-      toast.success("Đã xóa phiên đăng nhập từ xa.");
+      toast.exit("Đã xóa phiên đăng nhập từ xa.");
       await loadSessions();
     } catch (e) {
       setErr(errorMessage(e, "Không thể thu hồi phiên đăng nhập này."));
@@ -506,7 +507,7 @@ export function ActiveSessionsSheet({
     try {
       const res = await api.post<{ revokedCount: number }>("/auth/sessions/revoke-others");
       setConfirmRevoke(null);
-      toast.success(`Đã xóa phiên đăng nhập trên ${res.revokedCount ?? 0} thiết bị khác.`);
+      toast.exit(`Đã xóa phiên đăng nhập trên ${res.revokedCount ?? 0} thiết bị khác.`);
       await loadSessions();
     } catch (e) {
       setErr(errorMessage(e, "Không thể đăng xuất các thiết bị khác."));

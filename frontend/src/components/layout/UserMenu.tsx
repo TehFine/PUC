@@ -333,7 +333,7 @@ export default function UserMenu({
                 className="pt-profile-logout-btn"
                 onClick={() => {
                   setOpen(false);
-                  toast.success("Đã đăng xuất");
+                  toast.exit("Đã đăng xuất");
                   void logout();
                 }}
               >

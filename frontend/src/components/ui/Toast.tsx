@@ -10,7 +10,7 @@ import {
 import { PublicIcon } from "@/components/ui/PublicIcon";
 import "./skeleton.css";
 
-export type ToastTone = "success" | "error" | "info";
+export type ToastTone = "success" | "error" | "info" | "exit" | "loading" | "offline";
 
 interface ToastItem {
   id: number;
@@ -24,23 +24,197 @@ interface ToastItem {
 const MAX_ACTIVE_TOASTS = 3;
 const EXIT_DURATION_MS = 250;
 const DEDUPE_WINDOW_MS = 650;
+const LOADING_TOAST_ID = -1;
+const NETWORK_TOAST_ID = -2;
+const LOADING_SHOW_DELAY_MS = 100;
+const LOADING_MAX_TTL_MS = 45_000;
+const EMPTY_TOASTS: ToastItem[] = [];
 
 let items: ToastItem[] = [];
+let loadingItem: ToastItem | null = null;
+let networkItem: ToastItem | null = null;
+let snapshotList: ToastItem[] = EMPTY_TOASTS;
 let nextId = 1;
+let nextLoaderId = 1;
+const activeLoaders = new Map<number, string>();
+let loadingShowTimer: number | undefined;
+let loadingExitTimer: number | undefined;
+let networkExitTimer: number | undefined;
+let loadingDismissedManually = false;
+
 const listeners = new Set<() => void>();
 const exitTimers = new Map<number, number>();
 
-const emit = () => {
+const rebuildSnapshotAndEmit = () => {
+  const combined: ToastItem[] = [];
+  if (networkItem) combined.push(networkItem);
+  if (loadingItem) combined.push(loadingItem);
+  combined.push(...items);
+  snapshotList = combined.length > 0 ? combined : EMPTY_TOASTS;
   listeners.forEach((listener) => listener());
 };
 
+function currentLoaderMessage(): string {
+  let latest = "Đang tải dữ liệu…";
+  for (const label of activeLoaders.values()) {
+    if (label) latest = label;
+  }
+  return normalizeToastText(latest) || "Đang tải dữ liệu…";
+}
+
+function hideLoadingToastInternal(manual: boolean) {
+  if (typeof window === "undefined") return;
+  if (loadingShowTimer !== undefined) {
+    window.clearTimeout(loadingShowTimer);
+    loadingShowTimer = undefined;
+  }
+  if (manual && activeLoaders.size > 0) {
+    loadingDismissedManually = true;
+  }
+  if (!loadingItem || loadingItem.leaving) return;
+
+  loadingItem = { ...loadingItem, leaving: true };
+  rebuildSnapshotAndEmit();
+
+  if (loadingExitTimer !== undefined) {
+    window.clearTimeout(loadingExitTimer);
+  }
+  loadingExitTimer = window.setTimeout(() => {
+    loadingExitTimer = undefined;
+    loadingItem = null;
+    rebuildSnapshotAndEmit();
+  }, EXIT_DURATION_MS);
+}
+
+function registerActiveLoader(loaderId: number, rawLabel: string) {
+  if (typeof window === "undefined") return;
+  activeLoaders.set(loaderId, rawLabel);
+  if (loadingDismissedManually) return;
+
+  const message = currentLoaderMessage();
+  if (loadingExitTimer !== undefined) {
+    window.clearTimeout(loadingExitTimer);
+    loadingExitTimer = undefined;
+  }
+
+  if (loadingItem) {
+    if (loadingItem.leaving || loadingItem.message !== message) {
+      loadingItem = {
+        ...loadingItem,
+        message,
+        leaving: false,
+      };
+      rebuildSnapshotAndEmit();
+    }
+    return;
+  }
+
+  if (loadingShowTimer === undefined) {
+    loadingShowTimer = window.setTimeout(() => {
+      loadingShowTimer = undefined;
+      if (activeLoaders.size === 0 || loadingDismissedManually) return;
+      loadingItem = {
+        id: LOADING_TOAST_ID,
+        tone: "loading",
+        message: currentLoaderMessage(),
+        ttl: LOADING_MAX_TTL_MS,
+        createdAt: Date.now(),
+        leaving: false,
+      };
+      rebuildSnapshotAndEmit();
+    }, LOADING_SHOW_DELAY_MS);
+  }
+}
+
+function unregisterActiveLoader(loaderId: number) {
+  if (typeof window === "undefined") return;
+  activeLoaders.delete(loaderId);
+  if (activeLoaders.size === 0) {
+    loadingDismissedManually = false;
+    hideLoadingToastInternal(false);
+    return;
+  }
+  if (loadingItem && !loadingItem.leaving) {
+    const nextMsg = currentLoaderMessage();
+    if (nextMsg !== loadingItem.message) {
+      loadingItem = { ...loadingItem, message: nextMsg };
+      rebuildSnapshotAndEmit();
+    }
+  }
+}
+
+/** Cầu nối tự động đẩy trạng thái "Đang tải dữ liệu…" lên Toast khi khung Skeleton đang hiển thị. */
+export function LoadingToastBridge({ label = "Đang tải dữ liệu…" }: { label?: string }) {
+  useEffect(() => {
+    const loaderId = nextLoaderId++;
+    registerActiveLoader(loaderId, label);
+    return () => {
+      unregisterActiveLoader(loaderId);
+    };
+  }, [label]);
+  return null;
+}
+
+function hideNetworkToastInternal() {
+  if (typeof window === "undefined") return;
+  if (!networkItem || networkItem.leaving) return;
+  networkItem = { ...networkItem, leaving: true };
+  rebuildSnapshotAndEmit();
+
+  if (networkExitTimer !== undefined) {
+    window.clearTimeout(networkExitTimer);
+  }
+  networkExitTimer = window.setTimeout(() => {
+    networkExitTimer = undefined;
+    networkItem = null;
+    rebuildSnapshotAndEmit();
+  }, EXIT_DURATION_MS);
+}
+
+/** Đồng bộ thông báo trạng thái mạng (chậm / mất mạng / kết nối lại) vào chung Toast dock. */
+export function setNetworkStatusToast(
+  state: { kind: "slow" | "offline" | "ok"; text: string } | null,
+) {
+  if (typeof window === "undefined") return;
+  if (!state) {
+    hideNetworkToastInternal();
+    return;
+  }
+  if (state.kind === "ok") {
+    hideNetworkToastInternal();
+    push("success", state.text, 2600);
+    return;
+  }
+  if (networkExitTimer !== undefined) {
+    window.clearTimeout(networkExitTimer);
+    networkExitTimer = undefined;
+  }
+  networkItem = {
+    id: NETWORK_TOAST_ID,
+    tone: state.kind === "offline" ? "offline" : "loading",
+    message: normalizeToastText(state.text),
+    ttl: state.kind === "offline" ? 86_400_000 : 7_000,
+    createdAt: Date.now(),
+    leaving: false,
+  };
+  rebuildSnapshotAndEmit();
+}
+
 export function dismissToast(id: number) {
   if (typeof window === "undefined") return;
+  if (id === LOADING_TOAST_ID) {
+    hideLoadingToastInternal(true);
+    return;
+  }
+  if (id === NETWORK_TOAST_ID) {
+    hideNetworkToastInternal();
+    return;
+  }
   const target = items.find((it) => it.id === id);
   if (!target || target.leaving) return;
 
   items = items.map((it) => (it.id === id ? { ...it, leaving: true } : it));
-  emit();
+  rebuildSnapshotAndEmit();
 
   const existingTimer = exitTimers.get(id);
   if (existingTimer !== undefined) {
@@ -49,7 +223,7 @@ export function dismissToast(id: number) {
   const timer = window.setTimeout(() => {
     exitTimers.delete(id);
     items = items.filter((it) => it.id !== id);
-    emit();
+    rebuildSnapshotAndEmit();
   }, EXIT_DURATION_MS);
   exitTimers.set(id, timer);
 }
@@ -89,7 +263,7 @@ function push(tone: ToastTone, rawMessage: string, ttl: number) {
     }
   }
 
-  emit();
+  rebuildSnapshotAndEmit();
 }
 
 /** Thông báo nổi sau mỗi thao tác: trên Mobile thả xuống cỡ banner iPhone ở đỉnh màn hình, trên Laptop hiển thị gọn ở góc dưới bên phải. */
@@ -97,6 +271,7 @@ export const toast = {
   success: (message: string) => push("success", message, 3000),
   error: (message: string) => push("error", message, 4800),
   info: (message: string) => push("info", message, 3200),
+  exit: (message: string) => push("exit", message, 3000),
 };
 
 function isMobileToastViewport(): boolean {
@@ -220,9 +395,9 @@ function ToastCard({ item }: { item: ToastItem }) {
       const isDismissSwipe = start.mobile
         ? current.y <= -18 || (rawDeltaY < -8 && velocityY < -0.22)
         : current.y >= 18 ||
-          current.x >= 28 ||
-          (rawDeltaY > 8 && velocityY > 0.22) ||
-          (rawDeltaX > 12 && velocityX > 0.25);
+        current.x >= 28 ||
+        (rawDeltaY > 8 && velocityY > 0.22) ||
+        (rawDeltaX > 12 && velocityX > 0.25);
 
       if (isDismissSwipe || isTap) {
         triggerDismiss();
@@ -255,31 +430,41 @@ function ToastCard({ item }: { item: ToastItem }) {
     ? undefined
     : isDragging
       ? {
-          transform: `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0)`,
-          opacity: dismissDistance > 0 ? Math.max(0.18, 1 - dismissDistance / 92) : 1,
-          transition: "none",
-        }
+        transform: `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0)`,
+        opacity: dismissDistance > 0 ? Math.max(0.18, 1 - dismissDistance / 92) : 1,
+        transition: "none",
+      }
       : isSnapping
         ? {
-            transform: "translate3d(0, 0, 0)",
-            opacity: 1,
-            transition: "transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease",
-          }
+          transform: "translate3d(0, 0, 0)",
+          opacity: 1,
+          transition: "transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease",
+        }
         : undefined;
 
+  const isSpinner = item.tone === "loading" || item.tone === "offline";
   const iconColor =
-    item.tone === "error" ? "#b91c1c" : item.tone === "info" ? "#14372f" : "#15803d";
-  const iconSrc = item.tone === "error" ? "/icons/alert-triangle.svg" : "/accept.png";
+    item.tone === "error" || item.tone === "offline"
+      ? "#b91c1c"
+      : item.tone === "info" || item.tone === "loading" || item.tone === "exit"
+        ? "#14372f"
+        : "#15803d";
+  const iconSrc = isSpinner
+    ? "/icons/spinner.svg"
+    : item.tone === "error"
+      ? "/icons/alert-triangle.svg"
+      : item.tone === "exit"
+        ? "/logout.png"
+        : "/accept.png";
 
   return (
     <div
-      role={item.tone === "error" ? "alert" : "status"}
+      role={item.tone === "error" || item.tone === "offline" ? "alert" : "status"}
       tabIndex={0}
       aria-label={`${item.message}. Bấm hoặc kéo để đóng.`}
       title="Bấm hoặc kéo để đóng"
-      className={`puc-toast is-${item.tone}${item.leaving ? " is-leaving" : ""}${
-        isDragging ? " is-dragging" : ""
-      }${isSnapping ? " is-snapping" : ""}`}
+      className={`puc-toast is-${item.tone}${item.leaving ? " is-leaving" : ""}${isDragging ? " is-dragging" : ""
+        }${isSnapping ? " is-snapping" : ""}`}
       style={inlineGestureStyle}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -290,7 +475,11 @@ function ToastCard({ item }: { item: ToastItem }) {
       onKeyDown={handleKeyDown}
     >
       <span className="puc-toast-icon" aria-hidden="true">
-        <PublicIcon src={iconSrc} color={iconColor} />
+        <PublicIcon
+          src={iconSrc}
+          color={iconColor}
+          className={isSpinner ? "sk-apple-spinner" : ""}
+        />
       </span>
       <span className="puc-toast-text">{item.message}</span>
     </div>
@@ -303,11 +492,12 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
-const getSnapshot = () => items;
+const getSnapshot = () => snapshotList;
+const getServerSnapshot = () => EMPTY_TOASTS;
 
 /** Đặt một lần ở layout gốc. */
 export function Toaster() {
-  const list = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const list = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   if (list.length === 0) return null;
 
   return (

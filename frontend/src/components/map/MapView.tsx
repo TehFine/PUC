@@ -33,7 +33,7 @@ import DraftForm from "./DraftForm";
 import DrawHint from "./DrawHint";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
-import { AppleLoadingPill } from "@/components/ui/Skeleton";
+import { LoadingToastBridge } from "@/components/ui/Toast";
 import { useBackLayer } from "@/lib/back-navigation";
 import { isLowEndDevice } from "@/lib/network";
 import {
@@ -2195,11 +2195,7 @@ export default function MapView({
         />
       )}
 
-      {loading && (
-        <div className="plotmap-loading">
-          <AppleLoadingPill label="Đang tải dữ liệu thửa…" hud />
-        </div>
-      )}
+      {loading && <LoadingToastBridge label="Đang tải dữ liệu thửa…" />}
 
       {showPanel && (
         <aside ref={panelRef} className="plotmap-panel">
