@@ -86,6 +86,33 @@ const SERVER_SNAPSHOT: State<never> = Object.freeze({
   loading: true,
 });
 
+const initialObjectSnapshots = new WeakMap<object, State<unknown>>();
+const initialPrimitiveSnapshots = new Map<unknown, State<unknown>>();
+
+function getCachedInitialSnapshot<T>(initialData: T | null): State<T> {
+  if (initialData === null || initialData === undefined) {
+    return SERVER_SNAPSHOT as State<T>;
+  }
+  if (typeof initialData === "object") {
+    const key = initialData as unknown as object;
+    let cached = initialObjectSnapshots.get(key);
+    if (!cached) {
+      cached = Object.freeze({ data: initialData, error: false, loading: false });
+      initialObjectSnapshots.set(key, cached);
+    }
+    return cached as State<T>;
+  }
+  let cachedPrim = initialPrimitiveSnapshots.get(initialData);
+  if (!cachedPrim) {
+    if (initialPrimitiveSnapshots.size >= 32) {
+      initialPrimitiveSnapshots.clear();
+    }
+    cachedPrim = Object.freeze({ data: initialData, error: false, loading: false });
+    initialPrimitiveSnapshots.set(initialData, cachedPrim);
+  }
+  return cachedPrim as State<T>;
+}
+
 const entries = new Map<string, StoreEntry>();
 const listeners = new Set<() => void>();
 let globalListenersAttached = false;
@@ -267,7 +294,7 @@ export function usePublic<T>(path: string, initialData: T | null = null): State<
       listeners.add(onStoreChange);
       const entry = ensureEntry(path);
       if (initialData !== null && entry.state.data === null && entry.updatedAt === 0) {
-        entry.state = { data: initialData, error: false, loading: false };
+        entry.state = getCachedInitialSnapshot(initialData);
         entry.updatedAt = Date.now();
       }
       if (Date.now() - entry.updatedAt >= MOUNT_FRESH_MS) {
@@ -283,16 +310,13 @@ export function usePublic<T>(path: string, initialData: T | null = null): State<
   const getSnapshot = useCallback((): State<T> => {
     const entry = ensureEntry(path);
     if (entry.state.data === null && initialData !== null && !entry.state.error) {
-      return { data: initialData, error: false, loading: false };
+      return getCachedInitialSnapshot(initialData);
     }
     return entry.state as State<T>;
   }, [initialData, path]);
 
   const getServerSnapshot = useCallback(
-    (): State<T> =>
-      initialData !== null
-        ? { data: initialData, error: false, loading: false }
-        : (SERVER_SNAPSHOT as State<T>),
+    (): State<T> => getCachedInitialSnapshot(initialData),
     [initialData],
   );
 
