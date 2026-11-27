@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { PublicIcon } from "@/components/ui/PublicIcon";
 import "./skeleton.css";
 
@@ -18,6 +26,8 @@ interface ToastItem {
 const MAX_ACTIVE_TOASTS = 3;
 const EXIT_DURATION_MS = 250;
 const DEDUPE_WINDOW_MS = 650;
+const HEADER_SELECTOR =
+  ".app-header, .pt-topbar, .eh-sticky-bar, .auth-topbar, .tr-topbar, header";
 
 let items: ToastItem[] = [];
 let nextId = 1;
@@ -50,7 +60,6 @@ export function dismissToast(id: number) {
 
 function normalizeToastText(raw: string): string {
   const clean = raw.trim().replace(/\s+/g, " ");
-  // Bỏ dấu chấm đơn ở cuối câu ngắn để hiển thị gọn trên thanh thông báo
   if (clean.endsWith(".") && !clean.endsWith("...")) {
     return clean.slice(0, -1);
   }
@@ -87,12 +96,29 @@ function push(tone: ToastTone, rawMessage: string, ttl: number) {
   emit();
 }
 
-/** Thông báo nổi từ cạnh trên màn hình sau mỗi thao tác. Gọi được ở mọi nơi phía client. */
+/** Thông báo nổi sau mỗi thao tác: trên Mobile thả xuống cỡ banner iPhone, trên Laptop nằm ngay dưới thanh Header. */
 export const toast = {
   success: (message: string) => push("success", message, 3000),
   error: (message: string) => push("error", message, 4800),
   info: (message: string) => push("info", message, 3200),
 };
+
+function measureDesktopToastTopPx(): number | null {
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+  if (window.innerWidth <= 768) return null;
+
+  const candidates = document.querySelectorAll<HTMLElement>(HEADER_SELECTOR);
+  for (const el of candidates) {
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+    const rect = el.getBoundingClientRect();
+    // Chỉ lấy thanh header đầu trang thực sự đang hiển thị ở vùng đỉnh màn hình
+    if (rect.height >= 36 && rect.height <= 120 && rect.top >= -4 && rect.top <= 96 && rect.bottom > 0) {
+      return Math.min(156, Math.max(16, Math.round(rect.bottom) + 10));
+    }
+  }
+  return 16;
+}
 
 function ToastCard({ item }: { item: ToastItem }) {
   const [dragY, setDragY] = useState(0);
@@ -217,7 +243,7 @@ function ToastCard({ item }: { item: ToastItem }) {
     : isDragging
       ? {
           transform: `translate3d(0, ${dragY}px, 0)`,
-          opacity: dragY < 0 ? Math.max(0.2, 1 + dragY / 84) : 1,
+          opacity: dragY < 0 ? Math.max(0.18, 1 + dragY / 88) : 1,
           transition: "none",
         }
       : isSnapping
@@ -251,7 +277,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       onKeyDown={handleKeyDown}
     >
       <span className="puc-toast-icon" aria-hidden="true">
-        <PublicIcon src={iconSrc} size={18} color={iconColor} />
+        <PublicIcon src={iconSrc} color={iconColor} />
       </span>
       <span className="puc-toast-text">{item.message}</span>
     </div>
@@ -269,10 +295,43 @@ const getSnapshot = () => items;
 /** Đặt một lần ở layout gốc. */
 export function Toaster() {
   const list = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  if (list.length === 0) return null;
+  const pathname = usePathname();
+  const dockRef = useRef<HTMLDivElement>(null);
+  const hasItems = list.length > 0;
+
+  useLayoutEffect(() => {
+    if (!hasItems) return;
+    const syncHeaderOffset = () => {
+      const el = dockRef.current;
+      if (!el) return;
+      const topPx = measureDesktopToastTopPx();
+      if (topPx !== null) {
+        el.style.setProperty("--puc-toast-desktop-top", `${topPx}px`);
+      } else {
+        el.style.removeProperty("--puc-toast-desktop-top");
+      }
+    };
+
+    syncHeaderOffset();
+    const raf = window.requestAnimationFrame(syncHeaderOffset);
+    window.addEventListener("resize", syncHeaderOffset, { passive: true });
+    window.addEventListener("scroll", syncHeaderOffset, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", syncHeaderOffset);
+      window.removeEventListener("scroll", syncHeaderOffset);
+    };
+  }, [hasItems, pathname]);
+
+  if (!hasItems) return null;
 
   return (
-    <div className="puc-toast-dock" aria-live="polite" aria-relevant="additions text">
+    <div
+      ref={dockRef}
+      className="puc-toast-dock"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
       {list.map((item) => (
         <ToastCard key={item.id} item={item} />
       ))}

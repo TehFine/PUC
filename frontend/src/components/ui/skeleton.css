@@ -220,46 +220,62 @@ img[data-nimg="fill"] {
   background-color: rgba(20, 55, 47, 0.055);
 }
 
-/* Thẻ thông báo trạng thái mạng (Tối giản: chỉ icon loading xoay + chữ, không có khung màu bao ngoài icon) */
+/* Thẻ thông báo trạng thái mạng (Tối giản: chỉ icon + chữ, không viền bao ngoài, đồng bộ vị trí với Toast) */
 .net-toast {
   position: fixed;
-  top: max(12px, env(safe-area-inset-top));
+  top: var(--net-toast-desktop-top, 74px);
   left: 50%;
   z-index: 10000;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  max-width: min(420px, calc(100vw - 24px));
+  gap: 11px;
+  min-width: 240px;
+  max-width: min(440px, calc(100vw - 32px));
   width: max-content;
-  padding: 9px 16px 9px 14px;
-  border-radius: 6px;
+  min-height: 46px;
+  padding: 11px 18px 11px 15px;
+  border-radius: 8px;
   background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  color: #111827;
+  border: none !important;
+  outline: none !important;
+  color: #14372f;
   font-family: inherit;
   font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  box-shadow: 0 10px 28px -6px rgba(15, 23, 42, 0.12),
-              0 2px 8px rgba(15, 23, 42, 0.05);
+  font-weight: 600;
+  line-height: 1.38;
+  box-shadow: 0 8px 26px -4px rgba(20, 55, 47, 0.14),
+              0 2px 8px rgba(20, 55, 47, 0.06);
   transform: translate(-50%, 0);
-  animation: net-toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: net-toast-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease;
+}
+
+body:has(.auth-topbar, .tr-topbar) .net-toast {
+  --net-toast-desktop-top: 66px;
+}
+
+body:has(.eh-sticky-bar) .net-toast {
+  --net-toast-desktop-top: 68px;
+}
+
+body:has(.app-header, .pt-topbar) .net-toast {
+  --net-toast-desktop-top: 74px;
 }
 
 .net-toast:hover {
-  border-color: rgba(15, 23, 42, 0.12);
-  box-shadow: 0 14px 32px -6px rgba(15, 23, 42, 0.15),
-              0 4px 10px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 12px 30px -4px rgba(20, 55, 47, 0.17),
+              0 4px 10px rgba(20, 55, 47, 0.07);
 }
 
-.net-toast:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+.net-toast:focus,
+.net-toast:focus-visible,
+.net-toast:active {
+  outline: none !important;
+  border: none !important;
 }
 
 .net-toast-badge {
@@ -342,7 +358,7 @@ img[data-nimg="fill"] {
 @keyframes net-toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-100% - 20px));
+    transform: translate(-50%, -16px);
   }
   to {
     opacity: 1;
@@ -350,10 +366,12 @@ img[data-nimg="fill"] {
   }
 }
 
-/* ─── Toast thao tác toàn hệ thống (bật từ cạnh trên xuống, vuốt ngược lên để tắt) ─── */
+/* ─── Toast thao tác toàn hệ thống:
+   - Laptop / Desktop (> 768px): nằm gọn ngay dưới thanh Header của từng trang, không viền/outline.
+   - Điện thoại (<= 768px): thả từ đỉnh màn hình xuống với kích thước đầy đặn như thông báo trên iPhone. ─── */
 .puc-toast-dock {
   position: fixed;
-  top: max(12px, env(safe-area-inset-top));
+  top: var(--puc-toast-desktop-top, 74px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10020;
@@ -361,45 +379,61 @@ img[data-nimg="fill"] {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: min(440px, calc(100vw - 24px));
+  width: min(440px, calc(100vw - 32px));
   pointer-events: none;
+}
+
+body:has(.auth-topbar, .tr-topbar) .puc-toast-dock {
+  --puc-toast-desktop-top: 66px;
+}
+
+body:has(.eh-sticky-bar) .puc-toast-dock {
+  --puc-toast-desktop-top: 68px;
+}
+
+body:has(.app-header, .pt-topbar) .puc-toast-dock {
+  --puc-toast-desktop-top: 74px;
 }
 
 .puc-toast {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 11px;
+  min-width: 236px;
   max-width: 100%;
   width: max-content;
-  padding: 9px 15px 9px 12px;
-  border-radius: 7px;
+  min-height: 46px;
+  padding: 11px 18px 11px 15px;
+  border-radius: 8px;
   background: #ffffff;
-  border: 1px solid #d4d4d2;
+  border: none !important;
+  outline: none !important;
   color: #14372f;
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.38;
+  letter-spacing: -0.008em;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 6px 18px -4px rgba(20, 55, 47, 0.11),
-              0 2px 6px rgba(20, 55, 47, 0.05);
-  outline: none;
+  box-shadow: 0 8px 26px -4px rgba(20, 55, 47, 0.14),
+              0 2px 8px rgba(20, 55, 47, 0.06);
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  animation: puc-toast-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: puc-toast-in-desktop 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .puc-toast.is-error {
   color: #b91c1c;
 }
 
-.puc-toast:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(20, 55, 47, 0.18),
-              0 6px 18px -4px rgba(20, 55, 47, 0.11);
+.puc-toast:focus,
+.puc-toast:focus-visible,
+.puc-toast:active {
+  outline: none !important;
+  border: none !important;
 }
 
 .puc-toast-icon {
@@ -410,7 +444,12 @@ img[data-nimg="fill"] {
   background: transparent;
 }
 
+.puc-toast-icon .pub-icon {
+  --pub-icon-size: 20px;
+}
+
 .puc-toast-text {
+  flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -428,15 +467,26 @@ img[data-nimg="fill"] {
 .puc-toast.is-leaving {
   animation: none !important;
   pointer-events: none !important;
-  transform: translate3d(0, calc(-100% - 24px), 0);
+  transform: translate3d(0, calc(-100% - 76px), 0);
   opacity: 0;
-  transition: transform 0.24s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
+  transition: transform 0.24s cubic-bezier(0.4, 0, 1, 1), opacity 0.18s ease;
 }
 
-@keyframes puc-toast-in {
+@keyframes puc-toast-in-desktop {
   from {
     opacity: 0;
-    transform: translate3d(0, calc(-100% - 20px), 0);
+    transform: translate3d(0, -16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes puc-toast-in-mobile {
+  from {
+    opacity: 0;
+    transform: translate3d(0, calc(-100% - 18px), 0);
   }
   to {
     opacity: 1;
@@ -446,25 +496,51 @@ img[data-nimg="fill"] {
 
 @media (max-width: 768px) {
   .net-toast {
-    max-width: calc(100vw - 24px);
-    font-size: 13.5px;
-    padding: 8px 14px 8px 12px;
-    border-radius: 6px;
-    gap: 8px;
+    top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
+    width: min(414px, calc(100vw - 20px));
+    max-width: calc(100vw - 20px);
+    min-width: 0;
+    min-height: 58px;
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    gap: 13px;
+    box-shadow: 0 10px 30px -4px rgba(20, 55, 47, 0.16),
+                0 3px 10px rgba(20, 55, 47, 0.08);
+  }
+  .net-toast-badge .pub-icon {
+    --pub-icon-size: 22px !important;
   }
   .net-toast-ios-spinner {
-    width: 17px;
-    height: 17px;
+    width: 21px;
+    height: 21px;
   }
   .puc-toast-dock {
-    width: calc(100vw - 20px);
-    gap: 6px;
+    top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px));
+    width: min(414px, calc(100vw - 20px));
+    gap: 8px;
   }
   .puc-toast {
-    padding: 8px 13px 8px 11px;
-    border-radius: 6px;
-    font-size: 13px;
-    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    min-height: 60px;
+    padding: 15px 18px;
+    border-radius: 8px;
+    font-size: 15.5px;
+    line-height: 1.4;
+    gap: 13px;
+    box-shadow: 0 10px 30px -4px rgba(20, 55, 47, 0.16),
+                0 3px 10px rgba(20, 55, 47, 0.08);
+    animation-name: puc-toast-in-mobile;
+    animation-duration: 0.28s;
+  }
+  .puc-toast-icon .pub-icon {
+    --pub-icon-size: 24px;
+  }
+  .puc-toast.is-leaving {
+    transform: translate3d(0, calc(-100% - 28px), 0);
+    opacity: 0;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease;
   }
 }
 
