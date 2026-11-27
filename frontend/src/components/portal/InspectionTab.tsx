@@ -106,7 +106,7 @@ export default function InspectionTab() {
         </div>
         <StateBlock loading={schedule.loading} error={schedule.error} />
         {!schedule.loading && !schedule.error && schedule.data && scheduleGroups.length === 0 && (
-          <EmptyState icon="empty">Chưa có lịch kiểm tra sắp tới.</EmptyState>
+          <EmptyState icon="calendar">Chưa có lịch kiểm tra sắp tới.</EmptyState>
         )}
         {scheduleGroups.length > 0 && (
           <div className="pt-diary-day-groups">

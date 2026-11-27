@@ -9,6 +9,7 @@ export type EmptyArtVariant =
   | "envelope"
   | "tickets"
   | "journal"
+  | "schedule"
   | "clipboard"
   | "vault"
   | "cards";
@@ -74,17 +75,27 @@ export function resolveEmptyArtVariant(
     return "tickets";
   }
 
-  // 4. Kiểm nghiệm / Lịch kiểm tra / Biên bản / Vi phạm / Việc cần làm / Báo cáo
+  // 4a. Lịch kiểm tra / Lịch lấy mẫu thực địa -> Cuộn giấy lịch 3D kèm dãy nhà mờ phía sau
+  if (
+    t.includes("lịch kiểm tra") ||
+    t.includes("đợt kiểm tra") ||
+    t.includes("upcoming inspection") ||
+    t.includes("inspection schedule") ||
+    t.includes("巡检") ||
+    ic === "calendar"
+  ) {
+    return "schedule";
+  }
+
+  // 4b. Kiểm nghiệm / Biên bản / Vi phạm / Việc cần làm / Báo cáo -> Bảng kẹp hồ sơ 3D
   if (
     t.includes("kiểm nghiệm") ||
-    t.includes("lịch kiểm tra") ||
     t.includes("biên bản") ||
     t.includes("vi phạm") ||
     t.includes("việc cần làm") ||
     t.includes("báo cáo") ||
     t.includes("chỉ tiêu phân tích") ||
-    ic === "lab" ||
-    ic === "calendar"
+    ic === "lab"
   ) {
     return "clipboard";
   }
@@ -237,6 +248,31 @@ export function EmptyStateArt({
           <stop offset="62%" stopColor="#cfd5e0" stopOpacity="0.1" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
+        <linearGradient id={id("cityBack")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#e5ecf8" stopOpacity="0.92" />
+          <stop offset="70%" stopColor="#eff4fc" stopOpacity="0.52" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={id("cityFront")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#dae3f3" stopOpacity="0.95" />
+          <stop offset="72%" stopColor="#e9effa" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={id("scrollSheet")} x1="35%" y1="0%" x2="65%" y2="100%">
+          <stop offset="0%" stopColor="#fafcff" />
+          <stop offset="62%" stopColor="#edf2fb" />
+          <stop offset="88%" stopColor="#dde6f4" />
+          <stop offset="100%" stopColor="#cfd9ec" />
+        </linearGradient>
+        <linearGradient id={id("scrollCurl")} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#b9c6df" />
+          <stop offset="100%" stopColor="#cfd9ec" />
+        </linearGradient>
+        <linearGradient id={id("scrollLip")} x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#edf2fb" />
+          <stop offset="55%" stopColor="#dbe4f3" />
+          <stop offset="100%" stopColor="#c7d3e7" />
+        </linearGradient>
       </defs>
 
       {variant === "box" && (
@@ -467,6 +503,86 @@ export function EmptyStateArt({
           />
           <line x1="81" y1="64" x2="93" y2="64" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
           <line x1="81" y1="68.5" x2="89" y2="68.5" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
+        </g>
+      )}
+
+      {variant === "schedule" && (
+        <g>
+          {/* Cụm dãy nhà bậc thang mờ hai bên tan dần xuống đáy theo tông xám xanh hệ thống */}
+          <path
+            d="M28 106 V94 H41 V78 H54 V66 H72 V106 Z"
+            fill={`url(#${id("cityBack")})`}
+          />
+          <path
+            d="M45 106 V83 H59 V71 H72 V106 Z"
+            fill={`url(#${id("cityFront")})`}
+          />
+          <rect x="49" y="87" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.86" />
+          <rect x="54" y="87" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.86" />
+          <rect x="61" y="76" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.88" />
+          <rect x="66" y="76" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.88" />
+          <rect x="61" y="82" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.76" />
+          <rect x="66" y="82" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.76" />
+
+          <path
+            d="M108 106 V58 H114 V52 H127 V58 H133 V68 H147 V93 H155 V106 Z"
+            fill={`url(#${id("cityBack")})`}
+          />
+          <path
+            d="M111 106 V62 H132 V73 H145 V106 Z"
+            fill={`url(#${id("cityFront")})`}
+          />
+          <rect x="115" y="67" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.9" />
+          <rect x="120.5" y="67" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.9" />
+          <rect x="126" y="67" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.9" />
+          <rect x="115" y="73.5" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.82" />
+          <rect x="120.5" y="73.5" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.82" />
+          <rect x="126" y="73.5" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.82" />
+          <rect x="115" y="80" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.7" />
+          <rect x="120.5" y="80" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.7" />
+          <rect x="126" y="80" width="3.4" height="3.4" rx="0.7" fill="#f6f9fe" opacity="0.7" />
+          <rect x="135" y="78" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.8" />
+          <rect x="140" y="78" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.8" />
+          <rect x="135" y="84" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.68" />
+          <rect x="140" y="84" width="3.2" height="3.2" rx="0.7" fill="#f6f9fe" opacity="0.68" />
+
+          {/* Bóng đổ mềm dưới chân cuộn giấy lịch */}
+          <ellipse cx="90" cy="108.5" rx="46" ry="9.5" fill={`url(#${id("shadow")})`} />
+
+          {/* Nếp cuộn tròn phía trên bên phải của cuộn giấy */}
+          <path
+            d="M109 22 H115.5 C120.2 22 123.5 25.8 123.5 31.2 V44.8 C123.5 46.8 122 48.2 120 48.2 H109 Z"
+            fill={`url(#${id("scrollCurl")})`}
+          />
+          <path
+            d="M110 31.5 C110 27.2 112.8 24.5 116.5 24.5 C120.2 24.5 123.5 27.4 123.5 31.8 V45 C123.5 46.8 122.1 48.2 120.2 48.2 H110 Z"
+            fill="#c3cfe5"
+          />
+
+          {/* Thân tờ giấy cuộn đứng chính giữa */}
+          <path
+            d="M70 30.5 C70 25.4 73.8 22 79 22 H115.5 C111.6 22 110 25.6 110 30.8 V95.5 C110 99.8 107.2 103 103.2 103 H70 Z"
+            fill={`url(#${id("scrollSheet")})`}
+          />
+
+          {/* Bốn dòng vạch nội dung lịch kiểm tra tối giản */}
+          <rect x="77.5" y="39" width="25" height="4.2" rx="2.1" fill="#c7d2e6" />
+          <rect x="77.5" y="49" width="25" height="4.2" rx="2.1" fill="#cbd5e8" />
+          <rect x="77.5" y="59" width="25" height="4.2" rx="2.1" fill="#cfd9ea" />
+          <rect x="77.5" y="69" width="20.5" height="4.2" rx="2.1" fill="#d3ddec" />
+
+          {/* Vùng đổ bóng lõm trước mép cuộn đáy */}
+          <rect x="70" y="81" width="40" height="8" fill="#cbd6ea" opacity="0.36" />
+
+          {/* Nếp giấy cuộn ngược lên ở đáy trước kèm đầu ống tròn bên phải */}
+          <path
+            d="M61.5 87.5 C61.5 86.1 62.6 85 64 85 H97.8 C98.8 85 99.6 85.8 99.6 86.8 V94.5 C99.6 99.2 101.6 103 104.8 103 H69 C64.4 103 61.5 98.8 61.5 93.2 Z"
+            fill={`url(#${id("scrollLip")})`}
+          />
+          <path
+            d="M99.4 94.2 C99.4 90.2 101.8 87.6 104.7 87.6 C107.6 87.6 110 90.4 110 95.2 C110 99.8 107.6 103 104.5 103 C101.5 103 99.4 99.2 99.4 94.2 Z"
+            fill="#bcc9df"
+          />
         </g>
       )}
 
