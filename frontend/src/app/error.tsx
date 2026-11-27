@@ -74,138 +74,54 @@ export default function GlobalErrorPage({
     }
   }, [error, reset, router]);
 
-  // Khi đang tự đồng bộ bản triển khai mới, hiển thị khung chờ mượt thay vì chớp hình minh họa lỗi 1 giây.
   if (canSilentReload) {
     return <PageSkeleton label="Đang đồng bộ phiên bản hệ thống mới…" />;
   }
 
   return (
-    <main className="puc-err-screen">
-      <style>{`
-        .puc-err-screen {
-          min-height: 100dvh;
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 32px 24px;
-          background: #ffffff;
-          color: #121212;
-          font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
-          box-sizing: border-box;
-        }
-        .puc-err-inner {
-          width: 100%;
-          max-width: 360px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-        .puc-err-art {
-          width: 248px;
-          height: auto;
-          display: block;
-          margin: 0 auto 14px;
-          user-select: none;
-          pointer-events: none;
-        }
-        .puc-err-title {
-          font-size: 28px;
-          font-weight: 800;
-          line-height: 1.2;
-          letter-spacing: -0.025em;
-          color: #121212;
-          margin: 0 0 8px;
-        }
-        .puc-err-desc {
-          font-size: 14px;
-          line-height: 1.55;
-          color: #6b7280;
-          margin: 0 0 26px;
-          max-width: 300px;
-        }
-        .puc-err-actions {
-          display: flex;
-          flex-direction: column;
-          align-items: stretch;
-          gap: 10px;
-          width: 100%;
-          max-width: 204px;
-        }
-        .puc-err-btn-primary {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 42px;
-          padding: 0 22px;
-          border-radius: 6px;
-          border: none;
-          outline: none;
-          background: #48b293;
-          color: #ffffff;
-          font-family: inherit;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background-color 160ms ease;
-        }
-        .puc-err-btn-primary:hover {
-          background: #39997c;
-        }
-        .puc-err-btn-secondary {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          height: 40px;
-          padding: 0 18px;
-          border-radius: 6px;
-          border: none;
-          outline: none;
-          background: #f3f5f4;
-          color: #1f2937;
-          font-family: inherit;
-          font-size: 13.5px;
-          font-weight: 500;
-          text-decoration: none;
-          transition: background-color 160ms ease, color 160ms ease;
-        }
-        .puc-err-btn-secondary:hover {
-          background: #e7ece9;
-          color: #121212;
-        }
-      `}</style>
+    <main className="puc-err-state-screen">
+      <section className="puc-err-state-card" aria-labelledby="puc-err-heading">
+        <picture className="puc-err-state-media">
+          <source
+            media="(min-width: 769px)"
+            srcSet="/error-404-desktop.webp"
+            type="image/webp"
+          />
+          <img
+            src="/error-404-mobile.webp"
+            alt=""
+            width={1200}
+            height={896}
+            decoding="async"
+            fetchPriority="high"
+            className="puc-err-state-img"
+          />
+        </picture>
 
-      <div className="puc-err-inner">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/error-scene.svg?v=2"
-          alt=""
-          width={248}
-          height={195}
-          className="puc-err-art"
-        />
+        <div className="puc-err-state-body">
+          <h1 id="puc-err-heading" className="puc-err-state-title">
+            Đã xảy ra gián đoạn
+          </h1>
 
-        <h1 className="puc-err-title">Rất tiếc!</h1>
+          <p className="puc-err-state-desc">
+            Trang đang tạm gián đoạn kết nối, vui lòng thử tải lại sau ít giây.
+          </p>
 
-        <p className="puc-err-desc">
-          Trang đang tạm gián đoạn. Chúng tôi sẽ khắc phục ngay.
-        </p>
+          <div className="puc-err-state-actions">
+            <button
+              type="button"
+              onClick={handleRecover}
+              className="puc-err-state-btn is-primary"
+            >
+              Tải lại trang
+            </button>
 
-        <div className="puc-err-actions">
-          <button
-            type="button"
-            onClick={handleRecover}
-            className="puc-err-btn-primary"
-          >
-            Tải lại trang
-          </button>
-
-          <Link href={INTRO_PATH} className="puc-err-btn-secondary">
-            Về trang giới thiệu
-          </Link>
+            <Link href={INTRO_PATH} className="puc-err-state-btn is-secondary">
+              Về trang giới thiệu
+            </Link>
+          </div>
         </div>
-      </div>
+      </section>
     </main>
   );
 }
