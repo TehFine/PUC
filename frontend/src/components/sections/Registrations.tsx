@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/Toast";
 import { refreshMountedApiQueries, useApi } from "@/hooks/use-api";
 import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
+import { acknowledgeAdminEntity } from "@/lib/notification-badges";
 import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { Role } from "@/types/api";
 
@@ -145,6 +146,7 @@ export default function Registrations({
   }, [passwordResets, search]);
 
   const open = (row: Registration) => {
+    acknowledgeAdminEntity("approval", "registrations", row.id);
     setTarget(row);
     setQuery("");
     setHouseholds([]);
@@ -184,6 +186,18 @@ export default function Registrations({
     temporaryPassword: string;
   } | null>(null);
   const [copiedTempPassword, setCopiedTempPassword] = useState(false);
+
+  useEffect(() => {
+    if (confirmResetAction?.row.id) {
+      acknowledgeAdminEntity("approval", "registrations", confirmResetAction.row.id);
+    }
+  }, [confirmResetAction?.row.id]);
+
+  useEffect(() => {
+    if (rejectingRow?.id) {
+      acknowledgeAdminEntity("approval", "registrations", rejectingRow.id);
+    }
+  }, [rejectingRow?.id]);
 
   const reject = async (row: Registration) => {
     setRejectingBusy(true);

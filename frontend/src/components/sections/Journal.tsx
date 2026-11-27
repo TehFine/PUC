@@ -11,6 +11,12 @@ import {
   usePersistedState,
   useUrlSubTab,
 } from "@/lib/back-navigation";
+import {
+  acknowledgeAdminEntity,
+  acknowledgeAdminScope,
+  useAdminNotificationBadges,
+  useAutoAcknowledgeAdminScope,
+} from "@/lib/notification-badges";
 import { daysSince } from "@/lib/portal-labels";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
@@ -274,15 +280,55 @@ export default function Journal() {
       v === null || (typeof v === "object" && v !== null && Array.isArray((v as { urls?: unknown }).urls)),
   );
 
+  const { getSubBadge } = useAdminNotificationBadges();
+
   const tabs: TabItem<Tab>[] = [
-    { id: "journal", label: "Nhật ký canh tác", badge: journalList.total },
+    {
+      id: "journal",
+      label: "Nhật ký canh tác",
+      badge: journalList.total,
+      pendingBadge: getSubBadge("journal", "journal"),
+    },
     ...(canReadViolations
-      ? [{ id: "violations" as const, label: "Vi phạm", badge: openViolations || violationsList.total }]
+      ? [
+          {
+            id: "violations" as const,
+            label: "Vi phạm",
+            badge: openViolations || violationsList.total,
+            pendingBadge: getSubBadge("journal", "violations"),
+          },
+        ]
       : []),
-    { id: "spray", label: "Nhật ký phun thuốc", badge: sprayList.total },
+    {
+      id: "spray",
+      label: "Nhật ký phun thuốc",
+      badge: sprayList.total,
+      pendingBadge: getSubBadge("journal", "spray"),
+    },
   ];
 
   const activeTab: Tab = !canReadViolations && tab === "violations" ? "journal" : tab;
+
+  useAutoAcknowledgeAdminScope("journal", activeTab);
+
+  useEffect(() => {
+    const activeViolationId = viewingViolation?.id ?? resolvingViolation?.id;
+    if (activeViolationId) {
+      acknowledgeAdminEntity("journal", "violations", activeViolationId);
+    }
+  }, [viewingViolation?.id, resolvingViolation?.id]);
+
+  useEffect(() => {
+    if (viewingJournal?.id) {
+      acknowledgeAdminScope("journal", "journal");
+    }
+  }, [viewingJournal?.id]);
+
+  useEffect(() => {
+    if (viewingSpray?.id) {
+      acknowledgeAdminScope("journal", "spray");
+    }
+  }, [viewingSpray?.id]);
 
   const journalDayGroups = useMemo(
     () => groupDiaryRowsByDay(journalList.rows, (r) => r.entryOn, (r) => r.householdId || r.householdName),
@@ -362,7 +408,12 @@ export default function Journal() {
         </div>
       </div>
 
-      <TabBar tabs={tabs} active={activeTab} onChange={selectTab} />
+      <TabBar
+        tabs={tabs}
+        active={activeTab}
+        onChange={selectTab}
+        onActivate={(id) => acknowledgeAdminScope("journal", id)}
+      />
 
       {activeTab === "journal" && (
         <>

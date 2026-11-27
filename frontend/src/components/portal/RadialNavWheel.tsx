@@ -96,6 +96,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
 interface RadialNavWheelProps {
   currentTab: PortalTabId;
   onSelectTab: (tab: PortalTabId) => void;
+  badges?: Partial<Record<PortalTabId, number>>;
   open?: boolean;
   onClose?: () => void;
   showFloatingLauncher?: boolean;
@@ -104,6 +105,7 @@ interface RadialNavWheelProps {
 export default function RadialNavWheel({
   currentTab,
   onSelectTab,
+  badges,
   open: propOpen,
   onClose: propOnClose,
   showFloatingLauncher = false,
@@ -205,17 +207,13 @@ export default function RadialNavWheel({
     if (selectTimerRef.current) clearTimeout(selectTimerRef.current);
     const delayMs = isLowEndDevice() ? 55 : 110;
     selectTimerRef.current = setTimeout(() => {
-      if (tabId !== currentTab) {
-        onSelectTab(tabId);
-      }
+      onSelectTab(tabId);
       handleClose();
     }, delayMs);
   };
 
   const handleDone = () => {
-    if (selectedTab !== currentTab) {
-      onSelectTab(selectedTab);
-    }
+    onSelectTab(selectedTab);
     handleClose();
   };
 
@@ -251,6 +249,7 @@ export default function RadialNavWheel({
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = selectedTab === item.id;
+            const badge = badges?.[item.id] ?? 0;
             return (
               <button
                 key={item.id}
@@ -264,7 +263,12 @@ export default function RadialNavWheel({
                   <Icon size={26} />
                 </div>
                 <div className="pt-radial-option-text">
-                  <span className="pt-radial-option-title">{t(item.label)}</span>
+                  <span className="pt-radial-option-title">
+                    {t(item.label)}
+                    {badge > 0 && (
+                      <span className="pt-tab-badge is-drawer">{badge > 99 ? "99+" : badge}</span>
+                    )}
+                  </span>
                   <span className="pt-radial-option-desc">{t(item.desc)}</span>
                 </div>
                 <div className="pt-radial-option-radio" aria-hidden="true">

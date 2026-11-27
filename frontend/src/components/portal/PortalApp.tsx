@@ -53,6 +53,7 @@ import {
   usePersistedState,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import { classifyPortalNotification, markNotificationsReadBatch } from "@/lib/notification-badges";
 import { resolveValidPortalRoute } from "@/lib/route-validation";
 import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
@@ -849,6 +850,74 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     });
   }, [apiNotifItems.length, overview?.reminders, localReadKeys]);
 
+  const notifItems = useMemo<Array<AppNotification & { _readKey?: string }>>(
+    () => (apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems),
+    [apiNotifItems, fallbackNotifItems],
+  );
+  const unreadNotifItems = useMemo(() => notifItems.filter((n) => !n.readAt), [notifItems]);
+  const readNotifItems = useMemo(() => notifItems.filter((n) => Boolean(n.readAt)), [notifItems]);
+  const portalTabBadges = useMemo<Partial<Record<PortalTabId, number>>>(() => {
+    const counts: Partial<Record<PortalTabId, number>> = {};
+    for (const item of unreadNotifItems) {
+      const targetTab = classifyPortalNotification(item);
+      if (!targetTab) continue;
+      counts[targetTab] = (counts[targetTab] ?? 0) + 1;
+    }
+    return counts;
+  }, [unreadNotifItems]);
+
+  const acknowledgePortalTab = useCallback(
+    (targetTab: PortalTabId) => {
+      const localKeys: string[] = [];
+      const apiIds: number[] = [];
+      for (const item of unreadNotifItems) {
+        if (classifyPortalNotification(item) !== targetTab) continue;
+        if (item.id < 0) {
+          if (item._readKey) localKeys.push(item._readKey);
+        } else {
+          localKeys.push(`api:${item.id}`);
+          apiIds.push(item.id);
+        }
+      }
+      if (localKeys.length > 0) {
+        rememberLocalReadKeys(localKeys);
+      }
+      if (apiIds.length > 0) {
+        void markNotificationsReadBatch(apiIds, { syncPortalOverview: true });
+      }
+    },
+    [unreadNotifItems, rememberLocalReadKeys],
+  );
+
+  const acknowledgedPortalTabRef = useRef<PortalTabId | null>(null);
+  const acknowledgePortalTabRef = useRef(acknowledgePortalTab);
+  useEffect(() => {
+    acknowledgePortalTabRef.current = acknowledgePortalTab;
+  }, [acknowledgePortalTab]);
+
+  useEffect(() => {
+    acknowledgedPortalTabRef.current = null;
+  }, [tab]);
+
+  const hasLoadedPortalNotifs = notifications.data !== null || Boolean(overview);
+  useEffect(() => {
+    if (!isFarmerAuth || !hasLoadedPortalNotifs) return;
+    const tryAck = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (acknowledgedPortalTabRef.current === tab) return;
+      acknowledgedPortalTabRef.current = tab;
+      acknowledgePortalTabRef.current(tab);
+    };
+    tryAck();
+    if (acknowledgedPortalTabRef.current === tab || typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", tryAck);
+    window.addEventListener("focus", tryAck);
+    return () => {
+      document.removeEventListener("visibilitychange", tryAck);
+      window.removeEventListener("focus", tryAck);
+    };
+  }, [isFarmerAuth, hasLoadedPortalNotifs, tab]);
+
   if (invalidClientUrl) {
     notFound();
   }
@@ -949,10 +1018,6 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     }
   };
 
-  const notifItems: Array<AppNotification & { _readKey?: string }> =
-    apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
-  const unreadNotifItems = notifItems.filter((n) => !n.readAt);
-  const readNotifItems = notifItems.filter((n) => Boolean(n.readAt));
   const unreadCount =
     apiNotifItems.length > 0 && typeof notifications.data?.unread === "number"
       ? Math.max(unreadNotifItems.length, notifications.data.unread - locallyMarkedUnreadCount)
@@ -1011,11 +1076,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         if (item._readKey) rememberLocalReadKeys([item._readKey]);
       } else {
         rememberLocalReadKeys([`api:${item.id}`]);
-        optimisticMarkNotificationRead(item.id);
-        void api
-          .post(`/notifications/${item.id}/read`)
-          .then(() => invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview")))
-          .catch(() => invalidateQueries(NOTIFICATIONS_PATH));
+        void markNotificationsReadBatch([item.id], { syncPortalOverview: true });
       }
     }
     const rawLink = (item.link || "").trim();
@@ -1108,6 +1169,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
           <nav className="pt-tabs" aria-label={t("Chức năng")}>
             {TABS.map((item) => {
               const Icon = item.icon;
+              const tabBadge = portalTabBadges[item.id] ?? 0;
               return (
                 <button
                   key={item.id}
@@ -1115,10 +1177,16 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                   type="button"
                   className={`pt-tab ${tab === item.id ? "active" : ""}`}
                   aria-current={tab === item.id ? "page" : undefined}
-                  onClick={() => navigate(item.id)}
+                  onClick={() => {
+                    acknowledgePortalTab(item.id);
+                    navigate(item.id);
+                  }}
                 >
                   <Icon aria-hidden="true" />
                   <span>{t(item.label)}</span>
+                  {tabBadge > 0 && (
+                    <span className="pt-tab-badge">{tabBadge > 99 ? "99+" : tabBadge}</span>
+                  )}
                 </button>
               );
             })}
@@ -1876,7 +1944,11 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
       <RadialNavWheel
         currentTab={tab}
-        onSelectTab={navigate}
+        badges={portalTabBadges}
+        onSelectTab={(nextTab) => {
+          acknowledgePortalTab(nextTab);
+          navigate(nextTab);
+        }}
         open={navWheelOpen}
         onClose={() => setNavWheelOpen(false)}
       />

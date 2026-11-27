@@ -14,10 +14,12 @@ export default function TabBar<T extends string>({
   tabs,
   active,
   onChange,
+  onActivate,
 }: {
   tabs: TabItem<T>[];
   active: T;
   onChange: (id: T) => void;
+  onActivate?: (id: T) => void;
 }) {
   const barRef = useAutoCenterDock<HTMLDivElement>(active);
 
@@ -30,10 +32,15 @@ export default function TabBar<T extends string>({
           role="tab"
           aria-selected={active === id}
           className={`tab-btn ${active === id ? "active" : ""}`}
-          onClick={() => onChange(id)}
+          onClick={() => {
+            onActivate?.(id);
+            onChange(id);
+          }}
         >
           <span>{label}</span>
-          {pendingBadge && pendingBadge > 0 ? <span className="tab-badge">{pendingBadge}</span> : null}
+          {pendingBadge && pendingBadge > 0 ? (
+            <span className="tab-badge">{pendingBadge > 99 ? "99+" : pendingBadge}</span>
+          ) : null}
         </button>
       ))}
     </div>

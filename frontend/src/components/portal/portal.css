@@ -10032,15 +10032,16 @@ body.pt-body {
   position: absolute;
   top: -5px;
   right: -5px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
   background: #dc2626;
   color: #ffffff;
   font-family: var(--font-body-stack);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -10049,6 +10050,30 @@ body.pt-body {
   box-sizing: border-box;
   flex-shrink: 0;
   pointer-events: none;
+}
+
+.pt-tab-badge {
+  margin-left: 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #dc2626;
+  color: #ffffff;
+  font-family: var(--font-body-stack);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.pt-tab-badge.is-drawer {
+  margin-left: 8px;
 }
 
 .pt-notif-toolbar {

@@ -32,6 +32,7 @@ import {
   saveWorkspaceUrl,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import { acknowledgeAdminScope, useAutoAcknowledgeAdminScope } from "@/lib/notification-badges";
 import { useRealtimeNotifications } from "@/lib/realtime-notifications";
 import { resolveValidAdminRoute, type SectionId } from "@/lib/route-validation";
 import { INTRO_PATH } from "@/lib/routes";
@@ -154,6 +155,15 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
   const activeUserId = session?.user.id ?? null;
   const isFarmer = session?.user.role === "farmer";
   useRealtimeNotifications(status === "authenticated" && !isFarmer);
+  const directSectionScope: SectionId | null =
+    active === "households" ||
+    active === "zones" ||
+    active === "testing" ||
+    active === "news" ||
+    active === "reports"
+      ? active
+      : null;
+  useAutoAcknowledgeAdminScope(directSectionScope);
 
   useEffect(() => {
     activeRef.current = active;
@@ -261,6 +271,15 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
 
   const navigate = useCallback(
     (id: SectionId) => {
+      if (
+        id === "households" ||
+        id === "zones" ||
+        id === "testing" ||
+        id === "news" ||
+        id === "reports"
+      ) {
+        acknowledgeAdminScope(id);
+      }
       if (
         (activeRef.current === "zones" && id !== "zones") ||
         (id === "zones" && !hasPendingEditPlotCode())

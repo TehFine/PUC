@@ -1,18 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   ADMIN_SYSTEM_TAB_EVENT,
   consumePendingSystemTab,
-  onCountsChanged,
   type AdminSystemTabId,
 } from "@/components/admin/shared/counts-events";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AccountsTab from "@/components/settings/AccountsTab";
-import { api } from "@/lib/api-client";
 import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 import { useAutoCenterDock } from "@/lib/dock-scroll";
+import {
+  acknowledgeAdminScope,
+  useAdminNotificationBadges,
+  useAutoAcknowledgeAdminScope,
+} from "@/lib/notification-badges";
 
 const AuditLogTab = dynamic(() => import("@/components/settings/AuditLogTab"));
 const DeletionRequestsTab = dynamic(() => import("@/components/settings/DeletionRequestsTab"));
@@ -35,6 +38,7 @@ export default function SystemSettings() {
   const canCreateAccounts = can("accounts", "create");
   const canReadDeletionRequests = can("deletion-requests", "read");
   const canReadTraceRequests = can("trace-requests", "read");
+  const { getSubBadge } = useAdminNotificationBadges();
 
   const [tab, setTab] = useState<Tab>(
     () =>
@@ -49,41 +53,8 @@ export default function SystemSettings() {
     isSystemTab,
   );
   const [createTrigger, setCreateTrigger] = useState(0);
-  const [pendingDeletions, setPendingDeletions] = useState(0);
-  const [pendingTraceRequests, setPendingTraceRequests] = useState(0);
 
-  const refreshPendingCounts = useCallback(() => {
-    if (canReadDeletionRequests) {
-      api
-        .get<{ pendingCount?: number; total?: number }>(
-          "/deletion-requests?status=pending&pageSize=1",
-        )
-        .then((res) => {
-          setPendingDeletions(res.pendingCount ?? res.total ?? 0);
-        })
-        .catch(() => {
-          // ignore transient errors
-        });
-    }
-    if (canReadTraceRequests) {
-      api
-        .get<{ pendingCount?: number; total?: number }>(
-          "/trace-requests?status=pending&pageSize=1",
-        )
-        .then((res) => {
-          setPendingTraceRequests(res.pendingCount ?? res.total ?? 0);
-        })
-        .catch(() => {
-          // ignore transient errors
-        });
-    }
-  }, [canReadDeletionRequests, canReadTraceRequests]);
-
-  useEffect(() => {
-    refreshPendingCounts();
-    const unsub = onCountsChanged(refreshPendingCounts);
-    return unsub;
-  }, [refreshPendingCounts]);
+  useAutoAcknowledgeAdminScope("system", tab);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -100,13 +71,13 @@ export default function SystemSettings() {
   const tabBarRef = useAutoCenterDock<HTMLDivElement>(tab);
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: "accounts", label: "Tài khoản" },
+    { id: "accounts", label: "Tài khoản", badge: getSubBadge("system", "accounts") },
     ...(canReadTraceRequests
       ? [
         {
           id: "trace-requests" as const,
           label: "Cấp quyền QR",
-          badge: pendingTraceRequests,
+          badge: getSubBadge("system", "trace-requests"),
         },
       ]
       : []),
@@ -115,13 +86,13 @@ export default function SystemSettings() {
         {
           id: "deletions" as const,
           label: "Duyệt xóa",
-          badge: pendingDeletions,
+          badge: getSubBadge("system", "deletions"),
         },
       ]
       : []),
-    { id: "roles", label: "Phân quyền" },
-    { id: "alerts", label: "Phát thông báo" },
-    { id: "audit", label: "Nhật ký thao tác" },
+    { id: "roles", label: "Phân quyền", badge: getSubBadge("system", "roles") },
+    { id: "alerts", label: "Phát thông báo", badge: getSubBadge("system", "alerts") },
+    { id: "audit", label: "Nhật ký thao tác", badge: getSubBadge("system", "audit") },
   ];
 
   return (
@@ -146,27 +117,22 @@ export default function SystemSettings() {
             key={t.id}
             type="button"
             className={`tab-btn ${tab === t.id ? "active" : ""}`}
-            onClick={() => selectTab(t.id)}
+            onClick={() => {
+              acknowledgeAdminScope("system", t.id);
+              selectTab(t.id);
+            }}
           >
             <span>{t.label}</span>
-            {t.badge && t.badge > 0 ? <span className="tab-badge">{t.badge}</span> : null}
+            {t.badge && t.badge > 0 ? (
+              <span className="tab-badge">{t.badge > 99 ? "99+" : t.badge}</span>
+            ) : null}
           </button>
         ))}
       </div>
 
       {tab === "accounts" && <AccountsTab createTrigger={createTrigger} />}
-      {tab === "trace-requests" && canReadTraceRequests && (
-        <TraceAccessRequestsTab
-          onReviewed={refreshPendingCounts}
-          onPendingCountSync={setPendingTraceRequests}
-        />
-      )}
-      {tab === "deletions" && (
-        <DeletionRequestsTab
-          onReviewed={refreshPendingCounts}
-          onPendingCountSync={setPendingDeletions}
-        />
-      )}
+      {tab === "trace-requests" && canReadTraceRequests && <TraceAccessRequestsTab />}
+      {tab === "deletions" && <DeletionRequestsTab />}
       {tab === "roles" && <RolesTab />}
       {tab === "alerts" && <SystemAlertsTab />}
       {tab === "audit" && <AuditLogTab />}

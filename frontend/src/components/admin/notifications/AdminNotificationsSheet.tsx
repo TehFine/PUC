@@ -24,6 +24,7 @@ import {
 import { api } from "@/lib/api-client";
 import { resetOverlayHistoryOnRouteLeave, usePersistedState } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import { markNotificationsReadBatch } from "@/lib/notification-badges";
 import type { Tone } from "@/lib/portal-labels";
 import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
@@ -230,14 +231,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
     setOpen(false);
     navigateAdminNotification(item, (href) => router.push(href));
     if (!item.readAt) {
-      optimisticMarkNotificationRead(item.id);
-      try {
-        await api.post(`/notifications/${item.id}/read`);
-        invalidateQueries(NOTIFICATIONS_PATH);
-        notifyCountsChanged();
-      } catch {
-        invalidateQueries(NOTIFICATIONS_PATH);
-      }
+      await markNotificationsReadBatch([item.id]);
     }
   };
 

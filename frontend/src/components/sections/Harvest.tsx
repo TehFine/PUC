@@ -31,6 +31,11 @@ import {
   useUrlSubTab,
 } from "@/lib/back-navigation";
 import { useAutoCenterDock } from "@/lib/dock-scroll";
+import {
+  acknowledgeAdminScope,
+  useAdminNotificationBadges,
+  useAutoAcknowledgeAdminScope,
+} from "@/lib/notification-badges";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -123,6 +128,13 @@ export default function Harvest() {
     "lots",
     isHarvestTab,
   );
+  const { getSubBadge } = useAdminNotificationBadges();
+  useAutoAcknowledgeAdminScope("harvest", tab);
+
+  const renderHarvestTabBadge = (sub: HarvestTab) => {
+    const count = getSubBadge("harvest", sub);
+    return count > 0 ? <span className="tab-badge">{count > 99 ? "99+" : count}</span> : null;
+  };
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -443,35 +455,67 @@ export default function Harvest() {
 
       {/* Thanh chuyển tab quy trình chuỗi liên kết */}
       <div ref={harvestTabBarRef} className="tab-bar" role="tablist" style={{ marginTop: 20, marginBottom: 16 }}>
-        <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => selectTab("lots")}>
-          Lô thu hoạch
+        <button
+          type="button"
+          className={`tab-btn ${tab === "lots" ? "active" : ""}`}
+          onClick={() => {
+            acknowledgeAdminScope("harvest", "lots");
+            selectTab("lots");
+          }}
+        >
+          <span>Lô thu hoạch</span>
+          {renderHarvestTabBadge("lots")}
         </button>
         {canReadHouseholds && (
           <button
             type="button"
             className={`tab-btn ${tab === "plans" ? "active" : ""}`}
-            onClick={() => selectTab("plans")}
+            onClick={() => {
+              acknowledgeAdminScope("harvest", "plans");
+              selectTab("plans");
+            }}
           >
-            Tính lịch thu hoạch
+            <span>Tính lịch thu hoạch</span>
+            {renderHarvestTabBadge("plans")}
           </button>
         )}
         {canReadStamps && (
-          <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => selectTab("stamps")}>
-            Cấp phát tem
+          <button
+            type="button"
+            className={`tab-btn ${tab === "stamps" ? "active" : ""}`}
+            onClick={() => {
+              acknowledgeAdminScope("harvest", "stamps");
+              selectTab("stamps");
+            }}
+          >
+            <span>Cấp phát tem</span>
+            {renderHarvestTabBadge("stamps")}
           </button>
         )}
         {canReadContracts && (
-          <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => selectTab("contracts")}>
-            Hợp đồng bao tiêu
+          <button
+            type="button"
+            className={`tab-btn ${tab === "contracts" ? "active" : ""}`}
+            onClick={() => {
+              acknowledgeAdminScope("harvest", "contracts");
+              selectTab("contracts");
+            }}
+          >
+            <span>Hợp đồng bao tiêu</span>
+            {renderHarvestTabBadge("contracts")}
           </button>
         )}
         {canReadEnterprises && (
           <button
             type="button"
             className={`tab-btn ${tab === "enterprises" ? "active" : ""}`}
-            onClick={() => selectTab("enterprises")}
+            onClick={() => {
+              acknowledgeAdminScope("harvest", "enterprises");
+              selectTab("enterprises");
+            }}
           >
-            Doanh nghiệp và CSĐG
+            <span>Doanh nghiệp và CSĐG</span>
+            {renderHarvestTabBadge("enterprises")}
           </button>
         )}
       </div>

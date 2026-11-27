@@ -12,6 +12,11 @@ import BlockState from "@/components/admin/shared/BlockState";
 import { ProgressiveListFooter, useProgressiveCount } from "@/components/portal/shared/controls";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import { useAutoCenterDock } from "@/lib/dock-scroll";
+import {
+  acknowledgeAdminScope,
+  useAdminNotificationBadges,
+  useAutoAcknowledgeAdminScope,
+} from "@/lib/notification-badges";
 
 const FertilizerFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/FertilizerFormModal")), { ssr: false });
 const PesticideFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/PesticideFormModal")), { ssr: false });
@@ -372,6 +377,8 @@ export default function Catalog() {
   const varProgressive = useProgressiveCount(shownVarieties.length, 16, 16, `${debouncedVarQ}|${varCategory}`);
   const visibleVarieties = shownVarieties.slice(0, varProgressive.visibleCount);
   const catalogTabBarRef = useAutoCenterDock<HTMLDivElement>(tab);
+  const { getSubBadge } = useAdminNotificationBadges();
+  useAutoAcknowledgeAdminScope("catalog", tab);
 
   return (
     <div id="section-catalog" className="admin-catalog-section">
@@ -384,18 +391,25 @@ export default function Catalog() {
           { id: "diseases", label: "Sâu bệnh và IPM" },
           { id: "village", label: "Thôn / Tổ" },
           { id: "standards", label: "Tiêu chuẩn" },
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={`tab-btn ${tab === id ? "active" : ""}`}
-            onClick={() => selectTab(id as Tab)}
-          >
-            {label}
-          </button>
-        ))}
+        ].map(({ id, label }) => {
+          const badge = getSubBadge("catalog", id);
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={`tab-btn ${tab === id ? "active" : ""}`}
+              onClick={() => {
+                acknowledgeAdminScope("catalog", id);
+                selectTab(id as Tab);
+              }}
+            >
+              <span>{label}</span>
+              {badge > 0 ? <span className="tab-badge">{badge > 99 ? "99+" : badge}</span> : null}
+            </button>
+          );
+        })}
       </div>
 
       {/* 0. QUY TRÌNH CHĂM SÓC SẦU RIÊNG CHUẨN 2026-2027 */}

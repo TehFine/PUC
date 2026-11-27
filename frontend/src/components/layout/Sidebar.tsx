@@ -8,6 +8,7 @@ import { onAdminNavigate } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { useBackLayer } from "@/lib/back-navigation";
 import { animatePopupExit, attachSmoothSheetSettle } from "@/lib/popup-motion";
+import { useAdminNotificationBadges } from "@/lib/notification-badges";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 interface NavItem {
@@ -36,6 +37,7 @@ interface Props {
 
 export default function Sidebar({ active, onNavigate }: Props) {
   const { can } = useAuth();
+  const { getSectionBadge } = useAdminNotificationBadges();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<SectionId>(active);
 
@@ -148,10 +150,27 @@ export default function Sidebar({ active, onNavigate }: Props) {
   );
 
   const allowed = (item: NavItem) => !item.resource || can(item.resource, "read");
-  const allAllowedItems = useMemo(
-    () => [...topItems.filter(allowed), ...bottomItems.filter(allowed)],
+  const resolvedTopItems = useMemo<NavItem[]>(
+    () =>
+      topItems.filter(allowed).map((item) => ({
+        ...item,
+        badge: getSectionBadge(item.id),
+      })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [topItems, can],
+    [topItems, can, getSectionBadge],
+  );
+  const resolvedBottomItems = useMemo<NavItem[]>(
+    () =>
+      bottomItems.filter(allowed).map((item) => ({
+        ...item,
+        badge: getSectionBadge(item.id),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [can, getSectionBadge],
+  );
+  const allAllowedItems = useMemo(
+    () => [...resolvedTopItems, ...resolvedBottomItems],
+    [resolvedTopItems, resolvedBottomItems],
   );
 
   const go = (id: SectionId) => {
@@ -212,7 +231,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
           }
         }}
       >
-        {topItems.filter(allowed).map(({ id, label, badge, badgeType }) => (
+        {resolvedTopItems.map(({ id, label, badge, badgeType }) => (
           <button
             key={id}
             type="button"
@@ -223,12 +242,14 @@ export default function Sidebar({ active, onNavigate }: Props) {
           >
             {label}
             {!!badge && badge > 0 && (
-              <span className={`nav-badge ${badgeType === "warn" ? "warn" : ""}`}>{badge}</span>
+              <span className={`nav-badge ${badgeType === "warn" ? "warn" : ""}`}>
+                {badge > 99 ? "99+" : badge}
+              </span>
             )}
           </button>
         ))}
 
-        {bottomItems.filter(allowed).map(({ id, label }) => (
+        {resolvedBottomItems.map(({ id, label, badge, badgeType }) => (
           <button
             key={id}
             type="button"
@@ -238,6 +259,11 @@ export default function Sidebar({ active, onNavigate }: Props) {
             onClick={() => go(id)}
           >
             {label}
+            {!!badge && badge > 0 && (
+              <span className={`nav-badge ${badgeType === "warn" ? "warn" : ""}`}>
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -283,7 +309,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
                           {item.label}
                           {!!item.badge && item.badge > 0 && (
                             <span className={`nav-badge ${item.badgeType === "warn" ? "warn" : ""}`} style={{ marginLeft: 8 }}>
-                              {item.badge}
+                              {item.badge > 99 ? "99+" : item.badge}
                             </span>
                           )}
                         </span>

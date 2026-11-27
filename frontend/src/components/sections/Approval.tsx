@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { refreshMountedApiQueries, useApi, useApiList } from "@/hooks/use-api";
+import { refreshMountedApiQueries, useApiList } from "@/hooks/use-api";
 import {
   ADMIN_LAST_URL_KEY,
   readInitialUrlSubTab,
@@ -11,6 +11,12 @@ import {
   usePersistedState,
   useUrlSubTab,
 } from "@/lib/back-navigation";
+import {
+  acknowledgeAdminEntity,
+  acknowledgeAdminScope,
+  useAdminNotificationBadges,
+  useAutoAcknowledgeAdminScope,
+} from "@/lib/notification-badges";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   ADMIN_APPROVAL_TAB_EVENT,
@@ -37,7 +43,6 @@ import ScheduleFormModal from "@/components/admin/approvals/ScheduleFormModal";
 import Registrations from "@/components/sections/Registrations";
 import { formatDate } from "@/utils/format";
 import type { ApprovalRow, MinuteRow, ScheduleRow } from "@/types/approvals";
-import type { DashboardSummary } from "@/types/dashboard";
 
 type Tab = "pending" | "registrations" | "schedule" | "minutes";
 const PAGE_SIZE = 25;
@@ -86,17 +91,7 @@ export default function Approval() {
     defaultTab,
     isApprovalTab,
   );
-  const registrationsSummary = useApi<{
-    data: unknown[];
-    passwordResets?: unknown[];
-    total?: number;
-  }>(canReadRegistrations ? "/registrations" : null);
-  const dashSummary = useApi<DashboardSummary>("/dashboard/summary");
-  const pendingApprovalCount = dashSummary.data?.counts?.pendingApprovals ?? 0;
-  const regCount = registrationsSummary.data
-    ? (registrationsSummary.data.total ??
-      registrationsSummary.data.data.length + (registrationsSummary.data.passwordResets?.length ?? 0))
-    : 0;
+  const { getSubBadge } = useAdminNotificationBadges();
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -201,20 +196,44 @@ export default function Approval() {
 
   const tabs: TabItem<Tab>[] = [
     ...(canReadApprovals
-      ? [{ id: "pending" as const, label: "Hồ sơ chờ duyệt", badge: approvals.total, pendingBadge: pendingApprovalCount }]
+      ? [
+          {
+            id: "pending" as const,
+            label: "Hồ sơ chờ duyệt",
+            badge: approvals.total,
+            pendingBadge: getSubBadge("approval", "pending"),
+          },
+        ]
       : []),
     ...(canReadRegistrations
       ? [
           {
             id: "registrations" as const,
             label: "Cấp lại mật khẩu",
-            badge: regCount,
-            pendingBadge: regCount,
+            pendingBadge: getSubBadge("approval", "registrations"),
           },
         ]
       : []),
-    ...(canReadSchedule ? [{ id: "schedule" as const, label: "Lịch kiểm tra", badge: schedules.total }] : []),
-    ...(canReadMinutes ? [{ id: "minutes" as const, label: "Biên bản kiểm tra", badge: minutes.total }] : []),
+    ...(canReadSchedule
+      ? [
+          {
+            id: "schedule" as const,
+            label: "Lịch kiểm tra",
+            badge: schedules.total,
+            pendingBadge: getSubBadge("approval", "schedule"),
+          },
+        ]
+      : []),
+    ...(canReadMinutes
+      ? [
+          {
+            id: "minutes" as const,
+            label: "Biên bản kiểm tra",
+            badge: minutes.total,
+            pendingBadge: getSubBadge("approval", "minutes"),
+          },
+        ]
+      : []),
   ];
 
   const activeTab: Tab =
@@ -224,6 +243,21 @@ export default function Approval() {
     (tab === "minutes" && !canReadMinutes)
       ? defaultTab
       : tab;
+
+  useAutoAcknowledgeAdminScope("approval", activeTab);
+
+  useEffect(() => {
+    const activeEntityId = viewingApproval?.id ?? decisionTarget?.row.id;
+    if (activeEntityId) {
+      acknowledgeAdminEntity("approval", "pending", activeEntityId);
+    }
+  }, [viewingApproval?.id, decisionTarget?.row.id]);
+
+  useEffect(() => {
+    if (viewingMinute?.id) {
+      acknowledgeAdminEntity("approval", "minutes", viewingMinute.id);
+    }
+  }, [viewingMinute?.id]);
 
   return (
     <>
@@ -249,7 +283,12 @@ export default function Approval() {
         </div>
       )}
 
-      <TabBar tabs={tabs} active={activeTab} onChange={selectTab} />
+      <TabBar
+        tabs={tabs}
+        active={activeTab}
+        onChange={selectTab}
+        onActivate={(id) => acknowledgeAdminScope("approval", id)}
+      />
 
       {activeTab === "pending" && canReadApprovals && (
         <>

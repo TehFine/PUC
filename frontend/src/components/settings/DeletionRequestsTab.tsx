@@ -19,6 +19,7 @@ import { refreshMountedApiQueries, useApiList, useMutation } from "@/hooks/use-a
 import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
+import { acknowledgeAdminEntity } from "@/lib/notification-badges";
 import type { DeletionRequestRecord, DeletionRequestStatus } from "@/types/accounts";
 import { ROLE_LABELS } from "./settings-data";
 
@@ -120,6 +121,12 @@ export default function DeletionRequestsTab({
       : pendingTargetId != null
         ? (list.rows.find((r) => Number(r.id) === Number(pendingTargetId)) ?? null)
         : null;
+
+  useEffect(() => {
+    if (viewing?.id) {
+      acknowledgeAdminEntity("system", "deletions", viewing.id);
+    }
+  }, [viewing?.id]);
 
   const closeDetailModal = () => {
     setViewingSnapshot(null);
@@ -242,6 +249,7 @@ export default function DeletionRequestsTab({
                     type="button"
                     className="admin-diary-row admin-hh-row"
                     onClick={() => {
+                      acknowledgeAdminEntity("system", "deletions", r.id);
                       setReviewNote("");
                       setPendingTargetId(null);
                       setViewingSnapshot(r);

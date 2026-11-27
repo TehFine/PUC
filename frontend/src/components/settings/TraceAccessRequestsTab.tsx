@@ -19,6 +19,7 @@ import { refreshMountedApiQueries, useApiList, useMutation } from "@/hooks/use-a
 import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
+import { acknowledgeAdminEntity } from "@/lib/notification-badges";
 import type {
   TraceAccessRequestRecord,
   TraceAccessScopeMode,
@@ -190,7 +191,14 @@ export default function TraceAccessRequestsTab({
         ? (list.rows.find((r) => Number(r.id) === Number(pendingTargetId)) ?? null)
         : null;
 
+  useEffect(() => {
+    if (viewing?.id) {
+      acknowledgeAdminEntity("system", "trace-requests", viewing.id);
+    }
+  }, [viewing?.id]);
+
   const openDetailModal = (row: TraceAccessRequestRecord) => {
+    acknowledgeAdminEntity("system", "trace-requests", row.id);
     setViewingSnapshot(row);
     setPendingTargetId(null);
     setGrantedTier(row.grantedTier ?? row.requestedTier ?? "enterprise");
