@@ -518,4 +518,147 @@ describe("luồng thông báo và đồng bộ pending thời gian thực (SSE R
 
     expect(receivedChunks.join("")).toContain('"type":"notification"');
   });
+
+  it("đồng bộ tức thì trạng thái đã đọc giữa Chuông và từng Tab qua POST /api/notifications/read-batch, :id/read, read-all trên đa phiên SSE", async () => {
+    const [adminTabA, adminTabB, otherStaff] = await Promise.all([
+      loggedIn(USERS.admin),
+      loggedIn(USERS.admin),
+      loggedIn(USERS.htx),
+    ]);
+    const adminId = adminTabA.user.id;
+    const otherId = otherStaff.user.id;
+
+    const streamTabA: RealtimeStreamEvent[] = [];
+    const streamTabB: RealtimeStreamEvent[] = [];
+    const unsubA = notifications.subscribeUserStream(adminId, "admin", (ev) => streamTabA.push(ev));
+    const unsubB = notifications.subscribeUserStream(adminId, "admin", (ev) => streamTabB.push(ev));
+
+    const createdNotifIds: number[] = [];
+    try {
+      // 1. Khi có 2 thông báo Cấp quyền QR và 1 thông báo Hồ sơ đến -> cả 2 phiên mở của Admin đều nhận SSE đồng thời
+      await notifications.notifyUsers([adminId], {
+        kind: "approval",
+        title: "Yêu cầu mở quyền xem QR (QR-SYNC-01)",
+        body: "Đoàn kiểm tra đề nghị mở quyền xem lô SR-SYNC-01",
+        link: "/admin?section=system&sub=trace-requests&id=99001",
+      });
+      await notifications.notifyUsers([adminId], {
+        kind: "approval",
+        title: "Yêu cầu mở quyền xem QR (QR-SYNC-02)",
+        body: "Đoàn kiểm tra đề nghị mở quyền xem lô SR-SYNC-02",
+        link: "/admin?section=system&sub=trace-requests&id=99002",
+      });
+      await notifications.notifyUsers([adminId], {
+        kind: "approval",
+        title: "Hồ sơ chờ duyệt đồng bộ (HS-SYNC-03)",
+        body: "Đề nghị kiểm tra thửa trước thu hoạch",
+        link: "/admin?section=approval&id=99003",
+      });
+      await notifications.notifyUsers([otherId], {
+        kind: "approval",
+        title: "Thông báo riêng của cán bộ khác",
+        body: "Không được phép bị tài khoản khác đánh dấu đã đọc",
+        link: "/admin?section=approval&id=99004",
+      });
+
+      const pushedItemsA = streamTabA
+        .filter((e): e is Extract<RealtimeStreamEvent, { type: "notification" }> => e.type === "notification")
+        .map((e) => e.item);
+      const pushedItemsB = streamTabB
+        .filter((e): e is Extract<RealtimeStreamEvent, { type: "notification" }> => e.type === "notification")
+        .map((e) => e.item);
+
+      expect(pushedItemsA.length).toBeGreaterThanOrEqual(3);
+      expect(pushedItemsB.length).toBeGreaterThanOrEqual(3);
+
+      const qr1 = pushedItemsA.find((n) => n.title.includes("QR-SYNC-01"))!;
+      const qr2 = pushedItemsA.find((n) => n.title.includes("QR-SYNC-02"))!;
+      const hs3 = pushedItemsA.find((n) => n.title.includes("HS-SYNC-03"))!;
+      expect(qr1).toBeDefined();
+      expect(qr2).toBeDefined();
+      expect(hs3).toBeDefined();
+      createdNotifIds.push(qr1.id, qr2.id, hs3.id);
+
+      const otherListBefore = await otherStaff.agent.get("/api/notifications");
+      const otherNotif = (otherListBefore.body.data as Array<{ id: number; title: string; readAt: string | null }>).find(
+        (n) => n.title === "Thông báo riêng của cán bộ khác",
+      )!;
+      expect(otherNotif).toBeDefined();
+      createdNotifIds.push(otherNotif.id);
+
+      // 2. Chặn payload sai định dạng hoặc kèm trường lạ (whitelist + forbidNonWhitelisted) và chặn đánh dấu hộ người khác
+      const invalidEmpty = await adminTabA.agent.post("/api/notifications/read-batch").send({ ids: [] });
+      expect(invalidEmpty.status).toBe(400);
+
+      const invalidExtra = await adminTabA.agent
+        .post("/api/notifications/read-batch")
+        .send({ ids: [qr1.id], userId: otherId });
+      expect(invalidExtra.status).toBe(400);
+
+      const crossUserAttempt = await adminTabA.agent
+        .post("/api/notifications/read-batch")
+        .send({ ids: [otherNotif.id] });
+      expect(crossUserAttempt.status).toBe(200);
+      expect(crossUserAttempt.body.updated).toBe(0);
+
+      const otherListAfter = await otherStaff.agent.get("/api/notifications");
+      const otherStillUnread = (
+        otherListAfter.body.data as Array<{ id: number; readAt: string | null }>
+      ).find((n) => n.id === otherNotif.id);
+      expect(otherStillUnread?.readAt).toBeNull();
+
+      // 3. Mở xem tab Cấp quyền QR trên Tab A -> gọi read-batch cho 2 thông báo QR -> cả Tab A và Tab B nhận ngay readIds qua SSE
+      streamTabA.length = 0;
+      streamTabB.length = 0;
+
+      const batchRes = await adminTabA.agent
+        .post("/api/notifications/read-batch")
+        .send({ ids: [qr1.id, qr2.id] });
+      expect(batchRes.status).toBe(200);
+      expect(batchRes.body.updated).toBe(2);
+      expect(batchRes.body.readIds).toEqual(expect.arrayContaining([qr1.id, qr2.id]));
+
+      const syncA = streamTabA.find(
+        (e): e is Extract<RealtimeStreamEvent, { type: "notifications-sync" }> => e.type === "notifications-sync",
+      );
+      const syncB = streamTabB.find(
+        (e): e is Extract<RealtimeStreamEvent, { type: "notifications-sync" }> => e.type === "notifications-sync",
+      );
+      expect(syncA?.readIds).toEqual(expect.arrayContaining([qr1.id, qr2.id]));
+      expect(syncB?.readIds).toEqual(expect.arrayContaining([qr1.id, qr2.id]));
+
+      const listAfterQrTab = await adminTabB.agent.get("/api/notifications");
+      const byId = new Map(
+        (listAfterQrTab.body.data as Array<{ id: number; readAt: string | null }>).map((n) => [n.id, n]),
+      );
+      expect(byId.get(qr1.id)?.readAt).toBeTruthy();
+      expect(byId.get(qr2.id)?.readAt).toBeTruthy();
+      expect(byId.get(hs3.id)?.readAt).toBeNull();
+
+      // 4. Bấm "Đọc hết" trên Chuông ở Tab B -> cả Tab A và Tab B nhận ngay readAll: true đồng thời, số chưa đọc về 0
+      streamTabA.length = 0;
+      streamTabB.length = 0;
+      const readAllRes = await adminTabB.agent.post("/api/notifications/read-all");
+      expect(readAllRes.status).toBe(200);
+
+      const syncAllA = streamTabA.find(
+        (e): e is Extract<RealtimeStreamEvent, { type: "notifications-sync" }> => e.type === "notifications-sync",
+      );
+      const syncAllB = streamTabB.find(
+        (e): e is Extract<RealtimeStreamEvent, { type: "notifications-sync" }> => e.type === "notifications-sync",
+      );
+      expect(syncAllA?.readAll).toBe(true);
+      expect(syncAllB?.readAll).toBe(true);
+
+      const finalAdminList = await adminTabA.agent.get("/api/notifications");
+      expect(finalAdminList.body.unread).toBe(0);
+    } finally {
+      unsubA();
+      unsubB();
+      if (createdNotifIds.length > 0) {
+        await db.query("DELETE FROM notifications WHERE id = ANY($1::bigint[])", [createdNotifIds]);
+      }
+      await db.query("DELETE FROM notifications WHERE title = 'Thông báo riêng của cán bộ khác'");
+    }
+  });
 });

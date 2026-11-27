@@ -1,10 +1,11 @@
-import { Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from "@nestjs/common";
 import { SkipThrottle, Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser } from "../auth/auth.decorators";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
+import { MarkNotificationsReadBatchDto } from "./notifications.dto";
 import { NotificationsService } from "./notifications.service";
 
 const SSE_HEARTBEAT_MS = 15_000;
@@ -77,6 +78,12 @@ export class NotificationsController {
   @HttpCode(200)
   readAll(@CurrentUser() user: AuthUser) {
     return this.notifications.markAllRead(user.id);
+  }
+
+  @Post("read-batch")
+  @HttpCode(200)
+  readBatch(@Body() dto: MarkNotificationsReadBatchDto, @CurrentUser() user: AuthUser) {
+    return this.notifications.markReadBatch(user.id, dto.ids);
   }
 
   @Post("clear-read")

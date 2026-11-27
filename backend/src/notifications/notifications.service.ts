@@ -2,7 +2,14 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import type { AuthUser } from "../auth/auth-user";
 import { can, type Role } from "../auth/permissions";
 import type { CacheTag } from "../common/cache/app-cache.service";
-import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
+import {
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+  matchesJurisdiction,
+  villageScope,
+} from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 
@@ -36,7 +43,7 @@ export interface RealtimeNotificationItem {
 
 export type RealtimeStreamEvent =
   | { type: "notification"; item: RealtimeNotificationItem }
-  | { type: "notifications-sync" }
+  | { type: "notifications-sync"; readIds?: number[]; readAll?: boolean }
   | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean }
   | { type: "data-sync"; tags: CacheTag[] };
 
@@ -523,11 +530,26 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     if (cleanLinks.length === 0) return;
     try {
       this.lastSyncedAt.clear();
-      const res = await this.db.query<{ user_id: number }>(
-        "UPDATE notifications SET read_at = now() WHERE link = ANY($1::text[]) AND read_at IS NULL RETURNING user_id",
+      const res = await this.db.query<{ id: number; user_id: number }>(
+        "UPDATE notifications SET read_at = now() WHERE link = ANY($1::text[]) AND read_at IS NULL RETURNING id, user_id",
         [cleanLinks],
       );
-      this.emitSyncToUsers(res.rows.map((r) => Number(r.user_id)));
+      const byUser = new Map<number, number[]>();
+      for (const row of res.rows) {
+        const uid = Number(row.user_id);
+        const nid = Number(row.id);
+        if (!Number.isFinite(uid) || uid <= 0 || !Number.isFinite(nid) || nid <= 0) continue;
+        let list = byUser.get(uid);
+        if (!list) {
+          list = [];
+          byUser.set(uid, list);
+        }
+        list.push(nid);
+      }
+      for (const [uid, readIds] of byUser) {
+        this.lastSyncedAt.delete(uid);
+        this.emitToUser(uid, { type: "notifications-sync", readIds });
+      }
     } catch (error) {
       this.logger.error(
         `Không cập nhật được trạng thái thông báo: ${error instanceof Error ? error.message : String(error)}`,
@@ -540,7 +562,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     await this.resolveByLinks([link]);
   }
 
-  async list(userOrId: AuthUser | number, limit = 50) {
+  async list(userOrId: AuthUser | number, limit = 100) {
     const userId = typeof userOrId === "number" ? userOrId : userOrId.id;
     let rbacFilterSql = "";
     if (typeof userOrId !== "number") {
@@ -565,17 +587,42 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         if (!can(userOrId.role, "harvest", "read")) {
           clauses.push(`kind <> 'harvest' AND COALESCE(link, '') NOT LIKE '/admin?section=harvest%'`);
         }
+        if (!can(userOrId.role, "trace-requests", "read")) {
+          clauses.push(`COALESCE(link, '') NOT LIKE '/admin?section=system&sub=trace-requests%'`);
+        }
+        if (!can(userOrId.role, "deletion-requests", "read")) {
+          clauses.push(`COALESCE(link, '') NOT LIKE '/admin?section=system&sub=deletions%'`);
+        }
         if (clauses.length > 0) {
           rbacFilterSql = ` AND ${clauses.join(" AND ")}`;
         }
       }
     }
 
-    // Danh sách và số chưa đọc độc lập nhau: chạy song song để giảm một lượt chờ CSDL
+    // Tải song song tối đa $2 thông báo chưa đọc mới nhất và 50 thông báo vừa đọc gần nhất để tab Đã đọc không bao giờ bị đẩy mất
     const [listRes, unreadRes] = await Promise.all([
       this.db.query(
-        `SELECT id, kind, title, body, link, read_at, created_at FROM notifications
-         WHERE user_id = $1${rbacFilterSql} ORDER BY created_at DESC, id DESC LIMIT $2`,
+        `WITH unread_part AS (
+           SELECT id, kind, title, body, link, read_at, created_at
+           FROM notifications
+           WHERE user_id = $1 AND read_at IS NULL${rbacFilterSql}
+           ORDER BY created_at DESC, id DESC
+           LIMIT $2
+         ),
+         read_part AS (
+           SELECT id, kind, title, body, link, read_at, created_at
+           FROM notifications
+           WHERE user_id = $1 AND read_at IS NOT NULL${rbacFilterSql}
+           ORDER BY COALESCE(read_at, created_at) DESC, id DESC
+           LIMIT 50
+         )
+         SELECT id, kind, title, body, link, read_at, created_at
+         FROM (
+           SELECT * FROM unread_part
+           UNION ALL
+           SELECT * FROM read_part
+         ) combined
+         ORDER BY created_at DESC, id DESC`,
         [userId, limit],
       ),
       this.db.query<{ n: number }>(
@@ -683,8 +730,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private async syncStaffNotifications(user: AuthUser): Promise<void> {
     const canReadApprovals = can(user.role, "approvals", "read");
     const canReadViolations = can(user.role, "violations", "read");
+    const canReadTraceRequests =
+      can(user.role, "trace-requests", "read") && isStaffInCuneCoopScope(user, true);
     const isDeputyReviewer = user.role === "htx_deputy";
-    if (!canReadApprovals && !canReadViolations && !isDeputyReviewer) return;
+    if (!canReadApprovals && !canReadViolations && !canReadTraceRequests && !isDeputyReviewer) return;
 
     const now = Date.now();
     const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
@@ -693,7 +742,13 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.lastSyncedAt.set(user.id, now);
 
     try {
-      const params: unknown[] = [user.id, canReadApprovals, canReadViolations, isDeputyReviewer];
+      const params: unknown[] = [
+        user.id,
+        canReadApprovals,
+        canReadViolations,
+        isDeputyReviewer,
+        canReadTraceRequests,
+      ];
       const hhScopeCond = villageScope("h.village_id")(user, params);
       const apprScope = hhScopeCond
         ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
@@ -702,6 +757,21 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
         : "";
 
+      let traceScope = "";
+      const commune = user.assignedCommune?.trim() || "";
+      if (commune) {
+        const inCune = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+        const inEaKhal = matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+        const eaKhalExpr = `(COALESCE(tr.puc_code, '') ~* '^66-PUC-SR0001-' OR tr.scanned_code ~* '^(?:66-PUC-SR0001-|EK\\d)')`;
+        if (!inCune && !inEaKhal) {
+          traceScope = "AND 1 = 0";
+        } else if (inEaKhal && !inCune) {
+          traceScope = `AND ${eaKhalExpr}`;
+        } else if (inCune && !inEaKhal) {
+          traceScope = `AND NOT ${eaKhalExpr}`;
+        }
+      }
+
       // Gộp các bước đồng bộ thông báo quản trị vào 1 câu lệnh CTE trên 1 kết nối CSDL duy nhất
       await this.db.query(
         `WITH ins_appr AS (
@@ -709,7 +779,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
            SELECT
              $1,
              'approval',
-             'Hồ sơ chờ duyệt: ' || a.code || ' – ' || a.applicant_name,
+             'Hồ sơ chờ duyệt: ' || a.code || ' - ' || a.applicant_name,
              a.request_type || ' - Nộp ngày ' || to_char(a.submitted_on, 'DD/MM/YYYY'),
              '/admin?section=approval&id=' || a.id,
              COALESCE(a.created_at, a.submitted_on::timestamptz, now())
@@ -728,7 +798,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
              $1,
              'violation',
              'Cảnh báo vi phạm: ' || v.title,
-             v.household_label || COALESCE(' - Thửa ' || v.plot_code, '') || COALESCE(' – ' || v.description, ''),
+             v.household_label || COALESCE(' - Thửa ' || v.plot_code, '') || COALESCE(' - ' || v.description, ''),
              '/admin?section=journal&violationId=' || v.id,
              COALESCE(v.detected_on::timestamptz, now())
            FROM violations v
@@ -758,6 +828,26 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
                WHERE n.user_id = $1 AND n.link = '/admin?section=system&sub=deletions&id=' || d.id
              )
            ORDER BY d.created_at ASC, d.id ASC
+         ),
+         ins_trace AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'approval',
+             'Yêu cầu mở quyền xem QR (' || tr.request_code || ')',
+             tr.requester_name || ' (' || tr.organization || ') đề nghị xem hồ sơ ' || COALESCE(tr.resolved_lot_code, tr.scanned_code),
+             '/admin?section=system&sub=trace-requests&id=' || tr.id,
+             tr.created_at
+           FROM trace_access_requests tr
+           WHERE $5::boolean
+             AND tr.status = 'pending'
+             AND COALESCE(tr.requester_user_id, 0) <> $1
+             ${traceScope}
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1 AND n.link = '/admin?section=system&sub=trace-requests&id=' || tr.id
+             )
+           ORDER BY tr.created_at ASC, tr.id ASC
          )
          UPDATE notifications n
          SET read_at = now()
@@ -778,6 +868,36 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
                SELECT 1 FROM member_deletion_requests d
                WHERE '/admin?section=system&sub=deletions&id=' || d.id = n.link AND d.status <> 'pending'
              ))
+             OR
+             (
+               n.link LIKE '/admin?section=system&sub=trace-requests&id=%'
+               AND n.title NOT LIKE 'Đã %'
+               AND n.title NOT LIKE 'Từ chối%'
+               AND EXISTS (
+                 SELECT 1 FROM trace_access_requests tr
+                 WHERE '/admin?section=system&sub=trace-requests&id=' || tr.id = n.link
+                   AND tr.status <> 'pending'
+               )
+             )
+             OR
+             (
+               n.link LIKE '/admin?section=approval&sub=registrations&id=%'
+               AND NOT EXISTS (
+                 SELECT 1 FROM users u
+                 WHERE '/admin?section=approval&sub=registrations&id=' || u.id = n.link
+                   AND u.status = 'pending'
+               )
+             )
+             OR
+             (
+               n.link LIKE '/admin?section=registrations&id=%'
+               AND NOT EXISTS (
+                 SELECT 1 FROM password_reset_requests pr
+                 WHERE '/admin?section=registrations&id=' || pr.id = n.link
+                   AND pr.status = 'pending'
+                   AND pr.expires_at > now()
+               )
+             )
            )`,
         params,
       );
@@ -790,18 +910,46 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async markRead(userId: number, id: number) {
+    this.lastSyncedAt.delete(userId);
     await this.db.query("UPDATE notifications SET read_at = now() WHERE id = $1 AND user_id = $2 AND read_at IS NULL", [id, userId]);
-    this.emitToUser(userId, { type: "notifications-sync" });
+    this.emitToUser(userId, { type: "notifications-sync", readIds: [id] });
     return { ok: true };
   }
 
+  async markReadBatch(userId: number, ids: number[]) {
+    const cleanIds = Array.from(
+      new Set(ids.map((raw) => Number(raw)).filter((n) => Number.isInteger(n) && n > 0)),
+    ).slice(0, 100);
+    if (cleanIds.length === 0) {
+      return { ok: true, updated: 0, readIds: [] as number[] };
+    }
+    this.lastSyncedAt.delete(userId);
+    const res = await this.db.query<{ id: number }>(
+      `UPDATE notifications
+       SET read_at = now()
+       WHERE user_id = $1
+         AND id = ANY($2::bigint[])
+         AND read_at IS NULL
+       RETURNING id`,
+      [userId, cleanIds],
+    );
+    const updatedIds = res.rows.map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0);
+    this.emitToUser(userId, {
+      type: "notifications-sync",
+      readIds: updatedIds.length > 0 ? updatedIds : cleanIds,
+    });
+    return { ok: true, updated: res.rowCount ?? 0, readIds: updatedIds };
+  }
+
   async markAllRead(userId: number) {
+    this.lastSyncedAt.delete(userId);
     await this.db.query("UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL", [userId]);
-    this.emitToUser(userId, { type: "notifications-sync" });
+    this.emitToUser(userId, { type: "notifications-sync", readAll: true });
     return { ok: true };
   }
 
   async clearRead(userId: number) {
+    this.lastSyncedAt.delete(userId);
     const res = await this.db.query("DELETE FROM notifications WHERE user_id = $1 AND read_at IS NOT NULL", [userId]);
     this.emitToUser(userId, { type: "notifications-sync" });
     return { ok: true, deleted: res.rowCount ?? 0 };
