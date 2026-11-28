@@ -2880,7 +2880,7 @@ input[type="date"].filter-select {
   z-index: 660;
   isolation: isolate;
   width: 336px;
-  max-height: calc(100% - 20px);
+  max-height: calc(100% - 70px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2946,7 +2946,7 @@ input[type="date"].filter-select {
   gap: 0;
   width: 324px;
   max-width: calc(100% - 20px);
-  max-height: calc(100% - 20px);
+  max-height: calc(100% - 70px);
   overflow: hidden;
   padding: 0;
   background: transparent !important;
@@ -3669,7 +3669,7 @@ input[type="date"].filter-select {
   z-index: 720;
   isolation: isolate;
   width: min(376px, calc(100% - 20px));
-  max-height: calc(100% - 20px);
+  max-height: calc(100% - 70px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4898,6 +4898,9 @@ input[type="date"].filter-select {
   .zones-map-area .plotmap-zoom {
     right: 24px;
     bottom: 16px;
+    height: 40px;
+    align-items: center;
+    box-sizing: border-box;
   }
 
   .zones-map-area .leaflet-bottom.leaflet-left {
@@ -4913,8 +4916,8 @@ input[type="date"].filter-select {
   .zones-map-area .plotmap-popup {
     top: 80px;
     right: 24px;
-    max-height: calc(100vh - 104px);
-    max-height: calc(100dvh - 104px);
+    max-height: calc(100vh - 148px);
+    max-height: calc(100dvh - 148px);
   }
 
   .zones-map-area .plotmap-hint {
@@ -4923,8 +4926,8 @@ input[type="date"].filter-select {
     left: auto;
     width: 328px;
     max-width: calc(100vw - 404px);
-    max-height: calc(100vh - 104px);
-    max-height: calc(100dvh - 104px);
+    max-height: calc(100vh - 148px);
+    max-height: calc(100dvh - 148px);
     transform: none;
   }
 
