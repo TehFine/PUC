@@ -44,7 +44,6 @@ import {
 import {
   describeFieldEvidence,
   FieldTrustBadge,
-  PlotSignboardQrScannerModal,
 } from "./shared/FieldEvidenceCapture";
 import { RadialPngIcon } from "./RadialIcons";
 import type { PortalAction } from "./PortalSearch";
@@ -87,6 +86,59 @@ function diffDaysFromToday(isoDate: string): number {
 
 const SPRAY_ACTIVITY_NAME = "Phun thuốc BVTV";
 const FERTILIZE_ACTIVITY_NAME = "Bón phân";
+
+function resolveInitialActivities(
+  draft?: OfflineFieldDraft | null,
+  initialActivity?: string,
+): string[] {
+  if (draft?.activities && draft.activities.length > 0) {
+    return draft.activities;
+  }
+  if (draft?.activity?.trim()) {
+    const parts = draft.activity
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const matched = parts.filter((p) => JOURNAL_ACTIVITIES.includes(p));
+    return matched.length > 0 ? matched : [draft.activity.trim()];
+  }
+  if (initialActivity) {
+    return [initialActivity];
+  }
+  return [];
+}
+
+function summarizeSelectedActivities(activities: string[]): {
+  title: string;
+  overflowNote: string | null;
+} {
+  const clean = activities.map((a) => a.trim()).filter(Boolean);
+  if (clean.length === 0) {
+    return { title: JOURNAL_ACTIVITIES[0], overflowNote: null };
+  }
+  const fullJoined = clean.join(", ");
+  if (fullJoined.length <= 100) {
+    return { title: fullJoined, overflowNote: null };
+  }
+  const kept: string[] = [];
+  for (const item of clean) {
+    const nextStr = [...kept, item].join(", ");
+    const remaining = clean.length - (kept.length + 1);
+    const suffix = remaining > 0 ? ` (cùng ${remaining} việc)` : "";
+    if (nextStr.length + suffix.length <= 100 || kept.length === 0) {
+      kept.push(item);
+    } else {
+      break;
+    }
+  }
+  const restCount = clean.length - kept.length;
+  const title =
+    restCount > 0 ? `${kept.join(", ")} (cùng ${restCount} việc)`.slice(0, 100) : kept.join(", ").slice(0, 100);
+  return {
+    title,
+    overflowNote: restCount > 0 ? `Công việc thực hiện: ${fullJoined}` : null,
+  };
+}
 
 interface VisualPickerOption {
   id: string;
@@ -191,7 +243,9 @@ function VisualCatalogPickerBody({
       {loading && options.length === 0 ? (
         <div className="pt-vpicker-empty">Đang tải danh mục hình ảnh…</div>
       ) : filtered.length === 0 ? (
-        <div className="pt-vpicker-empty">Không tìm thấy sản phẩm phù hợp với từ khóa.</div>
+        <EmptyState icon="search" variant="catalogLens" compact>
+          Không tìm thấy sản phẩm phù hợp với từ khóa.
+        </EmptyState>
       ) : (
         <div className="pt-vpicker-carousel" data-no-sheet-drag="true">
           <button
@@ -315,6 +369,7 @@ function DiarySheetActionFooter({
   busyLabel = "Đang lưu…",
   saving,
   canSubmit,
+  hasActivities,
   hasFiles,
   onBeforeCancel,
   onCancel,
@@ -324,11 +379,17 @@ function DiarySheetActionFooter({
   busyLabel?: string;
   saving: boolean;
   canSubmit: boolean;
+  hasActivities: boolean;
   hasFiles: boolean;
   onBeforeCancel?: () => void;
   onCancel: () => void;
 }) {
   const sheetClose = useSheetClose();
+  const disabledHint = !hasActivities
+    ? "Vui lòng chọn ít nhất 1 công việc thực hiện trong ngày"
+    : !hasFiles
+      ? "Vui lòng chụp ảnh hoặc chọn ảnh từ bộ sưu tập trước khi lưu"
+      : undefined;
   return (
     <>
       <button
@@ -350,7 +411,7 @@ function DiarySheetActionFooter({
         busy={saving}
         busyLabel={busyLabel}
         disabled={!canSubmit}
-        title={!hasFiles ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
+        title={disabledHint}
       >
         {submitLabel}
       </BusyButton>
@@ -407,12 +468,15 @@ function UnifiedDiaryForm({
   const [entryOn, setEntryOn] = useState(initialEntryDate);
   const [dateBoundNotice, setDateBoundNotice] = useState<string | null>(null);
   const [plotCode, setPlotCode] = useState(defaultPlotCode);
-  const [activity, setActivity] = useState(initialDraft?.activity ?? initialActivity ?? JOURNAL_ACTIVITIES[0]);
+  const [selectedActivities, setSelectedActivities] = useState<string[]>(() =>
+    resolveInitialActivities(initialDraft, initialActivity),
+  );
   const [detail, setDetail] = useState(initialDraft?.detail ?? "");
   const [lateReason, setLateReason] = useState(autoLateDefault);
 
-  const isSprayActivity = activity === SPRAY_ACTIVITY_NAME;
-  const isFertilizeActivity = activity === FERTILIZE_ACTIVITY_NAME;
+  const isSprayActivity = selectedActivities.includes(SPRAY_ACTIVITY_NAME);
+  const isFertilizeActivity = selectedActivities.includes(FERTILIZE_ACTIVITY_NAME);
+  const activity = summarizeSelectedActivities(selectedActivities).title;
   const pesticides = useCatalog<PesticideDto>("pesticides", isSprayActivity);
   const fertilizersCatalog = useCatalog<FertilizerDto>("fertilizers", isFertilizeActivity);
   const fertilizerRows = useMemo(
@@ -432,8 +496,6 @@ function UnifiedDiaryForm({
     initialDraft?.coords ?? null,
   );
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(initialDraft?.gpsAccuracyM ?? null);
-  const [signboardQrToken, setSignboardQrToken] = useState<string | null>(initialDraft?.signboardQrToken ?? null);
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(() => {
     if (initialDraft?.coords) {
       return `Đã định vị: ${initialDraft.coords.latitude.toFixed(5)}, ${initialDraft.coords.longitude.toFixed(5)}`;
@@ -566,6 +628,7 @@ function UnifiedDiaryForm({
         plotCode: effectivePlot.trim(),
         entryOn,
         activity,
+        activities: selectedActivities,
         detail,
         lateReason,
         pesticideId,
@@ -577,7 +640,7 @@ function UnifiedDiaryForm({
         coords,
         gpsAccuracyM,
         captureSource: media.primaryCaptureSource,
-        signboardQrToken,
+        signboardQrToken: null,
         timeAnchorToken: initialDraft?.timeAnchorToken ?? clockSnap.timeAnchorToken ?? null,
         monotonicElapsedMs: initialDraft?.monotonicElapsedMs ?? clockSnap.monotonicElapsedMs ?? null,
         capturedAtIso: draftCapturedMeta.capturedAtIso ?? clockSnap.clientCapturedAt,
@@ -598,6 +661,7 @@ function UnifiedDiaryForm({
     effectivePlot,
     entryOn,
     activity,
+    selectedActivities,
     detail,
     lateReason,
     pesticideId,
@@ -608,7 +672,6 @@ function UnifiedDiaryForm({
     source,
     coords,
     gpsAccuracyM,
-    signboardQrToken,
   ]);
 
   const handleDiscardAndCancel = () => {
@@ -714,9 +777,6 @@ function UnifiedDiaryForm({
   }, [fertilizerRows]);
 
   const handlePlotChange = (nextCode: string) => {
-    if (nextCode !== plotCode) {
-      setSignboardQrToken(null);
-    }
     setPlotCode(nextCode);
     if (!areaTouched) {
       const matched = plotsList.find((p) => p.code === nextCode);
@@ -728,20 +788,21 @@ function UnifiedDiaryForm({
     startGpsWatch(true);
   };
 
+  const toggleActivity = (item: string) => {
+    setError(null);
+    setSelectedActivities((prev) =>
+      prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item],
+    );
+  };
+
   const lateReasonOk = !isLateOver48h || lateReason.trim().length >= 5;
-  const canSubmit = isSprayActivity
-    ? Boolean(
-      isEntryDateValid &&
-      lateReasonOk &&
-      effectivePlot.trim() &&
-      pesticideId &&
-      dose.trim() &&
-      Number(areaHa) > 0 &&
-      media.hasFiles,
-    )
-    : isFertilizeActivity
-      ? Boolean(isEntryDateValid && lateReasonOk && effectivePlot.trim() && fertilizerId && media.hasFiles)
-      : Boolean(isEntryDateValid && lateReasonOk && effectivePlot.trim() && media.hasFiles);
+  const canSubmit = Boolean(
+    isEntryDateValid &&
+    lateReasonOk &&
+    effectivePlot.trim() &&
+    selectedActivities.length > 0 &&
+    media.hasFiles,
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -772,26 +833,12 @@ function UnifiedDiaryForm({
       setError("Vui lòng chọn hoặc nhập mã thửa đất.");
       return;
     }
-    if (!media.hasFiles) {
-      setError("Vui lòng chụp hoặc chọn ít nhất 1 ảnh hiện trường trước khi lưu.");
+    if (selectedActivities.length === 0) {
+      setError("Vui lòng chọn ít nhất 1 công việc đã thực hiện trong ngày khai báo.");
       return;
     }
-    if (isSprayActivity) {
-      if (!pesticideId) {
-        setError("Vui lòng chọn loại thuốc bảo vệ thực vật đã sử dụng.");
-        return;
-      }
-      if (!dose.trim()) {
-        setError("Vui lòng nhập liều lượng pha phun.");
-        return;
-      }
-      if (!(Number(areaHa) > 0)) {
-        setError("Vui lòng nhập diện tích phun hợp lệ.");
-        return;
-      }
-    }
-    if (isFertilizeActivity && !fertilizerId) {
-      setError("Vui lòng chọn loại phân bón đã sử dụng.");
+    if (!media.hasFiles) {
+      setError("Vui lòng chụp ảnh trực tiếp hoặc chọn ít nhất 1 ảnh từ bộ sưu tập trước khi lưu.");
       return;
     }
 
@@ -807,15 +854,32 @@ function UnifiedDiaryForm({
       const resolvedAnchorToken = initialDraft?.timeAnchorToken ?? clockMeta.timeAnchorToken;
       const resolvedMonotonicMs = initialDraft?.monotonicElapsedMs ?? clockMeta.monotonicElapsedMs;
 
-      if (isSprayActivity) {
+      if (isSprayActivity && chosenPesticide) {
+        const extraTasks = selectedActivities.filter((a) => a !== SPRAY_ACTIVITY_NAME);
+        const resolvedArea =
+          Number(areaHa) > 0
+            ? Number(areaHa)
+            : Number(defaultPlotArea) > 0
+              ? Number(defaultPlotArea)
+              : 0.5;
+        const sprayNotes = [
+          extraTasks.length > 0 ? `Công việc cùng ngày: ${extraTasks.join(", ")}` : "",
+          isFertilizeActivity && chosenFertilizer ? `Phân bón: ${chosenFertilizer.name}` : "",
+          isFertilizeActivity && fertDose.trim() ? `Liều bón: ${fertDose.trim()}` : "",
+          detail.trim(),
+        ]
+          .filter(Boolean)
+          .join(". ")
+          .slice(0, 500);
+
         const sprayBody: Omit<CreateSprayBody, "photoId" | "photoIds"> = {
           sprayedOn: entryOn,
-          pesticideId: Number(pesticideId),
-          dose: dose.trim(),
-          areaHa: Number(areaHa),
+          pesticideId: Number(chosenPesticide.id),
+          dose: dose.trim() || "Theo hướng dẫn nhãn thuốc",
+          areaHa: resolvedArea,
           source: source.trim() || undefined,
           plotCode: finalPlot,
-          note: detail.trim() || undefined,
+          note: sprayNotes || undefined,
           latitude: coords?.latitude,
           longitude: coords?.longitude,
           gpsAccuracyM: gpsAccuracyM ?? undefined,
@@ -823,12 +887,11 @@ function UnifiedDiaryForm({
           clientCapturedAt: clockMeta.clientCapturedAt,
           timeAnchorToken: resolvedAnchorToken,
           monotonicElapsedMs: resolvedMonotonicMs ?? undefined,
-          signboardQrToken: signboardQrToken ?? undefined,
           lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
         };
         const outcome = await submitFieldRecordWithOfflineQueue<PortalSprayRecord>({
           kind: "portal-spray",
-          label: `Phun thuốc${chosenPesticide ? ` ${chosenPesticide.name}` : ""} - Thửa ${finalPlot}`,
+          label: `Phun thuốc ${chosenPesticide.name} - Thửa ${finalPlot}`,
           plotCode: finalPlot,
           endpoint: "/portal/spray",
           payload: sprayBody as Record<string, unknown>,
@@ -856,22 +919,21 @@ function UnifiedDiaryForm({
         return;
       }
 
-      const composedDetail =
-        isFertilizeActivity && chosenFertilizer
-          ? [
-            `Loại phân: ${chosenFertilizer.name}`,
-            fertDose.trim() ? `Liều lượng: ${fertDose.trim()}` : "",
-            detail.trim() ? `Ghi chú: ${detail.trim()}` : "",
-          ]
-            .filter(Boolean)
-            .join(". ")
-            .slice(0, 500)
-          : detail.trim() || undefined;
+      const { title: activityTitle, overflowNote } = summarizeSelectedActivities(selectedActivities);
+      const composedParts = [
+        overflowNote ?? "",
+        isFertilizeActivity && chosenFertilizer ? `Loại phân: ${chosenFertilizer.name}` : "",
+        isFertilizeActivity && fertDose.trim() ? `Liều lượng bón: ${fertDose.trim()}` : "",
+        isSprayActivity && dose.trim() ? `Liều lượng phun: ${dose.trim()}` : "",
+        isSprayActivity && source.trim() ? `Đại lý vật tư: ${source.trim()}` : "",
+        detail.trim() ? (chosenFertilizer || fertDose.trim() || dose.trim() || source.trim() ? `Ghi chú: ${detail.trim()}` : detail.trim()) : "",
+      ].filter(Boolean);
+      const composedDetail = composedParts.length > 0 ? composedParts.join(". ").slice(0, 500) : undefined;
 
       const baseBody: Omit<CreateJournalBody, "photoId" | "photoIds"> = {
         entryOn,
         plotCode: finalPlot,
-        activity,
+        activity: activityTitle,
         detail: composedDetail,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
@@ -880,7 +942,6 @@ function UnifiedDiaryForm({
         clientCapturedAt: clockMeta.clientCapturedAt,
         timeAnchorToken: resolvedAnchorToken,
         monotonicElapsedMs: resolvedMonotonicMs ?? undefined,
-        signboardQrToken: signboardQrToken ?? undefined,
         lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
       };
       const outcome = await submitFieldRecordWithOfflineQueue<PortalJournalEntry>({
@@ -888,7 +949,7 @@ function UnifiedDiaryForm({
         label:
           isFertilizeActivity && chosenFertilizer
             ? `Bón phân ${chosenFertilizer.name} - Thửa ${finalPlot}`
-            : `Nhật ký ${activity} - Thửa ${finalPlot}`,
+            : `Nhật ký ${activityTitle} - Thửa ${finalPlot}`,
         plotCode: finalPlot,
         endpoint: "/portal/journal",
         payload: baseBody as Record<string, unknown>,
@@ -928,6 +989,7 @@ function UnifiedDiaryForm({
         <DiarySheetActionFooter
           saving={saving || Boolean(media.compressing)}
           canSubmit={canSubmit && !media.compressing}
+          hasActivities={selectedActivities.length > 0}
           hasFiles={media.hasFiles}
           onBeforeCancel={() => {
             void clearWorkingFieldDraft();
@@ -970,50 +1032,11 @@ function UnifiedDiaryForm({
                 id="pj-plot"
                 placeholder="Nhập mã thửa đất"
                 value={plotCode}
-                onChange={(e) => {
-                  setSignboardQrToken(null);
-                  setPlotCode(e.target.value);
-                }}
+                onChange={(e) => setPlotCode(e.target.value)}
                 required
               />
             )}
           </Field>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-            padding: "9px 12px",
-            borderRadius: 6,
-            border: "1px solid #d4d4d2",
-            background: signboardQrToken ? "#f3f7ee" : "#f7f7f5",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 180, flex: 1 }}>
-            <strong style={{ fontSize: 13, color: signboardQrToken ? "#15803d" : "#14372f" }}>
-              {signboardQrToken
-                ? `Đã xác thực bảng QR tại Thửa ${effectivePlot}`
-                : "Xác thực bảng QR cắm tại đầu thửa (khuyến khích khi rẫy khuất GPS)"}
-            </strong>
-            <span style={{ fontSize: 12, color: "#5f6d66" }}>
-              {signboardQrToken
-                ? "Bằng chứng có mặt thực địa tại vườn đã được đính kèm vào nhật ký."
-                : "Quét ngoại tuyến không cần 4G để tự động chọn đúng thửa và đạt mức tin cậy cao nhất."}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="pt-gps-btn"
-            onClick={() => setQrScannerOpen(true)}
-            disabled={saving}
-            style={{ flexShrink: 0 }}
-          >
-            <span>{signboardQrToken ? "Quét lại QR" : "Quét QR biển vườn"}</span>
-          </button>
         </div>
 
         {dateBoundNotice && (
@@ -1048,63 +1071,80 @@ function UnifiedDiaryForm({
           </Field>
         )}
 
-        <Field label="Công việc thực hiện" htmlFor="pj-activity">
-          <select
-            id="pj-activity"
-            value={activity}
-            onChange={(e) => {
-              const next = e.target.value;
-              setActivity(next);
-              setError(null);
-              if (next === SPRAY_ACTIVITY_NAME && !pesticideId) {
-                setPickerMode("pesticide");
-              } else if (next === FERTILIZE_ACTIVITY_NAME && !fertilizerId) {
-                setPickerMode("fertilizer");
-              }
-            }}
-          >
-            {JOURNAL_ACTIVITIES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="pt-field">
+          <div className="pt-diary-task-header">
+            <span className="pt-field-label">Công việc thực hiện</span>
+            <span className="pt-diary-task-count" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {selectedActivities.length > 0
+                ? `Đã chọn ${selectedActivities.length} việc`
+                : "Chạm để chọn"}
+            </span>
+          </div>
+          <div className="pt-diary-task-grid" role="group" aria-label="Công việc thực hiện">
+            {JOURNAL_ACTIVITIES.map((item) => {
+              const active = selectedActivities.includes(item);
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={active}
+                  className={`pt-diary-task-chip ${active ? "is-selected" : ""}`.trim()}
+                  onClick={() => toggleActivity(item)}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {isFertilizeActivity && (
           <>
-            <Field label="Loại phân bón sử dụng" htmlFor="pf-fertilizer-trigger">
-              <button
-                id="pf-fertilizer-trigger"
-                type="button"
-                className={`pt-vpicker-trigger ${chosenFertilizer ? "has-value" : ""}`}
-                onClick={() => setPickerMode("fertilizer")}
-              >
-                {chosenFertilizer ? (
-                  <>
-                    <span className="pt-vpicker-trigger-thumb">
-                      <img
-                        src={getFertilizerImage(chosenFertilizer)}
-                        alt={chosenFertilizer.name}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </span>
-                    <span className="pt-vpicker-trigger-info">
-                      <strong className="pt-vpicker-trigger-name">{chosenFertilizer.name}</strong>
-                      <span className="pt-vpicker-trigger-sub">{chosenFertilizer.formula}</span>
-                    </span>
-                    <span className="pt-vpicker-trigger-action">Đổi loại</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="pt-vpicker-trigger-placeholder">
-                      {fertilizersCatalog.loading ? "Đang tải danh mục phân bón…" : "Bấm để chọn phân bón bằng hình ảnh"}
-                    </span>
-                    <DetailArrowIcon className="pt-vpicker-trigger-arrow" size={20} />
-                  </>
+            <Field label="Loại phân bón đã dùng (không bắt buộc)" htmlFor="pf-fertilizer-trigger">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button
+                  id="pf-fertilizer-trigger"
+                  type="button"
+                  className={`pt-vpicker-trigger ${chosenFertilizer ? "has-value" : ""}`}
+                  onClick={() => setPickerMode("fertilizer")}
+                >
+                  {chosenFertilizer ? (
+                    <>
+                      <span className="pt-vpicker-trigger-thumb">
+                        <img
+                          src={getFertilizerImage(chosenFertilizer)}
+                          alt={chosenFertilizer.name}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </span>
+                      <span className="pt-vpicker-trigger-info">
+                        <strong className="pt-vpicker-trigger-name">{chosenFertilizer.name}</strong>
+                        <span className="pt-vpicker-trigger-sub">{chosenFertilizer.formula}</span>
+                      </span>
+                      <span className="pt-vpicker-trigger-action">Đổi loại</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="pt-vpicker-trigger-placeholder">
+                        {fertilizersCatalog.loading
+                          ? "Đang tải danh mục phân bón…"
+                          : "Bấm chọn loại phân bón (bỏ qua nếu không nhớ tên)"}
+                      </span>
+                      <DetailArrowIcon className="pt-vpicker-trigger-arrow" size={20} />
+                    </>
+                  )}
+                </button>
+                {chosenFertilizer && (
+                  <button
+                    type="button"
+                    className="pt-diary-clear-choice"
+                    onClick={() => setFertilizerId("")}
+                  >
+                    Bỏ chọn loại phân bón
+                  </button>
                 )}
-              </button>
+              </div>
             </Field>
 
             {chosenFertilizer?.status === "warning" && (
@@ -1132,51 +1172,64 @@ function UnifiedDiaryForm({
 
         {isSprayActivity && (
           <>
-            <Field label="Loại thuốc bảo vệ thực vật sử dụng" htmlFor="ps-pesticide-trigger">
-              <button
-                id="ps-pesticide-trigger"
-                type="button"
-                className={`pt-vpicker-trigger ${chosenPesticide ? "has-value" : ""}`}
-                onClick={() => setPickerMode("pesticide")}
-              >
-                {chosenPesticide ? (
-                  <>
-                    <span className="pt-vpicker-trigger-thumb">
-                      <img
-                        src={getPesticideImage(chosenPesticide)}
-                        alt={chosenPesticide.name}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </span>
-                    <span className="pt-vpicker-trigger-info">
-                      <strong className="pt-vpicker-trigger-name">{chosenPesticide.name}</strong>
-                      <span
-                        className={`pt-vpicker-trigger-sub ${chosenPesticide.status === "banned"
-                          ? "is-danger"
-                          : chosenPesticide.status === "restricted"
-                            ? "is-warn"
-                            : ""
-                          }`}
-                      >
-                        {chosenPesticide.status === "banned"
-                          ? "Danh mục cấm sử dụng"
-                          : chosenPesticide.status === "restricted"
-                            ? `Hạn chế, cách ly ${chosenPesticide.isolationDays ?? 0} ngày`
-                            : `Cách ly ${chosenPesticide.isolationDays ?? 0} ngày`}
+            <Field label="Loại thuốc BVTV đã dùng (không bắt buộc)" htmlFor="ps-pesticide-trigger">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button
+                  id="ps-pesticide-trigger"
+                  type="button"
+                  className={`pt-vpicker-trigger ${chosenPesticide ? "has-value" : ""}`}
+                  onClick={() => setPickerMode("pesticide")}
+                >
+                  {chosenPesticide ? (
+                    <>
+                      <span className="pt-vpicker-trigger-thumb">
+                        <img
+                          src={getPesticideImage(chosenPesticide)}
+                          alt={chosenPesticide.name}
+                          loading="lazy"
+                          decoding="async"
+                        />
                       </span>
-                    </span>
-                    <span className="pt-vpicker-trigger-action">Đổi loại</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="pt-vpicker-trigger-placeholder">
-                      {pesticides.loading ? "Đang tải danh mục thuốc…" : "Bấm để chọn thuốc bằng hình ảnh"}
-                    </span>
-                    <DetailArrowIcon className="pt-vpicker-trigger-arrow" size={20} />
-                  </>
+                      <span className="pt-vpicker-trigger-info">
+                        <strong className="pt-vpicker-trigger-name">{chosenPesticide.name}</strong>
+                        <span
+                          className={`pt-vpicker-trigger-sub ${chosenPesticide.status === "banned"
+                            ? "is-danger"
+                            : chosenPesticide.status === "restricted"
+                              ? "is-warn"
+                              : ""
+                            }`}
+                        >
+                          {chosenPesticide.status === "banned"
+                            ? "Danh mục cấm sử dụng"
+                            : chosenPesticide.status === "restricted"
+                              ? `Hạn chế, cách ly ${chosenPesticide.isolationDays ?? 0} ngày`
+                              : `Cách ly ${chosenPesticide.isolationDays ?? 0} ngày`}
+                        </span>
+                      </span>
+                      <span className="pt-vpicker-trigger-action">Đổi loại</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="pt-vpicker-trigger-placeholder">
+                        {pesticides.loading
+                          ? "Đang tải danh mục thuốc…"
+                          : "Bấm chọn loại thuốc (bỏ qua nếu không nhớ tên)"}
+                      </span>
+                      <DetailArrowIcon className="pt-vpicker-trigger-arrow" size={20} />
+                    </>
+                  )}
+                </button>
+                {chosenPesticide && (
+                  <button
+                    type="button"
+                    className="pt-diary-clear-choice"
+                    onClick={() => setPesticideId("")}
+                  >
+                    Bỏ chọn loại thuốc
+                  </button>
                 )}
-              </button>
+              </div>
             </Field>
 
             {chosenPesticide?.status === "banned" && (
@@ -1209,16 +1262,15 @@ function UnifiedDiaryForm({
             )}
 
             <div className="pt-field-row">
-              <Field label="Liều lượng pha phun" htmlFor="ps-dose">
+              <Field label="Liều lượng pha phun (không bắt buộc)" htmlFor="ps-dose">
                 <input
                   id="ps-dose"
                   placeholder="Ví dụ: 100 ml / bình 20L"
                   value={dose}
                   onChange={(e) => setDose(e.target.value)}
-                  required
                 />
               </Field>
-              <Field label="Diện tích phun (ha)" htmlFor="ps-area">
+              <Field label="Diện tích phun (ha, không bắt buộc)" htmlFor="ps-area">
                 <input
                   id="ps-area"
                   type="number"
@@ -1230,7 +1282,6 @@ function UnifiedDiaryForm({
                     setAreaTouched(true);
                     setAreaHa(e.target.value);
                   }}
-                  required
                 />
               </Field>
             </div>
@@ -1287,35 +1338,18 @@ function UnifiedDiaryForm({
 
         <MultiPhotoField
           id="pj-photo-input"
-          label={isSprayActivity ? "Ảnh hiện trường phun thuốc và nhãn thuốc" : "Ảnh, video chụp trực tiếp hiện trường"}
+          label={isSprayActivity ? "Hình ảnh hiện trường phun thuốc và công việc" : "Hình ảnh, video thực hiện công việc"}
           picker={media}
           required
-          cameraOnly
-          description="Chụp trực tiếp tại vườn (tối đa 8 ảnh hoặc video dưới 90 giây, tự lưu an toàn khi mất sóng 4G)."
+          liveCamera
           cameraLabel="Chụp ảnh hiện trường"
-          videoLabel="Quay video tại vườn"
+          galleryLabel="Chọn từ bộ sưu tập"
+          videoLabel="Thêm video"
           disabled={saving}
         />
 
         <InlineError message={error} />
       </form>
-
-      {qrScannerOpen && (
-        <PlotSignboardQrScannerModal
-          plotsList={plotsList}
-          selectedPlotCode={effectivePlot}
-          onVerifiedScan={({ plotCode: scannedPlot, qrToken }) => {
-            setPlotCode(scannedPlot);
-            setSignboardQrToken(qrToken);
-            if (!areaTouched) {
-              const matched = plotsList.find((p) => p.code === scannedPlot);
-              if (matched?.areaHa) setAreaHa(String(matched.areaHa));
-            }
-            toast.success(`Đã xác thực QR Thửa ${scannedPlot}`);
-          }}
-          onClose={() => setQrScannerOpen(false)}
-        />
-      )}
 
       {pickerMode === "pesticide" && (
         <VisualCatalogPickerSheet
@@ -1992,7 +2026,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
         <StateBlock loading={isLoading} error={combinedError} />
 
         {hasLoadedOnce && combinedItems.length === 0 && !hasPendingOfflineItems && (
-          <EmptyState icon="empty">
+          <EmptyState icon="diary" variant="journal">
             Chưa có nhật ký nào. Bấm “Ghi nhật ký” để lưu công việc đầu tiên.
           </EmptyState>
         )}

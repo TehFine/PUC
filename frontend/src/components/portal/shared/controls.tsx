@@ -1087,6 +1087,7 @@ export function MultiPhotoField({
   picker,
   required = false,
   cameraOnly = false,
+  liveCamera = false,
   description,
   cameraLabel = "Chụp ảnh",
   galleryLabel = "Chọn nhiều ảnh",
@@ -1097,8 +1098,10 @@ export function MultiPhotoField({
   label: string;
   picker: MultiPhotoPicker;
   required?: boolean;
-  /** Khi bật cho nhật ký thực địa của nông hộ: chặn chọn ảnh cũ từ thư viện máy, chỉ cho chụp trực tiếp tại hiện trường. */
+  /** Khi bật: ẩn nút chọn từ bộ sưu tập, chỉ cho phép chụp trực tiếp. */
   cameraOnly?: boolean;
+  /** Mở khung chụp máy ảnh trực tiếp trên ứng dụng đồng thời vẫn hiển thị nút chọn từ bộ sưu tập thiết bị. */
+  liveCamera?: boolean;
   description?: string;
   cameraLabel?: string;
   galleryLabel?: string;
@@ -1108,6 +1111,7 @@ export function MultiPhotoField({
   const [removingItem, setRemovingItem] = useState<MultiMediaItem | null>(null);
   const [liveCameraOpen, setLiveCameraOpen] = useState(false);
   const canAddMore = picker.count < picker.maxFiles;
+  const useLiveCameraModal = cameraOnly || liveCamera;
 
   return (
     <div className="pt-multi-media-field">
@@ -1189,7 +1193,7 @@ export function MultiPhotoField({
 
       {canAddMore && (
         <div className="pt-multi-media-actions">
-          {cameraOnly ? (
+          {useLiveCameraModal ? (
             <button
               type="button"
               className={`pt-multi-media-btn is-primary ${disabled ? "is-disabled" : ""}`.trim()}
@@ -1262,7 +1266,7 @@ export function MultiPhotoField({
         </div>
       )}
 
-      {liveCameraOpen && cameraOnly && (
+      {liveCameraOpen && useLiveCameraModal && (
         <FieldCameraCaptureModal
           remainingSlots={Math.max(0, picker.maxFiles - picker.count)}
           currentCount={picker.count}

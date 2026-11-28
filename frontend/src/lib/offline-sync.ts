@@ -107,6 +107,7 @@ export interface OfflineFieldDraft {
   plotCode: string;
   entryOn: string;
   activity: string;
+  activities?: string[];
   detail: string;
   lateReason: string;
   pesticideId: string;
@@ -970,6 +971,7 @@ export interface SaveFieldDraftInput {
   plotCode: string;
   entryOn: string;
   activity: string;
+  activities?: string[];
   detail?: string;
   lateReason?: string;
   pesticideId?: string;
@@ -1040,6 +1042,7 @@ export async function saveOfflineFieldDraft(input: SaveFieldDraftInput): Promise
     plotCode: input.plotCode,
     entryOn: input.entryOn || dateVn,
     activity: input.activity,
+    activities: input.activities,
     detail: input.detail ?? "",
     lateReason: input.lateReason ?? "",
     pesticideId: input.pesticideId ?? "",

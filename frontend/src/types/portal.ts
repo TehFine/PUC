@@ -196,8 +196,8 @@ export interface PortalSprayRecord {
 export interface CreateSprayBody {
   sprayedOn?: string;
   pesticideId: number;
-  dose: string;
-  areaHa: number;
+  dose?: string;
+  areaHa?: number;
   source?: string;
   plotCode?: string;
   note?: string;
