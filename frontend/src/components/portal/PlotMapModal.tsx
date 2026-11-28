@@ -484,7 +484,7 @@ export default function PlotMapModal({
 
         mapRef.current = map;
         smoothZoom = attachSmoothMapZoom(L, map);
-        L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
+        L.control.scale({ imperial: false, metric: true, position: "bottomright" }).addTo(map);
 
         // 1. Lớp vệ tinh mới nhất (Esri Maxar Vivid cập nhật mới nhất; ở chế độ chinaSafe chỉ nạp ảnh vệ tinh thực tế không phụ thuộc Google)
         const satellite = createLatestSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM, undefined, { chinaSafe });

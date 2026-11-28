@@ -8870,7 +8870,8 @@ body.pt-body {
   background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  border: 0 !important;
+  outline: none !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
   flex-shrink: 0;
   white-space: nowrap;
@@ -8925,8 +8926,8 @@ body.pt-body {
   padding: 3px;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.56);
-  outline: none;
+  border: 0 !important;
+  outline: none !important;
   gap: 2px;
   box-sizing: border-box;
 }
@@ -8975,7 +8976,8 @@ body.pt-body {
   width: 36px;
   height: 36px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  border: 0 !important;
+  outline: none !important;
   background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -9026,7 +9028,8 @@ body.pt-body {
   -webkit-backdrop-filter: blur(14px) saturate(135%);
   backdrop-filter: blur(14px) saturate(135%);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  border: 0 !important;
+  outline: none !important;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
   overflow-x: hidden;
   overflow-y: auto;
@@ -9557,10 +9560,8 @@ body.pt-body {
     max-width: 100%;
     max-height: min(72dvh, 560px);
     border-radius: 8px 8px 0 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    border-top: 1px solid rgba(20, 55, 47, 0.14);
+    border: 0 !important;
+    outline: none !important;
     box-shadow: 0 56px 0 0 #fcfdfc, 0 -6px 24px rgba(15, 23, 42, 0.2);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
