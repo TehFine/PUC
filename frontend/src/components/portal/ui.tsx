@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight } from "@/components/ui/PublicIcon";
-import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
+import { ContextualEmptyBox, type EmptyArtVariant } from "@/components/ui/EmptyStateArt";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
@@ -58,9 +58,19 @@ export type EmptyIconName =
   | "recyclebin"
   | "empty";
 
-export function EmptyState({ icon, children }: { icon: EmptyIconName; children: ReactNode }) {
+export function EmptyState({
+  icon,
+  variant,
+  compact,
+  children,
+}: {
+  icon: EmptyIconName;
+  variant?: EmptyArtVariant;
+  compact?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <ContextualEmptyBox iconHint={icon} className="pt-empty">
+    <ContextualEmptyBox variant={variant} iconHint={icon} compact={compact} className="pt-empty">
       {children}
     </ContextualEmptyBox>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
+import { ContextualEmptyBox, type EmptyArtVariant } from "@/components/ui/EmptyStateArt";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 
 /** Hộp trạng thái cho vùng không phải bảng (lưới thẻ, danh sách): đang tải (Apple spinner + skeleton) / lỗi / trống. */
@@ -9,12 +9,14 @@ export default function BlockState({
   error,
   empty,
   emptyText = "Chưa có dữ liệu",
+  variant,
   onRetry,
 }: {
   loading: boolean;
   error: string | null;
   empty: boolean;
   emptyText?: string;
+  variant?: EmptyArtVariant;
   onRetry?: () => void;
 }) {
   if (error) {
@@ -34,8 +36,8 @@ export default function BlockState({
   }
   if (empty) {
     return (
-      <div className="card empty-state">
-        <ContextualEmptyBox>{emptyText}</ContextualEmptyBox>
+      <div className="empty-state">
+        <ContextualEmptyBox variant={variant}>{emptyText}</ContextualEmptyBox>
       </div>
     );
   }
