@@ -63,33 +63,33 @@ export default function DrawHint({
 
   const title =
     mode === "draw"
-      ? "Vẽ ranh giới thửa mới"
+      ? "Vẽ thửa mới"
       : mode === "gps"
-        ? "Đo GPS thực địa"
+        ? "Đo GPS"
         : mode === "edit"
           ? plotCode
             ? ownerName
-              ? `Vẽ, sửa ${plotCode} (${ownerName})`
-              : `Sửa ranh giới ${plotCode}`
-            : "Sửa ranh giới thửa"
+              ? `Sửa ${plotCode} (${ownerName})`
+              : `Sửa ${plotCode}`
+            : "Sửa ranh giới"
           : plotCode
             ? `Đối chiếu ${plotCode}`
-            : "Vẽ ranh giới đối chiếu";
+            : "Đối chiếu thửa";
 
   const guideText =
     mode === "gps"
       ? gpsAccuracy !== null
-        ? "Di chuyển dọc bờ thửa để ghi tọa độ hoặc chạm bản đồ thêm đỉnh."
-        : "Đang định vị vệ tinh, có thể chạm bản đồ để đặt đỉnh thủ công."
+        ? "Đi dọc bờ thửa hoặc chạm bản đồ để thêm đỉnh."
+        : "Đang dò GPS, có thể chạm bản đồ để đặt đỉnh."
       : drawStyle === "freehand"
-        ? "Nhấn giữ chuột hoặc ngón tay rồi rê dọc bờ cong, suối, đường uốn lượn để lấy nét mượt."
+        ? "Nhấn giữ rồi rê theo bờ cong để vẽ nét mượt."
         : preview.points === 0
-          ? "Chạm lần lượt các góc thửa trên ảnh vệ tinh, không giới hạn số đỉnh."
+          ? "Chạm các góc thửa trên bản đồ để bắt đầu."
           : preview.points < 3
-            ? "Tiếp tục chấm thêm góc. Có thể kéo dời ngay bất kỳ đỉnh nào vừa đặt."
+            ? "Chấm thêm góc để tạo vùng, kéo đỉnh để chỉnh."
             : mode === "edit"
-              ? "Kéo đỉnh trắng để dời góc, kéo chấm giữa cạnh để uốn cong và thêm đỉnh mới."
-              : "Kéo đỉnh để chỉnh góc, kéo giữa cạnh để thêm đỉnh, chạm đỉnh đầu #1 để khép kín.";
+              ? "Kéo đỉnh để chỉnh góc, kéo chấm giữa cạnh để thêm đỉnh."
+              : "Kéo đỉnh để chỉnh góc, chạm đỉnh #1 để khép vùng.";
 
   const canDeleteSelected =
     selectedVertexIndex !== null &&
@@ -104,12 +104,12 @@ export default function DrawHint({
       .split(/[\s,;]+/)
       .map((item) => Number.parseFloat(item));
     if (parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) {
-      setCoordError("Nhập đúng định dạng: Vĩ độ, Kinh độ (ví dụ 13.12540, 108.18520).");
+      setCoordError("Nhập đúng định dạng: Vĩ độ, Kinh độ (VD: 13.1254, 108.1852).");
       return;
     }
     const [lat, lng] = parts;
     if (lat < 8 || lat > 24 || lng < 102 || lng > 110.5) {
-      setCoordError("Tọa độ nằm ngoài phạm vi Việt Nam (Vĩ độ 8-24, Kinh độ 102-110.5).");
+      setCoordError("Tọa độ nằm ngoài phạm vi Việt Nam.");
       return;
     }
     setCoordError(null);
@@ -236,7 +236,7 @@ export default function DrawHint({
 
       {preview.selfIntersections > 0 && (
         <div className="plotmap-inline-alert is-error" role="alert">
-          Có {preview.selfIntersections} vị trí cạnh ranh giới cắt chéo nhau (đường đỏ). Hãy kéo đỉnh bị chéo ra đúng vị trí trước khi hoàn tất.
+          Có {preview.selfIntersections} cạnh cắt chéo nhau. Hãy kéo chỉnh lại đỉnh trước khi lưu.
         </div>
       )}
 
@@ -360,7 +360,7 @@ export default function DrawHint({
             checked={updateArea}
             onChange={(e) => onUpdateAreaChange(e.target.checked)}
           />
-          <span>Cập nhật diện tích hồ sơ theo ranh giới thực tế mới</span>
+          <span>Cập nhật diện tích hồ sơ theo ranh giới mới</span>
         </label>
       )}
 
@@ -395,7 +395,7 @@ export default function DrawHint({
       {confirmKind === "deleteVertex" && onDeleteSelectedVertex && selectedVertexIndex !== null && (
         <ConfirmDialog
           title={`Xóa đỉnh #${selectedVertexIndex + 1}`}
-          message={`Xác nhận xóa đỉnh #${selectedVertexIndex + 1} khỏi ranh giới thửa đất đang chỉnh sửa?`}
+          message={`Xác nhận xóa đỉnh #${selectedVertexIndex + 1}?`}
           confirmLabel="Xóa đỉnh"
           danger
           onConfirm={() => {
@@ -408,9 +408,9 @@ export default function DrawHint({
 
       {confirmKind === "clear" && (
         <ConfirmDialog
-          title="Xóa toàn bộ đỉnh đang vẽ"
-          message="Xác nhận xóa toàn bộ các đỉnh hiện tại để vẽ lại ranh giới thửa đất từ đầu?"
-          confirmLabel="Xóa và vẽ lại"
+          title="Xóa vẽ lại"
+          message="Xóa toàn bộ các đỉnh hiện tại để vẽ lại từ đầu?"
+          confirmLabel="Xóa vẽ lại"
           danger
           onConfirm={() => {
             onClearVertices();

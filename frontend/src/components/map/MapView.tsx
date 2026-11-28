@@ -700,7 +700,7 @@ export default function MapView({
           if (modeRef.current === "edit" && verticesRef.current.length <= 3) {
             setMessage({
               tone: "info",
-              text: "Thửa đất cần tối thiểu 3 đỉnh. Dùng nút Xóa vẽ lại nếu muốn chấm lại toàn bộ.",
+              text: "Cần tối thiểu 3 đỉnh. Bấm Xóa vẽ lại nếu muốn vẽ mới.",
             });
             return;
           }
@@ -830,7 +830,7 @@ export default function MapView({
     const L = leafletRef.current;
     const cleaned = cleanLatLngPoints(verticesRef.current);
     if (cleaned.length < 3) {
-      setMessage({ tone: "error", text: "Cần ít nhất 3 đỉnh phân biệt để khép kín ranh giới thửa đất." });
+      setMessage({ tone: "error", text: "Cần ít nhất 3 đỉnh để tạo ranh giới." });
       return;
     }
 
@@ -838,7 +838,7 @@ export default function MapView({
     if (selfHits.length > 0) {
       setMessage({
         tone: "error",
-        text: "Ranh giới đang có cạnh tự cắt chéo nhau. Hãy kéo chỉnh đỉnh bị chéo trước khi hoàn tất.",
+        text: "Có cạnh cắt chéo nhau, hãy kéo chỉnh lại đỉnh.",
       });
       return;
     }
@@ -1738,8 +1738,8 @@ export default function MapView({
           tone: "error",
           text:
             error.code === 1
-              ? "Cần cấp quyền định vị cho trình duyệt để ghi GPS."
-              : "Tín hiệu GPS yếu, bạn có thể chấm trực tiếp các đỉnh trên bản đồ.",
+              ? "Cần cấp quyền định vị cho trình duyệt."
+              : "Tín hiệu GPS yếu, có thể chấm trực tiếp trên bản đồ.",
         });
       },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
@@ -1780,7 +1780,7 @@ export default function MapView({
       if (!feature) {
         setMessage({
           tone: "info",
-          text: "Hãy bấm chọn một thửa đất trên bản đồ trước khi sửa hình dạng.",
+          text: "Chọn một thửa đất trên bản đồ trước khi sửa.",
         });
         return;
       }
@@ -1828,8 +1828,7 @@ export default function MapView({
         setPreview(EMPTY_PREVIEW);
         setMessage({
           tone: "info",
-          text: `Đang vẽ lại thửa ${feature.properties.code}${feature.properties.owner ? ` (${feature.properties.owner})` : ""
-            }. Chấm từng góc vườn hoặc chọn Vẽ nét cong trên ảnh vệ tinh.`,
+          text: `Đang vẽ lại thửa ${feature.properties.code}. Chấm các góc thửa trên bản đồ.`,
         });
       } else {
         verticesRef.current = initialPoints;
