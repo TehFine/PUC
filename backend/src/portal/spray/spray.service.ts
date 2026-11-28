@@ -125,6 +125,22 @@ export class SprayService {
     ).rows[0];
     if (!pesticide) throw badRequest("Không tìm thấy loại thuốc đã chọn.");
 
+    const resolvedDose = dto.dose?.trim() || "Theo hướng dẫn nhãn thuốc";
+    let resolvedAreaHa = dto.areaHa && Number(dto.areaHa) > 0 ? Number(dto.areaHa) : 0;
+    if (resolvedAreaHa <= 0 && plotCode) {
+      const plotAreaRes = await this.db.query<{ area_ha: string | number | null }>(
+        "SELECT area_ha FROM plots WHERE household_id = $1 AND upper(btrim(code)) = upper(btrim($2)) LIMIT 1",
+        [householdId, plotCode],
+      );
+      const dbArea = Number(plotAreaRes.rows[0]?.area_ha ?? 0);
+      if (Number.isFinite(dbArea) && dbArea > 0) {
+        resolvedAreaHa = dbArea;
+      }
+    }
+    if (resolvedAreaHa <= 0) {
+      resolvedAreaHa = 0.5;
+    }
+
     // Thuốc cấm hoặc hạn chế luôn bị ghi nhận là không đạt để cán bộ kiểm tra theo dõi và cảnh báo ngay.
     const mrlStatus = mrlStatusForPesticide(pesticide.status);
     const rawPhotoIds = [
@@ -193,8 +209,8 @@ export class SprayService {
         householdId,
         dto.pesticideId,
         dto.source ?? null,
-        dto.dose,
-        dto.areaHa,
+        resolvedDose,
+        resolvedAreaHa,
         pesticide.isolation_days ?? 0,
         mrlStatus,
         plotCode,
@@ -257,7 +273,7 @@ export class SprayService {
           pesticide.status === "banned"
             ? `Cảnh báo: ${farmerName} khai báo thuốc cấm`
             : `Lưu ý: ${farmerName} phun thuốc hạn chế`,
-        body: `${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""}, liều ${dto.dose} (${sprayTimeNote})`,
+        body: `${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""}, liều ${resolvedDose} (${sprayTimeNote})`,
         link: `${ADMIN_LINKS.journal}&sub=spray`,
       });
     } else {

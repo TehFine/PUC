@@ -1,6 +1,6 @@
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsPositive, Max, Min } from "class-validator";
-import { IsoDate, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, Min } from "class-validator";
+import { IsoDate, OptionalField, OptionalText, RecordId } from "../../common/validation/fields";
 import { OptionalNumberIn } from "../common/portal-fields";
 
 /** Hộ dân tự ghi nhật ký phun thuốc. Thời gian cách ly và kết quả MRL do hệ thống suy ra từ danh mục thuốc. */
@@ -15,13 +15,11 @@ export class CreatePortalSprayDto {
   @OptionalText(200)
   source?: string | null;
 
-  @Text(100)
-  dose!: string;
+  @OptionalText(100)
+  dose?: string | null;
 
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @IsPositive()
-  @Max(1000)
-  areaHa!: number;
+  @OptionalNumberIn(0.01, 1000)
+  areaHa?: number | null;
 
   @OptionalText(30)
   plotCode?: string | null;
