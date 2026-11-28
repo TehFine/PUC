@@ -224,10 +224,6 @@ export default function PlotPopup({
             </div>
           )}
         </div>
-
-        <p className="pp-privacy">
-          Số điện thoại, CCCD và tài liệu định danh cá nhân được bảo mật khỏi cửa sổ tra cứu nhanh.
-        </p>
       </div>
 
       {/* Thanh nút hành động cố định dưới cùng */}

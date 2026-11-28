@@ -364,16 +364,16 @@ body.pt-body {
   padding: 16px 18px;
   background: #ffffff;
   border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.11);
-  box-shadow: none;
+  border: none;
+  outline: none;
+  box-shadow: var(--shadow-card);
   color: #0f172a;
   overflow: hidden;
-  transition: border-color 0.16s ease, background-color 0.16s ease;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .pt-asset-card:hover {
-    border-color: rgba(15, 23, 42, 0.22);
     background: #fcfdfd;
   }
 }
@@ -545,8 +545,7 @@ body.pt-body {
 }
 
 .pt-asset-qr-btn:focus-visible {
-  outline: 2px solid #22c55e;
-  outline-offset: 4px;
+  outline: none;
 }
 
 .pt-asset-qr-btn:hover {
@@ -2250,16 +2249,15 @@ body.pt-body {
 
 .pt-quick-btn:hover {
   background: #f9fbfa;
-  border-color: rgba(20, 55, 47, 0.24);
 }
 
 .pt-quick-btn:active {
   background: #f3f7f5;
 }
 
+.pt-quick-btn:focus,
 .pt-quick-btn:focus-visible {
-  outline: 2px solid var(--green-600);
-  outline-offset: 2px;
+  outline: none;
 }
 
 @media (max-width: 640px) {
@@ -2739,8 +2737,9 @@ body.pt-body {
   position: relative;
   background: #ffffff;
   border-radius: 8px;
-  border: 1px solid rgba(20, 55, 47, 0.11);
-  box-shadow: none;
+  border: none;
+  outline: none;
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2879,9 +2878,10 @@ body.pt-body {
   background: rgba(20, 55, 47, 0.04);
 }
 
+.pt-widget-item:focus,
 .pt-widget-item:focus-visible {
-  outline: 2px solid var(--green-600);
-  outline-offset: 2px;
+  outline: none;
+  background: rgba(20, 55, 47, 0.04);
 }
 
 .pt-widget-clock-icon {
@@ -3123,8 +3123,10 @@ body.pt-body {
   margin: 0;
   padding: 0;
   background: #ffffff;
-  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  border: none;
+  outline: none;
   border-radius: 8px;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -3162,9 +3164,10 @@ body.pt-body {
   background: rgba(60, 60, 67, 0.04);
 }
 
+.pt-diary-day-row:focus,
 .pt-diary-day-row:focus-visible {
-  outline: 2px solid var(--green-600);
-  outline-offset: -2px;
+  outline: none;
+  background: rgba(60, 60, 67, 0.04);
 }
 
 .pt-diary-day-row .pt-widget-note-icon {
@@ -3911,9 +3914,9 @@ body.pt-body {
   border-color: #14372f;
 }
 
+.pt-reminder:focus,
 .pt-reminder:focus-visible {
-  outline: 2px solid var(--green-600);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .pt-reminder-red {
@@ -4019,7 +4022,8 @@ body.pt-body {
   align-items: flex-start;
   gap: 16px;
   padding: 10px 10px 18px;
-  border-radius: 14px;
+  border-radius: 8px;
+  outline: none;
   cursor: pointer;
   text-decoration: none;
   background: transparent;
@@ -4029,12 +4033,12 @@ body.pt-body {
 
 .pt-timeline-item:hover {
   background-color: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.04);
+  box-shadow: var(--shadow-card-sm);
 }
 
+.pt-timeline-item:focus,
 .pt-timeline-item:focus-visible {
-  outline: 2px solid #16a34a;
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* Cột track bên trái chứa Node tròn và Đường nối dọc */
@@ -6657,7 +6661,9 @@ body.pt-body {
 .pt-notif-sheet .pt-empty {
   min-height: 240px;
   padding: 44px 20px 46px;
-  background: #ffffff;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .pt-notif-sheet .pt-empty .puc-empty-art {
@@ -7321,7 +7327,8 @@ body.pt-body {
   min-height: 40px;
   padding: 9px 18px;
   border: none;
-  border-radius: 10px;
+  outline: none;
+  border-radius: 8px;
   background: #e4f4d6;
   color: #14372f;
   font-family: var(--font-body-stack);
@@ -7330,31 +7337,28 @@ body.pt-body {
   line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
+  box-shadow:
+    0 2px 6px rgba(20, 55, 47, 0.14),
+    0 6px 16px -4px rgba(20, 55, 47, 0.16);
   -webkit-tap-highlight-color: transparent;
   transition:
     background-color 0.16s ease,
     color 0.16s ease,
+    box-shadow 0.16s ease,
     transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.pt-drawer-cta svg,
-.pt-drawer-cta .pub-icon {
-  flex-shrink: 0;
-  transition: transform 0.16s ease;
 }
 
 .pt-drawer-cta:hover:not(:disabled) {
   background: #d3eab9;
   color: #0f2c25;
-}
-
-.pt-drawer-cta:hover:not(:disabled) svg,
-.pt-drawer-cta:hover:not(:disabled) .pub-icon {
-  transform: translateX(2px);
+  box-shadow:
+    0 4px 10px rgba(20, 55, 47, 0.18),
+    0 8px 20px -4px rgba(20, 55, 47, 0.2);
 }
 
 .pt-drawer-cta:active:not(:disabled) {
   background: #c5e2a4;
+  box-shadow: 0 1px 3px rgba(20, 55, 47, 0.14);
 }
 
 .pt-drawer-cta:disabled {
@@ -8628,13 +8632,12 @@ body.pt-body {
 @media (hover: hover) and (pointer: fine) {
   .pt-plot-reminder-card:hover {
     background: #fafdfc;
-    border-color: rgba(5, 150, 105, 0.38);
   }
 }
 
+.pt-plot-reminder-card:focus,
 .pt-plot-reminder-card:focus-visible {
-  outline: 2px solid var(--green-600);
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* Icon trifold map từ public/trifold.png */
@@ -8834,7 +8837,29 @@ body.pt-body {
   pointer-events: none;
 }
 
+.pt-mapmodal-top-tag::before,
+.pt-mapmodal-layer-pill::before,
+.pt-mapmodal-round-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--pt-dock-bg, rgba(245, 247, 246, 0.76));
+  -webkit-backdrop-filter: blur(12px) saturate(135%);
+  backdrop-filter: blur(12px) saturate(135%);
+  -webkit-clip-path: inset(0 round var(--pt-dock-r, 6px));
+  clip-path: inset(0 round var(--pt-dock-r, 6px));
+  transition: background-color 0.16s ease;
+}
+
 .pt-mapmodal-top-tag {
+  --pt-dock-r: 6px;
+  --pt-dock-bg: rgba(245, 247, 246, 0.76);
+  position: relative;
+  isolation: isolate;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -8842,9 +8867,11 @@ body.pt-body {
   min-height: 36px;
   padding: 6px 12px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
   flex-shrink: 0;
   white-space: nowrap;
   box-sizing: border-box;
@@ -8885,14 +8912,20 @@ body.pt-body {
 }
 
 .pt-mapmodal-layer-pill {
+  --pt-dock-r: 8px;
+  --pt-dock-bg: rgba(242, 245, 243, 0.74);
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   min-height: 36px;
-  background: #ededec;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   padding: 3px;
   border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
-  border: none;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.56);
   outline: none;
   gap: 2px;
   box-sizing: border-box;
@@ -8907,7 +8940,7 @@ body.pt-body {
   border-radius: 5.5px;
   font-size: 12px;
   font-weight: 600;
-  color: #6e7471;
+  color: #2f3e38;
   cursor: pointer;
   box-shadow: none;
   transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
@@ -8921,35 +8954,40 @@ body.pt-body {
 
 @media (hover: hover) and (pointer: fine) {
   .pt-mapmodal-pill-btn:hover:not(.is-active) {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.54);
     color: #14372f;
   }
 }
 
 .pt-mapmodal-pill-btn.is-active {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   color: #14372f;
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12),
               0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .pt-mapmodal-round-btn {
+  --pt-dock-r: 6px;
+  --pt-dock-bg: rgba(245, 247, 246, 0.76);
+  position: relative;
+  isolation: isolate;
   width: 36px;
   height: 36px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   color: #0f172a;
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
-  transition: background-color 0.16s ease;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
   flex-shrink: 0;
 }
 
-.pt-mapmodal-round-btn:hover {
+.pt-mapmodal-round-btn:hover::before {
   background: #ffffff;
 }
 
@@ -8983,14 +9021,25 @@ body.pt-body {
   width: 380px;
   max-width: calc(100vw - 48px);
   max-height: calc(100dvh - 96px);
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(245, 247, 246, 0.78);
+  background-clip: padding-box;
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  backdrop-filter: blur(14px) saturate(135%);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   touch-action: pan-y;
+}
+
+.pt-mapmodal-floating-popup::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .pt-mapmodal-floating-popup.is-dragging {
@@ -9010,11 +9059,11 @@ body.pt-body {
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  background: #fcfdfc;
+  background: rgba(255, 255, 255, 0.36);
   transition: background 0.15s ease;
 }
 
@@ -9035,7 +9084,7 @@ body.pt-body {
 }
 
 .pt-mapmodal-popup-header:hover {
-  background: #f4fbf7;
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .pt-mapmodal-popup-header-main {
@@ -9703,7 +9752,8 @@ body.pt-body {
   justify-content: space-between;
   gap: 16px;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 8px;
+  outline: none;
   cursor: pointer;
   background: #ffffff;
   transition: background-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
@@ -9714,13 +9764,12 @@ body.pt-body {
 @media (hover: hover) and (pointer: fine) {
   .pt-training-clean-card:hover {
     background-color: #f8fafc;
-    box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
   }
 }
 
+.pt-training-clean-card:focus,
 .pt-training-clean-card:focus-visible {
-  outline: 2px solid #16a34a;
-  outline-offset: 2px;
+  outline: none;
 }
 
 .pt-transit-head {
@@ -10764,31 +10813,8 @@ body.pt-body .pt-sheet.pt-search-sheet>.pt-sheet-body {
    TỐI ƯU HIỆU NĂNG CUỘN, CHỐNG NÓNG MÁY & TƯƠNG THÍCH LAPTOP / MOBILE NHỎ
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Bỏ qua tính toán layout & paint các mục danh sách nằm ngoài màn hình */
-.pt-diary-day-group {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 84px;
-}
-
-.pt-asset-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 156px;
-}
-
-.pt-notif-item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 76px;
-}
-
-@media print {
-
-  .pt-diary-day-group,
-  .pt-asset-card,
-  .pt-notif-item {
-    content-visibility: visible !important;
-    contain-intrinsic-size: none !important;
-  }
-}
+/* Không gắn content-visibility: auto lên khung bọc hoặc thẻ bo góc có box-shadow
+   vì contain: paint sẽ cắt bóng đổ thành khung vuông góc cạnh bao quanh thẻ */
 
 /* Laptop vừa & nhỏ (1000px – 1200px, ví dụ 1366×768 scale 125% ≈ 1093px):
    thu gọn thanh tab ngang để đủ cả 6 tab + tìm kiếm + thông báo + hồ sơ không bị chật */
@@ -10842,52 +10868,10 @@ body.pt-body .pt-sheet.pt-search-sheet>.pt-sheet-body {
   }
 }
 
-/* Ẩn dựng ngoài khung nhìn (content-visibility) cho danh sách thẻ dài trên Cổng hộ dân */
-.pt-pest-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 108px;
-}
-
-.pt-diary-day-group {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 84px;
-}
-
-.pt-notif-item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 84px;
-}
-
-.pt-training-clean-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 80px;
-}
-
-.pt-lab-test-row,
-.pt-lab-row,
-.pt-list>.pt-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 64px;
-}
-
-@media print {
-
-  .pt-pest-card,
-  .pt-diary-day-group,
-  .pt-notif-item,
-  .pt-training-clean-card,
-  .pt-lab-test-row,
-  .pt-lab-row,
-  .pt-list>.pt-row {
-    content-visibility: visible !important;
-    contain-intrinsic-size: none !important;
-  }
-}
-
 @media (max-width: 999px) {
 
-  .pt-app *,
-  .pt-app *::before,
+  .pt-app *:not(.pt-mapmodal-floating-popup),
+  .pt-app *:not(.pt-mapmodal-top-tag):not(.pt-mapmodal-layer-pill):not(.pt-mapmodal-round-btn)::before,
   .pt-app *::after,
   .pt-sheet-backdrop,
   .pt-radial-backdrop {
@@ -10896,19 +10880,17 @@ body.pt-body .pt-sheet.pt-search-sheet>.pt-sheet-body {
   }
 }
 
-/* Thiết bị cấu hình yếu (data-perf="lite"): dùng mặt phẳng đặc thay blur, giảm bóng đổ nặng & rút ngắn chuyển cảnh */
+/* Thiết bị cấu hình yếu (data-perf="lite"): dùng mặt phẳng đặc thay blur nền toàn trang, giữ blur nhẹ cho dock nổi bản đồ */
 html[data-perf="lite"] {
   scroll-behavior: auto !important;
 }
 
-[data-perf="lite"] *,
-[data-perf="lite"] *::before,
+[data-perf="lite"] *:not(.zones-left-col):not(.pt-mapmodal-floating-popup),
+[data-perf="lite"] *:not(.app-header):not(.map-toolgroup):not(.plotmap-zoom):not(.plotmap-popup):not(.plotmap-panel):not(.plotmap-hint):not(.zone-view-tabs):not(.zones-sidebar):not(.zone-source-card):not(.map-sheet-btn):not(.pt-mapmodal-top-tag):not(.pt-mapmodal-layer-pill):not(.pt-mapmodal-round-btn)::before,
 [data-perf="lite"] *::after,
 html[data-perf="lite"] .pt-sheet-backdrop,
 html[data-perf="lite"] .pt-topbar,
-html[data-perf="lite"] .pt-bottom-nav,
-html[data-perf="lite"] .pt-mapmodal-topbar,
-html[data-perf="lite"] .pt-mapmodal-floating-popup {
+html[data-perf="lite"] .pt-bottom-nav {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -10924,7 +10906,7 @@ html[data-perf="lite"] :is(.pt-tab-pane, .pt-tab, .pt-pest-filter-chip) {
 }
 
 html[data-perf="lite"] :is(.pt-asset-card, .pt-card, .pt-pest-card, .pt-diary-day-card, .pt-notif-item, .pt-training-clean-card, .pt-lab-test-row, .pt-plot-card) {
-  box-shadow: none !important;
+  box-shadow: var(--shadow-card-sm) !important;
 }
 
 html[data-perf="lite"] .pt-sheet,
@@ -12609,8 +12591,9 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-lab-test-list,
 .pt-app .pt-diary-day-card {
   background: #ffffff;
-  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
-  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
+  border: none !important;
+  outline: none !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
 .pt-app .pt-segmented {
@@ -12631,8 +12614,9 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-pest-card.pt-pest-card-encouraged,
 .pt-app .pt-pest-card.pt-pest-card-warning {
   background: #ffffff;
-  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
-  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
+  border: none !important;
+  outline: none !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -12759,19 +12743,20 @@ body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-intro-btn,
 body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-lang-row,
 html:has(.pt-app) .pt-support-box {
   background: #ffffff !important;
-  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055)) !important;
+  border: none !important;
+  outline: none !important;
   border-radius: 8px;
-  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card) !important;
 }
 
 html:has(.app-shell) .pt-sheet .pt-notif-item,
 html:has(.pt-app) .pt-notif-item,
 html:has(.pt-app) .pt-list>li.pt-notif-item:first-child {
   background: #ffffff !important;
-  border: 1px solid rgba(20, 55, 47, 0.1) !important;
+  border: none !important;
   outline: none !important;
   border-radius: 8px;
-  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.04));
+  box-shadow: var(--shadow-card-sm) !important;
 }
 
 html:has(.app-shell) .pt-sheet .pt-notif-item.is-read,
@@ -13296,9 +13281,10 @@ body.pt-body .pt-form-actions .pt-btn {
   background: #fafcfb;
 }
 
+.pt-vpicker-trigger:focus,
 .pt-vpicker-trigger:focus-visible {
-  outline: 2px solid #14372f;
-  outline-offset: 2px;
+  outline: none;
+  border-color: #14372f;
 }
 
 .pt-vpicker-trigger.has-value {
@@ -13595,9 +13581,9 @@ body.pt-body .pt-form-actions .pt-btn {
   background: #fafcfb;
 }
 
+.pt-vpicker-card:focus,
 .pt-vpicker-card:focus-visible {
-  outline: 2px solid #14372f;
-  outline-offset: 2px;
+  outline: none;
 }
 
 .pt-vpicker-card.is-selected {
@@ -13752,4 +13738,113 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):no
   .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;
   }
+}
+
+/* ── Lưới chọn nhanh công việc thực hiện cho biểu mẫu Nhật ký nông hộ ── */
+.pt-diary-task-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pt-diary-task-header .pt-field-label {
+  margin-bottom: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #14372f;
+}
+
+.pt-diary-task-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #5f6d66;
+  white-space: nowrap;
+}
+
+.pt-diary-task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+@media (max-width: 359px) {
+  .pt-diary-task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pt-diary-task-chip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 0 !important;
+  outline: none !important;
+  background: #ffffff;
+  color: #14372f;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 2px 9px rgba(15, 23, 42, 0.1),
+    0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pt-diary-task-chip:focus,
+.pt-diary-task-chip:focus-visible {
+  outline: none !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pt-diary-task-chip:not(.is-selected):hover {
+    background: #f3f7ee;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.13),
+      0 1px 3px rgba(15, 23, 42, 0.07);
+  }
+}
+
+.pt-diary-task-chip.is-selected {
+  background: #14372f;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(20, 55, 47, 0.24),
+    0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.pt-diary-clear-choice {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 0 !important;
+  outline: none !important;
+  background: #ffffff;
+  color: #5f6d66;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.09),
+    0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pt-diary-clear-choice:focus,
+.pt-diary-clear-choice:focus-visible {
+  outline: none !important;
+}
+
+.pt-diary-clear-choice:hover {
+  background: #f7f7f5;
+  color: #14372f;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.13),
+    0 1px 3px rgba(15, 23, 42, 0.07);
 }

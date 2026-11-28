@@ -165,12 +165,8 @@ export default function DrawHint({
 
   return (
     <div className="plotmap-hint" role="region" aria-label={title}>
-      <div className="plotmap-hint-body">
-        <div className="plotmap-hint-toprow">
-        <div className="plotmap-hint-head">
-          <strong>{title}</strong>
-          <span>{guideText}</span>
-        </div>
+      <div className="plotmap-hint-toprow">
+        <strong className="plotmap-hint-title">{title}</strong>
         <button
           type="button"
           className="plotmap-hint-collapse-btn"
@@ -181,6 +177,9 @@ export default function DrawHint({
           <RadialPngIcon src="/minimize.png" size={16} />
         </button>
       </div>
+
+      <div className="plotmap-hint-body">
+        <p className="plotmap-hint-guide">{guideText}</p>
 
       {supportsStyleSwitch && (
         <div className="plotmap-drawstyle-switch" role="group" aria-label="Phương thức vẽ ranh giới">

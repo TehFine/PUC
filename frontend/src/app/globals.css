@@ -55,9 +55,9 @@
   --r-md: 6px;
   --r-lg: 8px;
 
-  /* Shadow — Đổ bóng tán xạ mềm kiểu iOS (nhẹ nhàng, tách lớp tự nhiên trên nền sáng) */
-  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055);
-  --shadow-card-sm: 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045);
+  /* Shadow — Đổ bóng tán xạ mềm đồng bộ toàn hệ thống (không viền cứng, không outline) */
+  --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.05), 0 10px 28px -6px rgba(15, 23, 42, 0.075);
+  --shadow-card-sm: 0 2px 6px rgba(15, 23, 42, 0.045), 0 6px 18px -4px rgba(15, 23, 42, 0.065);
   --shadow-sm: var(--shadow-card);
   --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 18px 44px rgba(15, 23, 42, 0.16);
@@ -272,7 +272,16 @@ body {
     0 3px 4px -2px rgba(20, 55, 47, 0.03);
 }
 
-/* Tab Vùng trồng trên di động: header trong suốt trên bản đồ; trên desktop giữ nguyên thanh header đồng nhất không viền bao tab */
+/* Tab Vùng trồng trên di động: header trong suốt trên bản đồ; trên desktop dùng nền mờ nhẹ đồng bộ các dock bản đồ */
+@media (min-width: 901px) {
+  .app-shell.is-zones .app-header::before {
+    background: rgba(248, 250, 249, 0.78);
+    -webkit-backdrop-filter: blur(12px) saturate(135%);
+    backdrop-filter: blur(12px) saturate(135%);
+    border-bottom: 1px solid rgba(20, 55, 47, 0.09);
+  }
+}
+
 @media (max-width: 900px) {
   .app-shell.is-zones .app-header::before {
     display: none;
@@ -856,7 +865,8 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
 /* ─── CARDS ───────────────────────────────────── */
 .card {
   background: var(--bg-card);
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
@@ -901,26 +911,21 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
   margin-bottom: 20px;
 }
 
-/* Thẻ chỉ số thống kê vuông vắn, nền trắng sạch, viền mảnh trung tính đồng nhất */
+/* Thẻ chỉ số thống kê vuông vắn, nền trắng sạch, đổ bóng mềm đồng bộ toàn hệ thống */
 .kpi-card {
   position: relative;
   padding: 18px 20px;
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   box-shadow: var(--shadow-card);
   filter: none;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: box-shadow 0.16s ease;
 }
 
 .kpi-card::before {
   display: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .kpi-card:hover {
-    border-color: rgba(20, 55, 47, 0.16);
-  }
 }
 
 /*
@@ -934,14 +939,14 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
   background: #ffffff;
   border-radius: 8px;
   filter: none;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: box-shadow 0.16s ease;
 }
 
 .kpi-card.has-chart:hover {
   filter: none;
-  border-color: rgba(20, 55, 47, 0.16);
 }
 
 .kpi-head {
@@ -1073,7 +1078,8 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
 
 .chart-card {
   background: var(--bg-card);
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-card);
   padding: 20px 14px 14px;
@@ -1167,8 +1173,10 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
 
 .dash-insight-card {
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
+  box-shadow: var(--shadow-card);
 }
 
 .dash-insight-body {
@@ -1481,7 +1489,8 @@ html[data-perf="lite"] .btn.btn-filter-toggle {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   padding: 0;
   overflow: hidden;
@@ -2405,7 +2414,8 @@ input[type="date"].filter-select {
 /* ─── TABLES ──────────────────────────────────── */
 .table-wrap {
   background: var(--bg-card);
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   overflow-x: auto;
   overflow-y: hidden;
@@ -2715,23 +2725,52 @@ input[type="date"].filter-select {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 0;
+  box-shadow: none;
   pointer-events: none;
 }
 
 .map-toolgroup {
   --map-dock-radius: 8px;
   --map-dock-padding: 3px;
+  --dock-blur-r: var(--map-dock-radius);
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   padding: var(--map-dock-padding);
-  background: #ededec;
-  border: none;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-clip: padding-box;
+  border: 1px solid rgba(255, 255, 255, 0.56);
   outline: none;
   border-radius: var(--map-dock-radius);
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1),
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12),
     0 1px 3px rgba(15, 23, 42, 0.06);
   pointer-events: auto;
+}
+
+.map-toolgroup::before,
+.plotmap-zoom::before,
+.zone-view-tabs::before,
+.map-sheet-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(242, 245, 243, 0.74);
+  -webkit-backdrop-filter: blur(12px) saturate(135%);
+  backdrop-filter: blur(12px) saturate(135%);
+  -webkit-clip-path: inset(0 round var(--dock-blur-r, 8px));
+  clip-path: inset(0 round var(--dock-blur-r, 8px));
 }
 
 .map-toolgroup-col {
@@ -2760,7 +2799,7 @@ input[type="date"].filter-select {
   background: transparent;
   padding: 6px 12px;
   border-radius: 5.5px;
-  color: #6e7471;
+  color: #2f3e38;
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -2778,15 +2817,15 @@ input[type="date"].filter-select {
 }
 
 .map-tool:hover:not(.active):not(:disabled) {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.54);
   color: var(--ink);
 }
 
 .map-tool.active {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   color: var(--ink);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12),
     0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
@@ -2796,32 +2835,61 @@ input[type="date"].filter-select {
 }
 
 .plotmap-zoom {
+  --dock-blur-r: 8px;
   position: absolute;
   right: 14px;
   bottom: 14px;
   z-index: 640;
+  isolation: isolate;
   display: flex;
   gap: 2px;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid var(--border);
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-clip: padding-box;
+  border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 8px;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12),
+    0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.plotmap-panel::before,
+.plotmap-hint::before,
+.plotmap-popup::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(245, 247, 246, 0.78);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-clip-path: inset(0 round var(--dock-blur-r, 8px));
+  clip-path: inset(0 round var(--dock-blur-r, 8px));
 }
 
 .plotmap-panel {
+  --dock-blur-r: var(--r-lg);
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 660;
+  isolation: isolate;
   width: 336px;
   max-height: calc(100% - 20px);
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid var(--border);
+  overflow: hidden;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
 }
 
 .plotmap-panel-head {
@@ -2830,7 +2898,8 @@ input[type="date"].filter-select {
   justify-content: space-between;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.36);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.08);
   flex-shrink: 0;
 }
 
@@ -2856,15 +2925,19 @@ input[type="date"].filter-select {
 .plotmap-panel-body {
   padding: 14px 16px 16px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .plotmap-hint {
+  --dock-blur-r: 8px;
   position: absolute;
   top: 10px;
   right: 10px;
   left: auto;
   transform: none;
   z-index: 660;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2874,10 +2947,13 @@ input[type="date"].filter-select {
   max-height: calc(100% - 20px);
   overflow: hidden;
   padding: 0;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #d4d4d2;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
   animation: none;
 }
 
@@ -2889,7 +2965,9 @@ input[type="date"].filter-select {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 15px 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 12px 15px 12px;
 }
 
 .plotmap-hint.is-collapsed {
@@ -2933,10 +3011,14 @@ input[type="date"].filter-select {
 }
 
 .plotmap-hint-toprow {
+  flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  padding: 11px 15px;
+  background: rgba(255, 255, 255, 0.36);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.12);
 }
 
 .plotmap-hint-collapse-btn {
@@ -2960,62 +3042,80 @@ input[type="date"].filter-select {
   color: var(--ink);
 }
 
-.plotmap-hint-head {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.plotmap-hint-title {
   min-width: 0;
-}
-
-.plotmap-hint-head strong {
   font-family: var(--font-display-stack);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.015em;
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
-.plotmap-hint-head span {
+.plotmap-hint-guide {
+  margin: 0;
   font-size: 11.5px;
-  line-height: 1.42;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
 .plotmap-drawstyle-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  width: 100%;
+  gap: 2px;
   padding: 3px;
-  background: #f2f4f3;
+  background: #ededec;
   border: none;
-  border-radius: 6px;
+  outline: none;
+  border-radius: 8px;
+  box-sizing: border-box;
 }
 
 .plotmap-drawstyle-btn {
-  border: 0;
-  border-radius: 4px;
-  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  outline: none;
+  border-radius: 5.5px;
   background: transparent;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 11.5px;
+  color: #6e7471;
+  font-family: var(--font-display-stack);
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  box-shadow: none;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.plotmap-drawstyle-btn:focus,
+.plotmap-drawstyle-btn:focus-visible {
+  outline: none;
 }
 
 .plotmap-drawstyle-btn:not(.is-active):hover:not(:disabled) {
-  background: rgba(20, 55, 47, 0.06);
-  color: var(--ink);
+  background: rgba(255, 255, 255, 0.5);
+  color: #14372f;
 }
 
 .plotmap-drawstyle-btn.is-active,
 .plotmap-drawstyle-btn.is-active:hover:not(:disabled),
 .plotmap-drawstyle-btn.is-active:focus-visible,
 .plotmap-drawstyle-btn.is-active:active:not(:disabled) {
-  background: #14372f;
-  color: #ffffff !important;
+  background: #ffffff;
+  color: #14372f !important;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+    0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .plotmap-hint-stats {
@@ -3023,8 +3123,8 @@ input[type="date"].filter-select {
   grid-template-columns: 0.78fr 1.22fr 1fr;
   gap: 6px;
   padding: 9px 10px;
-  background: #f7f7f5;
-  border: none;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
 }
@@ -3085,7 +3185,55 @@ input[type="date"].filter-select {
 .plotmap-hint-edit-tools {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 7px;
+}
+
+.plotmap-hint-edit-tools .btn,
+.plotmap-hint-subtools .btn,
+.plotmap-coord-actions .btn,
+.plotmap-hint-collapsed-actions .btn {
+  border: none !important;
+  outline: none !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08),
+    0 4px 12px -2px rgba(15, 23, 42, 0.06) !important;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease !important;
+}
+
+.plotmap-hint-edit-tools .btn:focus,
+.plotmap-hint-edit-tools .btn:focus-visible,
+.plotmap-hint-subtools .btn:focus,
+.plotmap-hint-subtools .btn:focus-visible,
+.plotmap-coord-actions .btn:focus,
+.plotmap-coord-actions .btn:focus-visible,
+.plotmap-hint-collapsed-actions .btn:focus,
+.plotmap-hint-collapsed-actions .btn:focus-visible {
+  border: none !important;
+  outline: none !important;
+}
+
+.plotmap-hint-edit-tools .btn:hover:not(:disabled),
+.plotmap-hint-subtools .btn:hover:not(:disabled),
+.plotmap-coord-actions .btn:hover:not(:disabled),
+.plotmap-hint-collapsed-actions .btn:hover:not(:disabled) {
+  border: none !important;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.12),
+    0 6px 14px -2px rgba(15, 23, 42, 0.08) !important;
+}
+
+.plotmap-hint-edit-tools .btn.btn-danger,
+.plotmap-hint-subtools .btn.btn-danger {
+  border: none !important;
+  outline: none !important;
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.24),
+    0 4px 12px -2px rgba(15, 23, 42, 0.08) !important;
+}
+
+.plotmap-hint-edit-tools .btn.btn-danger:hover:not(:disabled),
+.plotmap-hint-subtools .btn.btn-danger:hover:not(:disabled) {
+  border: none !important;
+  box-shadow: 0 3px 9px rgba(185, 28, 28, 0.32),
+    0 6px 14px -2px rgba(15, 23, 42, 0.1) !important;
 }
 
 .plotmap-hint-edit-tools .btn,
@@ -3098,7 +3246,7 @@ input[type="date"].filter-select {
 .plotmap-hint-subtools {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
 }
 
 .plotmap-hint-subtools .btn {
@@ -3108,8 +3256,10 @@ input[type="date"].filter-select {
 .plotmap-hint-subtools .btn.is-toggled,
 .plotmap-hint-subtools .btn.is-toggled:hover:not(:disabled) {
   background: #14372f !important;
-  border-color: #14372f !important;
+  border: none !important;
   color: #ffffff !important;
+  box-shadow: 0 2px 7px rgba(20, 55, 47, 0.24),
+    0 4px 12px -2px rgba(15, 23, 42, 0.08) !important;
 }
 
 .plotmap-coord-box {
@@ -3117,8 +3267,8 @@ input[type="date"].filter-select {
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: #f7f7f5;
-  border: none;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 6px;
 }
 
@@ -3218,8 +3368,8 @@ input[type="date"].filter-select {
   gap: 1px;
   width: 100%;
   flex-shrink: 0;
-  border-top: 1px solid rgba(60, 60, 67, 0.16);
-  background: rgba(60, 60, 67, 0.16);
+  border-top: 1px solid rgba(20, 55, 47, 0.08);
+  background: rgba(20, 55, 47, 0.08);
 }
 
 .plotmap-hint-actions .btn {
@@ -3233,7 +3383,7 @@ input[type="date"].filter-select {
   border-radius: 0 !important;
   outline: none !important;
   box-shadow: none !important;
-  background: #ffffff !important;
+  background: rgba(255, 255, 255, 0.72) !important;
   color: #007aff !important;
   font-size: 14px !important;
   font-weight: 500 !important;
@@ -3352,8 +3502,8 @@ input[type="date"].filter-select {
 .plotmap-metrics>div,
 .plotmap-compare-grid>div {
   padding: 9px 11px;
-  background: #f7f7f5;
-  border: 1px solid #e2e5e3;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
 }
@@ -3509,20 +3659,25 @@ input[type="date"].filter-select {
 
 /* ─── POPUP THÔNG TIN THỬA (máy tính: cạnh phải; di động: ngăn kéo đáy chia khu vực) ─── */
 .plotmap-popup {
+  --dock-blur-r: 8px;
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 720;
+  isolation: isolate;
   width: min(376px, calc(100% - 20px));
   max-height: calc(100% - 20px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
-  background: #ffffff;
-  border: 1px solid #d4d4d2;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14),
+    0 2px 6px rgba(15, 23, 42, 0.06);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   animation: pp-sheet-up-desktop 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -3531,8 +3686,8 @@ input[type="date"].filter-select {
 .pp-topbar {
   flex-shrink: 0;
   padding: 14px 16px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.36);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.08);
 }
 
 .pp-head {
@@ -3584,30 +3739,42 @@ input[type="date"].filter-select {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 12px 14px;
-  background: #f7f7f5;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+.pp-body::-webkit-scrollbar,
+.plotmap-panel-body::-webkit-scrollbar,
+.plotmap-hint-body::-webkit-scrollbar,
+.zones-zone-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .pp-section {
   flex-shrink: 0;
-  background: #ffffff;
-  border: 1px solid #e2e5e3;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.65);
   border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   overflow: hidden;
 }
 
 .pp-sec-head {
   padding: 7px 12px;
-  background: #fafaf9;
-  border-bottom: 1px solid #eceeed;
+  background: rgba(244, 247, 245, 0.56);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.07);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #5f6d66;
+  color: #4f5e57;
 }
 
 .pp-areas {
@@ -3619,13 +3786,13 @@ input[type="date"].filter-select {
 .pp-areas>div {
   padding: 11px 12px;
   min-width: 0;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.72);
   font-variant-numeric: tabular-nums;
 }
 
 .pp-areas>div:first-child {
-  background: #f4f8f0;
-  border-right: 1px solid #eceeed;
+  background: rgba(236, 247, 230, 0.78);
+  border-right: 1px solid rgba(20, 55, 47, 0.07);
 }
 
 .pp-areas span {
@@ -3660,14 +3827,14 @@ input[type="date"].filter-select {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
-  background: #eceeed;
+  background: rgba(20, 55, 47, 0.07);
   font-variant-numeric: tabular-nums;
 }
 
 .pp-cell {
   padding: 9px 12px;
   min-width: 0;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .pp-cell.is-wide {
@@ -3739,7 +3906,7 @@ input[type="date"].filter-select {
 }
 
 .pp-overlap.danger {
-  background: #fdf3f2;
+  background: rgba(253, 243, 242, 0.82);
 }
 
 .pp-overlap.danger strong {
@@ -3747,18 +3914,11 @@ input[type="date"].filter-select {
 }
 
 .pp-overlap.ok {
-  background: #f4f8f0;
+  background: rgba(244, 248, 240, 0.78);
 }
 
 .pp-overlap.ok strong {
   color: #15803d;
-}
-
-.pp-privacy {
-  margin: 2px 2px 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-muted);
 }
 
 .pp-actions {
@@ -3768,8 +3928,8 @@ input[type="date"].filter-select {
   gap: 8px;
   margin: 0;
   padding: 12px 14px;
-  background: #ffffff;
-  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.42);
+  border-top: 1px solid rgba(20, 55, 47, 0.08);
 }
 
 .pp-actions>.pp-btn:last-child:nth-child(odd) {
@@ -3811,25 +3971,25 @@ input[type="date"].filter-select {
 }
 
 .pp-btn-secondary {
-  background: #ffffff;
-  border: 1px solid #d4d4d2;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(20, 55, 47, 0.14);
   color: #14372f;
 }
 
 .pp-btn-secondary:hover:not(:disabled) {
-  background: #f3f7ee;
+  background: rgba(243, 247, 238, 0.96);
   border-color: #14372f;
 }
 
 .pp-btn-ghost {
-  background: #f5f6f5;
-  border: 1px solid #d4d4d2;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(20, 55, 47, 0.12);
   color: #4f5d56;
 }
 
 .pp-btn-ghost:hover:not(:disabled) {
-  background: #eaeeec;
-  border-color: #b8c2bd;
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(20, 55, 47, 0.24);
   color: #14372f;
 }
 
@@ -3845,6 +4005,7 @@ input[type="date"].filter-select {
 
 @media (max-width: 900px) {
   .plotmap-popup {
+    --dock-blur-r: 8px 8px 0 0;
     top: auto;
     left: 0;
     right: 0;
@@ -3918,8 +4079,17 @@ input[type="date"].filter-select {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .plotmap-popup {
-    background: #fff;
+  .plotmap-popup::before,
+  .plotmap-panel::before,
+  .plotmap-hint::before,
+  .map-toolgroup::before,
+  .plotmap-zoom::before,
+  .zone-view-tabs::before,
+  .zones-sidebar::before,
+  .zone-source-card::before,
+  .map-sheet-btn::before,
+  .zones-left-col {
+    background: #ffffff;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -4103,8 +4273,9 @@ input[type="date"].filter-select {
 
 .zone-stats.embedded {
   margin-bottom: 0;
+  background: rgba(255, 255, 255, 0.42);
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.08);
   border-radius: 0;
 }
 
@@ -4151,16 +4322,23 @@ input[type="date"].filter-select {
 .zone-view-tabs {
   --zone-tabs-radius: 8px;
   --zone-tabs-padding: 3px;
+  --dock-blur-r: var(--zone-tabs-radius);
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 2px;
   width: fit-content;
   padding: var(--zone-tabs-padding);
   margin-bottom: 10px;
-  background: #ededec;
-  border: none;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-clip: padding-box;
+  border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: var(--zone-tabs-radius);
-  box-shadow: none;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1),
+    0 1px 3px rgba(15, 23, 42, 0.05);
   flex-shrink: 0;
 }
 
@@ -4175,7 +4353,7 @@ input[type="date"].filter-select {
   outline: none;
   border-radius: 5.5px;
   background: transparent;
-  color: #6e7471;
+  color: #2f3e38;
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -4186,14 +4364,14 @@ input[type="date"].filter-select {
 }
 
 .zone-view-tab:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.54);
   color: var(--text-primary);
 }
 
 .zone-view-tab.active {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   color: var(--ink);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.11),
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12),
     0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
@@ -4270,7 +4448,7 @@ input[type="date"].filter-select {
 .zones-sidebar-head-sub {
   align-items: center;
   padding: 10px 18px 9px;
-  background: var(--mist);
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .zones-sidebar-count {
@@ -4385,6 +4563,8 @@ input[type="date"].filter-select {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 0 18px;
 }
 
@@ -4568,8 +4748,10 @@ input[type="date"].filter-select {
   .zone-view-tabs {
     --zone-tabs-radius: 8px;
     --zone-tabs-padding: 3px;
+    --dock-blur-r: var(--zone-tabs-radius);
     position: relative;
     z-index: 3;
+    isolation: isolate;
     width: 336px;
     height: 40px;
     display: grid;
@@ -4577,9 +4759,12 @@ input[type="date"].filter-select {
     padding: var(--zone-tabs-padding);
     box-sizing: border-box;
     pointer-events: auto;
-    background: #ededec;
-    border: none;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.56);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12),
+      0 1px 3px rgba(15, 23, 42, 0.06);
   }
 
   .zone-view-tab {
@@ -4596,10 +4781,34 @@ input[type="date"].filter-select {
 
   .zones-sidebar,
   .zone-source-card {
+    --dock-blur-r: var(--r-lg);
     position: relative;
     z-index: 3;
-    background: rgba(255, 255, 255, 0.97);
+    isolation: isolate;
+    overflow: hidden;
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.58);
     border-radius: var(--r-lg);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12),
+      0 2px 6px rgba(15, 23, 42, 0.05);
+  }
+
+  .zones-sidebar::before,
+  .zone-source-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(245, 247, 246, 0.76);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-clip-path: inset(0 round var(--r-lg));
+    clip-path: inset(0 round var(--r-lg));
   }
 
   .zones-map-area {
@@ -4629,11 +4838,12 @@ input[type="date"].filter-select {
   }
 
   .zones-map-area .plotmap-toolbar {
-    top: 80px;
-    left: 372px;
-    right: 24px;
-    max-width: calc(100vw - 396px);
-    height: 40px;
+    top: 72px;
+    left: 364px;
+    right: 16px;
+    max-width: calc(100vw - 380px);
+    height: auto;
+    padding: 8px 8px 18px;
     flex-direction: row;
     align-items: center;
     gap: 8px;
@@ -4649,11 +4859,15 @@ input[type="date"].filter-select {
   .zones-map-area .map-toolgroup {
     --map-dock-radius: 8px;
     --map-dock-padding: 3px;
+    --dock-blur-r: var(--map-dock-radius);
     height: 40px;
     box-sizing: border-box;
-    background: #ededec;
-    border: none;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.56);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12),
+      0 1px 3px rgba(15, 23, 42, 0.06);
   }
 
   .zones-map-area .map-toolgroup-col {
@@ -4703,8 +4917,9 @@ input[type="date"].filter-select {
   }
 
   .zones-map-area .plotmap-toolbar {
-    left: 332px;
-    right: 24px;
+    left: 324px;
+    right: 16px;
+    max-width: calc(100vw - 340px);
   }
 
   .zones-map-area .plotmap-hint {
@@ -4792,7 +5007,8 @@ input[type="date"].filter-select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(84px, max-content);
   margin-bottom: 16px;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: var(--shadow-card);
@@ -5375,17 +5591,12 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
 
 .training-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.16s ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .training-card:hover {
-    border-color: var(--border-dark);
-  }
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.16s ease;
 }
 
 .training-card-top {
@@ -5577,24 +5788,19 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   text-align: left;
   width: 100%;
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   padding: 0;
   overflow: hidden;
   cursor: pointer;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .report-card:hover {
-    border-color: rgba(20, 55, 47, 0.34);
-  }
-}
-
+.report-card:focus,
 .report-card:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .report-icon {
@@ -5694,11 +5900,12 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
 
 .variety-card {
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   padding: 20px 22px;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: box-shadow 0.16s ease;
 }
 
 .variety-card>svg {
@@ -5731,10 +5938,11 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
 
 .role-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   padding: 22px 24px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .role-card-header {
@@ -5796,13 +6004,14 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
 
 .standard-item {
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   padding: 20px 24px;
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .std-item-icon {
@@ -5865,12 +6074,13 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border: 1px solid var(--card-border-soft);
+  border: none;
+  outline: none;
   border-radius: 8px;
   padding: 0;
   overflow: hidden;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: box-shadow 0.16s ease;
 }
 
 .schedule-card-body {
@@ -7867,6 +8077,9 @@ code {
   .zones-topbar .zone-view-tabs {
     --zone-tabs-radius: 8px;
     --zone-tabs-padding: 3px;
+    --dock-blur-r: var(--zone-tabs-radius);
+    position: relative;
+    isolation: isolate;
     flex: 1 1 auto;
     min-width: 0;
     max-width: 320px;
@@ -7875,13 +8088,14 @@ code {
     margin-bottom: 0;
     gap: 2px;
     padding: var(--zone-tabs-padding);
-    background: #ededec;
-    border: none;
-    box-shadow: 0 4px 16px rgba(20, 55, 47, 0.1);
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.56);
+    box-shadow: 0 4px 16px rgba(20, 55, 47, 0.12);
     pointer-events: auto;
     display: flex;
     align-items: center;
-    overflow: hidden;
   }
 
   .zone-view-tab {
@@ -7995,12 +8209,17 @@ code {
     max-height: 82dvh;
     gap: 8px;
     padding: 2px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-width: none;
     border: none;
-    border-top: 1px solid rgba(20, 55, 47, 0.14);
+    border-top: 1px solid rgba(255, 255, 255, 0.62);
     border-radius: 8px 8px 0 0;
-    background: #ffffff;
-    box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.16);
+    background: rgba(245, 247, 246, 0.8);
+    background-clip: padding-box;
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    backdrop-filter: blur(14px) saturate(135%);
+    box-shadow: 0 -6px 24px rgba(15, 23, 42, 0.16);
     will-change: transform;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
@@ -8079,23 +8298,31 @@ code {
   }
 
   .map-sheet-btn {
+    --dock-blur-r: 6px;
     position: fixed;
     left: 12px;
     bottom: 12px;
     z-index: 25;
+    isolation: isolate;
     display: inline-flex;
     align-items: center;
     height: 40px;
     padding: 0 16px;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255, 255, 255, 0.58);
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.96);
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
     color: var(--ink);
     font-family: inherit;
     font-size: 12px;
     font-weight: 600;
-    box-shadow: 0 6px 20px rgba(24, 32, 24, 0.18);
+    box-shadow: 0 6px 20px rgba(24, 32, 24, 0.16);
     cursor: pointer;
+  }
+
+  .map-sheet-btn::before {
+    background: rgba(245, 247, 246, 0.78);
   }
 
   .zones-left-col.sheet-open~.map-sheet-btn {
@@ -8142,16 +8369,6 @@ code {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     animation: none;
-  }
-
-  .map-toolgroup,
-  .plotmap-zoom,
-  .plotmap-panel,
-  .plotmap-hint,
-  .zone-view-tabs,
-  .zones-left-col {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
   }
 
   .btn {
@@ -9128,14 +9345,14 @@ code {
 
   /* Vùng trồng: 2 dock riêng biệt nằm cùng một hàng ngang bên dưới header */
   .zones-map-area .plotmap-toolbar {
-    top: 60px;
-    left: 6px;
-    right: 6px;
+    top: 54px;
+    left: 0;
+    right: 0;
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: flex-start;
-    gap: 2px;
-    padding-bottom: 4px;
+    gap: 6px;
+    padding: 6px 6px 16px;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -9541,14 +9758,9 @@ code {
   :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card) {
     filter: none !important;
     border-radius: 8px;
-    border: 1px solid var(--card-border-soft);
+    border: none;
+    outline: none;
     box-shadow: var(--shadow-card);
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  :is(.variety-card, .schedule-card):hover {
-    border-color: rgba(20, 55, 47, 0.28);
   }
 }
 
@@ -10216,7 +10428,7 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
 }
 
 /* ─── TỐI ƯU HIỆU NĂNG DOM & GPU CHO THIẾT BỊ CẤU HÌNH YẾU / MẠNG CHẬM ─── */
-/* Cô lập layout & style cho các thẻ/hàng lặp lại để thao tác trên 1 phần tử không làm reflow toàn trang */
+/* Cô lập layout & style (không bật contain: paint / content-visibility: auto trên thẻ có đổ bóng để không cắt vuông góc bóng đổ) */
 .table-wrap tbody tr,
 .kpi-card,
 .compliance-kpi,
@@ -10231,40 +10443,6 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
   contain: layout style;
 }
 
-/* Ẩn dựng (lazy layout/paint) cho danh sách dài ngoài khung nhìn trên thiết bị di động & laptop */
-.pt-pest-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 112px;
-}
-
-.catalog-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 160px;
-}
-
-.report-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 176px;
-}
-
-@media (max-width: 640px) {
-  .table-wrap .responsive-table tbody tr {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 180px;
-  }
-}
-
-@media print {
-
-  .pt-pest-card,
-  .catalog-card,
-  .report-card,
-  .table-wrap .responsive-table tbody tr {
-    content-visibility: visible !important;
-    contain-intrinsic-size: none !important;
-  }
-}
-
 /* Bên trong mọi popup/modal/sheet cố định: tắt content-visibility, contain và chặn toàn bộ hoạt ảnh phụ của phần tử con */
 :is(.pt-sheet, .modal, .pt-radial-sheet, .batch-qr-modal, .cert-modal-backdrop, .media-bottom-sheet, .plotmap-popup, .zones-left-col.sheet-open, .sw-side-drawer, .auth-google-dialog) * {
   content-visibility: visible !important;
@@ -10275,11 +10453,11 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
   animation: none !important;
 }
 
-/* Chặn triệt để backdrop-filter trên toàn bộ thiết bị di động/máy tính bảng để tránh nghẽn GPU khi cuộn */
+/* Tắt backdrop-filter trên nền chung thiết bị di động (trừ các dock nổi trên bản đồ có blur nhẹ) */
 @media (max-width: 999px) {
 
-  *,
-  *::before,
+  *:not(.zones-left-col):not(.pt-mapmodal-floating-popup),
+  *:not(.app-header):not(.map-toolgroup):not(.plotmap-zoom):not(.plotmap-popup):not(.plotmap-panel):not(.plotmap-hint):not(.zone-view-tabs):not(.zones-sidebar):not(.zone-source-card):not(.map-sheet-btn):not(.pt-mapmodal-top-tag):not(.pt-mapmodal-layer-pill):not(.pt-mapmodal-round-btn)::before,
   *::after {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
@@ -10291,11 +10469,11 @@ html[data-perf="lite"] {
   scroll-behavior: auto !important;
 }
 
-[data-perf="lite"] *,
-[data-perf="lite"] *::before,
+[data-perf="lite"] *:not(.zones-left-col):not(.pt-mapmodal-floating-popup),
+[data-perf="lite"] *:not(.app-header):not(.map-toolgroup):not(.plotmap-zoom):not(.plotmap-popup):not(.plotmap-panel):not(.plotmap-hint):not(.zone-view-tabs):not(.zones-sidebar):not(.zone-source-card):not(.map-sheet-btn):not(.pt-mapmodal-top-tag):not(.pt-mapmodal-layer-pill):not(.pt-mapmodal-round-btn)::before,
 [data-perf="lite"] *::after,
-html[data-net="slow"] *,
-html[data-net="slow"] *::before,
+html[data-net="slow"] *:not(.zones-left-col):not(.pt-mapmodal-floating-popup),
+html[data-net="slow"] *:not(.app-header):not(.map-toolgroup):not(.plotmap-zoom):not(.plotmap-popup):not(.plotmap-panel):not(.plotmap-hint):not(.zone-view-tabs):not(.zones-sidebar):not(.zone-source-card):not(.map-sheet-btn):not(.pt-mapmodal-top-tag):not(.pt-mapmodal-layer-pill):not(.pt-mapmodal-round-btn)::before,
 html[data-net="slow"] *::after {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -10328,11 +10506,6 @@ html[data-perf="lite"] :is(.pt-minimap-pin-pulse, .pt-plot-minimap-loading, .pt-
 html[data-perf="lite"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card),
 html[data-net="slow"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card) {
   filter: none !important;
-}
-
-html[data-perf="lite"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card)::before,
-html[data-net="slow"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card)::before {
-  border: 1px solid rgba(20, 55, 47, 0.08);
 }
 
 html[data-perf="lite"] svg,
@@ -13058,7 +13231,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   text-align: left;
   padding: 12px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(20, 55, 47, 0.1) !important;
+  border: none !important;
   outline: none !important;
   background: #ffffff;
   box-shadow: var(--shadow-card-sm);
@@ -13067,7 +13240,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   flex-direction: column;
   gap: 4px;
   font-family: inherit;
-  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .admin-notif-card.is-read {
@@ -13123,13 +13296,12 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 .admin-notif-card:focus,
 .admin-notif-card:focus-visible {
   outline: none !important;
-  border-color: rgba(20, 55, 47, 0.24) !important;
+  background: #f6f9f7;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .admin-notif-card:hover {
     background: #f6f9f7;
-    border-color: rgba(20, 55, 47, 0.18) !important;
   }
 }
 
@@ -13138,7 +13310,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 html[data-perf="lite"] .admin-notif-card {
-  box-shadow: none;
+  box-shadow: var(--shadow-card-sm);
+}
+
+#section-catalog :is(.pt-pest-card, .pt-protocol-guarantee-card, .catalog-card) {
+  border: none !important;
+  outline: none !important;
+  box-shadow: var(--shadow-card) !important;
 }
 
 /* ─── DÒNG TÓM TẮT NHẬT KÝ THAO TÁC (AUDIT LOG) TRONG THẺ THEO NGÀY ─── */
@@ -13967,88 +14145,76 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   border-color: #14372f !important;
 }
 
-/* ─── MÀN HÌNH LỖI 404 & GIÁN ĐOẠN KẾT NỐI (LAPTOP & MOBILE) ─── */
+/* ─── MÀN HÌNH LỖI 404 & GIÁN ĐOẠN KẾT NỐI TOÀN KHUNG NHÌN (LAPTOP & MOBILE) ─── */
 .puc-err-state-screen {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 32px);
-  background: #f4f5f7;
-  color: #121212;
-  font-family: var(--font-body-stack);
-  box-sizing: border-box;
-}
-
-.puc-err-state-card {
-  width: min(840px, calc(100vw - 40px), calc((100dvh - 228px) * 1.79));
-  min-width: min(560px, calc(100vw - 40px));
-  display: flex;
   flex-direction: column;
   align-items: center;
-  border-radius: 8px;
-  border: 1px solid #e2e5e3;
-  background: #ffffff;
+  justify-content: center;
+  padding: clamp(210px, 26vh, 280px) clamp(16px, 4vw, 48px) 24px;
+  background: #eff2f7;
+  color: #263547;
+  font-family: var(--font-body-stack);
+  box-sizing: border-box;
   overflow: hidden;
-  box-shadow:
-    0 12px 34px rgba(18, 28, 24, 0.06),
-    0 2px 8px rgba(18, 28, 24, 0.03);
 }
 
-.puc-err-state-media {
-  display: block;
+.puc-err-state-bg {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
+  z-index: 0;
   line-height: 0;
-  background: #ffffff;
   user-select: none;
   -webkit-user-select: none;
   pointer-events: none;
 }
 
-.puc-err-state-img {
+.puc-err-state-bg-img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 38%;
 }
 
-.puc-err-state-body {
-  width: 100%;
+.puc-err-state-overlay {
+  position: relative;
+  z-index: 1;
+  width: min(460px, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 6px 28px 28px;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
   box-sizing: border-box;
-}
-
-.puc-err-state-code {
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #5f6d66;
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 4px;
 }
 
 .puc-err-state-title {
   margin: 0 0 8px;
-  font-size: clamp(22px, 2.2vw, 26px);
+  font-family: var(--font-display-stack);
+  font-size: clamp(23px, 2.15vw, 28px);
   font-weight: 700;
   line-height: 1.24;
   letter-spacing: -0.02em;
-  color: #1f242d;
+  color: #263547;
 }
 
 .puc-err-state-desc {
-  margin: 0 0 22px;
-  max-width: 38ch;
+  margin: 0 0 18px;
+  max-width: 36ch;
   font-size: 14.5px;
   font-weight: 500;
-  line-height: 1.55;
-  color: #6b7280;
+  line-height: 1.5;
+  color: #5b6b7c;
   text-wrap: pretty;
 }
 
@@ -14058,17 +14224,22 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+}
+
+.puc-err-state-title + .puc-err-state-actions {
+  margin-top: 10px;
 }
 
 .puc-err-state-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 164px;
-  height: 42px;
-  padding: 0 20px;
+  min-width: 162px;
+  height: 44px;
+  padding: 0 22px;
   border-radius: 6px;
+  border: none;
   outline: none;
   font-family: inherit;
   font-size: 14px;
@@ -14077,79 +14248,96 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   text-decoration: none;
   cursor: pointer;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
   transition:
     background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+    color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .puc-err-state-btn:focus,
 .puc-err-state-btn:focus-visible {
+  border: none;
   outline: none;
 }
 
 .puc-err-state-btn.is-primary {
-  background: #14372f;
-  border: 1px solid #14372f;
+  background: #2d4256;
   color: #ffffff;
+  box-shadow:
+    0 3px 8px rgba(38, 53, 71, 0.18),
+    0 8px 20px -4px rgba(38, 53, 71, 0.22);
 }
 
 .puc-err-state-btn.is-primary:hover {
-  background: #0e2822;
-  border-color: #0e2822;
+  background: #233546;
+  box-shadow:
+    0 4px 12px rgba(38, 53, 71, 0.24),
+    0 10px 24px -4px rgba(38, 53, 71, 0.26);
+}
+
+.puc-err-state-btn.is-primary:active {
+  background: #1b2a38;
+  box-shadow: 0 2px 5px rgba(38, 53, 71, 0.18);
 }
 
 .puc-err-state-btn.is-secondary {
-  background: #ffffff;
-  border: 1px solid #d4d4d2;
-  color: #14372f;
+  background: #d9e4f0;
+  color: #263547;
+  box-shadow:
+    0 2px 6px rgba(38, 53, 71, 0.08),
+    0 8px 18px -4px rgba(38, 53, 71, 0.11);
 }
 
 .puc-err-state-btn.is-secondary:hover {
-  background: #f7f7f5;
-  border-color: #9ca3af;
-  color: #121212;
+  background: #ccdaea;
+  color: #1c2836;
+  box-shadow:
+    0 4px 10px rgba(38, 53, 71, 0.11),
+    0 10px 22px -4px rgba(38, 53, 71, 0.14);
 }
 
-@media (max-width: 768px) {
+.puc-err-state-btn.is-secondary:active {
+  background: #bfd0e3;
+  box-shadow: 0 1px 4px rgba(38, 53, 71, 0.1);
+}
+
+@media (min-width: 901px) and (max-height: 660px) {
   .puc-err-state-screen {
-    align-items: stretch;
-    padding: 0;
-    background: #ffffff;
+    padding-top: clamp(172px, 25vh, 210px);
   }
+}
 
-  .puc-err-state-card {
-    width: 100%;
-    min-width: 0;
-    min-height: 100vh;
-    min-height: 100dvh;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    justify-content: flex-start;
-  }
-
-  .puc-err-state-body {
-    flex: 1;
+@media (max-width: 900px) {
+  .puc-err-state-screen {
     justify-content: center;
-    padding: 18px 24px calc(32px + env(safe-area-inset-bottom, 0px));
+    padding: clamp(170px, 24dvh, 236px) 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .puc-err-state-bg-img {
+    object-position: center 40%;
+  }
+
+  .puc-err-state-overlay {
+    width: min(340px, 100%);
   }
 
   .puc-err-state-title {
-    font-size: 24px;
+    font-size: 23px;
   }
 
   .puc-err-state-desc {
-    font-size: 15px;
+    font-size: 14.5px;
     max-width: 30ch;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
 
   .puc-err-state-actions {
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    max-width: 240px;
+    max-width: 224px;
+    gap: 10px;
   }
 
   .puc-err-state-btn {
