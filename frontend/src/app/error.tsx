@@ -80,46 +80,46 @@ export default function GlobalErrorPage({
 
   return (
     <main className="puc-err-state-screen">
-      <section className="puc-err-state-card" aria-labelledby="puc-err-heading">
-        <picture className="puc-err-state-media">
-          <source
-            media="(min-width: 769px)"
-            srcSet="/error-404-desktop.webp"
-            type="image/webp"
-          />
-          <img
-            src="/error-404-mobile.webp"
-            alt=""
-            width={1200}
-            height={896}
-            decoding="async"
-            fetchPriority="high"
-            className="puc-err-state-img"
-          />
-        </picture>
+      <picture className="puc-err-state-bg">
+        <source
+          media="(min-width: 901px)"
+          srcSet="/error-conn-v3-desktop.webp"
+          type="image/webp"
+          width={1920}
+          height={1080}
+        />
+        <img
+          src="/error-conn-v3-mobile.webp"
+          alt=""
+          width={1080}
+          height={1920}
+          decoding="async"
+          fetchPriority="high"
+          className="puc-err-state-bg-img"
+        />
+      </picture>
 
-        <div className="puc-err-state-body">
-          <h1 id="puc-err-heading" className="puc-err-state-title">
-            Đã xảy ra gián đoạn
-          </h1>
+      <section className="puc-err-state-overlay" aria-labelledby="puc-err-heading">
+        <h1 id="puc-err-heading" className="puc-err-state-title">
+          Tạm gián đoạn kết nối
+        </h1>
 
-          <p className="puc-err-state-desc">
-            Trang đang tạm gián đoạn kết nối, vui lòng thử tải lại sau ít giây.
-          </p>
+        <p className="puc-err-state-desc">
+          Vui lòng tải lại trang sau ít giây.
+        </p>
 
-          <div className="puc-err-state-actions">
-            <button
-              type="button"
-              onClick={handleRecover}
-              className="puc-err-state-btn is-primary"
-            >
-              Tải lại trang
-            </button>
+        <div className="puc-err-state-actions">
+          <button
+            type="button"
+            onClick={handleRecover}
+            className="puc-err-state-btn is-primary"
+          >
+            Tải lại trang
+          </button>
 
-            <Link href={INTRO_PATH} className="puc-err-state-btn is-secondary">
-              Về trang giới thiệu
-            </Link>
-          </div>
+          <Link href={INTRO_PATH} className="puc-err-state-btn is-secondary">
+            Trang giới thiệu
+          </Link>
         </div>
       </section>
     </main>
