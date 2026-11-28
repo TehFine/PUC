@@ -205,6 +205,7 @@ export default function AccountsTab({
         error={list.error}
         empty={list.rows.length === 0}
         emptyText="Không tìm thấy tài khoản phù hợp."
+        variant="cards"
         onRetry={() => void list.refresh()}
       />
 

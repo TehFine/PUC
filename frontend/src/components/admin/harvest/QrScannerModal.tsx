@@ -5,7 +5,8 @@ import Link from "next/link";
 import jsQR from "jsqr";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
-import { FormError, Modal } from "@/components/ui/Modal";
+import { ContextualEmptyBox, EmptyStateArt } from "@/components/ui/EmptyStateArt";
+import { Modal } from "@/components/ui/Modal";
 import { ROLE_LABELS } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
 import { resetOverlayHistoryOnRouteLeave } from "@/lib/back-navigation";
@@ -481,7 +482,8 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                   position: "relative",
                   borderRadius: 8,
                   overflow: "hidden",
-                  background: "#0f172a",
+                  background: "#f5f6f8",
+                  border: "1px solid rgba(20, 55, 47, 0.1)",
                   minHeight: 240,
                   display: "flex",
                   alignItems: "center",
@@ -490,15 +492,21 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               >
                 <div
                   style={{
-                    padding: "28px 20px",
+                    padding: "22px 20px 24px",
                     textAlign: "center",
-                    color: "#e2e8f0",
+                    color: "#334155",
                     width: "100%",
                     maxWidth: 380,
                     margin: "0 auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
                   }}
                 >
-                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 16 }}>{effectiveCameraError}</div>
+                  <EmptyStateArt variant="qrCamera" compact />
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, margin: "6px 0 16px" }}>
+                    {effectiveCameraError}
+                  </div>
                   <div
                     style={{
                       display: "grid",
@@ -670,7 +678,13 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      <FormError message={lookupError} />
+      {lookupError && !loading && (
+        <ContextualEmptyBox variant="qrNotFound" compact>
+          <span role="alert" style={{ color: "#b91c1c", fontWeight: 500 }}>
+            {lookupError}
+          </span>
+        </ContextualEmptyBox>
+      )}
 
       {result && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

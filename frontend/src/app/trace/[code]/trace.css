@@ -968,11 +968,35 @@
 }
 
 /* ─── Khung tra cứu lỗi / tìm mã khác ─── */
-.tr-error-card {
+.tr-card.tr-error-card {
   text-align: center;
-  padding: 40px 24px;
+  padding: 36px 20px 44px;
+  background: transparent;
   border: none;
-  box-shadow: var(--tr-card-shadow);
+  box-shadow: none;
+}
+
+.tr-error-art {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 10px;
+}
+
+.tr-error-art .puc-empty-art {
+  width: 204px;
+  height: 154px;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .tr-error-art .puc-empty-art {
+    width: 172px;
+    height: 130px;
+  }
+}
+
+.tr-error-card .tr-search-input {
+  background: #ffffff;
 }
 
 .tr-error-title {

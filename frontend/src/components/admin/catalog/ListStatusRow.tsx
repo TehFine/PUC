@@ -1,6 +1,6 @@
 "use client";
 
-import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
+import { ContextualEmptyBox, type EmptyArtVariant } from "@/components/ui/EmptyStateArt";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { LoadingToastBridge } from "@/components/ui/Toast";
 
@@ -14,6 +14,7 @@ export default function ListStatusRow({
   error,
   empty,
   emptyText = "Chưa có dữ liệu.",
+  variant,
   onRetry,
 }: {
   colSpan: number;
@@ -21,6 +22,7 @@ export default function ListStatusRow({
   error: string | null;
   empty: boolean;
   emptyText?: string;
+  variant?: EmptyArtVariant;
   onRetry?: () => void;
 }) {
   if (error) {
@@ -64,7 +66,7 @@ export default function ListStatusRow({
     return (
       <tr>
         <td colSpan={colSpan} className="empty-state">
-          <ContextualEmptyBox>{emptyText}</ContextualEmptyBox>
+          <ContextualEmptyBox variant={variant}>{emptyText}</ContextualEmptyBox>
         </td>
       </tr>
     );

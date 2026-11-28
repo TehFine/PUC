@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import InsightLineChart, { type InsightPoint } from "@/components/ui/charts/InsightLineChart";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
 import { refreshMountedApiQueries, useApi } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
@@ -435,58 +436,58 @@ export default function Dashboard() {
                   (canReadTraceRequests && pendingTraceRequests > 0) ||
                   (canReadDeclarations && canReadHarvest && pendingDeclarations > 0) ||
                   (canReadViolations && openViolations > 0)) && (
-                  <footer className="dash-bento-footer">
-                    {(canReadApprovals || canReadRegistrations) && (
-                      <button
-                        type="button"
-                        className="dash-bento-footer-btn"
-                        onClick={() =>
-                          !canReadApprovals || (pendingRegistrations > 0 && (counts.pendingApprovals ?? 0) === 0)
-                            ? requestApprovalTab("registrations")
-                            : requestAdminNavigate("approval")
-                        }
-                      >
-                        Hồ sơ
-                      </button>
-                    )}
-                    {canReadDeletionRequests && pendingDeletions > 0 && (
-                      <button
-                        type="button"
-                        className="dash-bento-footer-btn"
-                        onClick={() => requestSystemTab("deletions")}
-                      >
-                        Duyệt xóa
-                      </button>
-                    )}
-                    {canReadTraceRequests && pendingTraceRequests > 0 && (
-                      <button
-                        type="button"
-                        className="dash-bento-footer-btn"
-                        onClick={() => requestSystemTab("trace-requests")}
-                      >
-                        Cấp quyền QR
-                      </button>
-                    )}
-                    {canReadDeclarations && canReadHarvest && pendingDeclarations > 0 && (
-                      <button
-                        type="button"
-                        className="dash-bento-footer-btn"
-                        onClick={() => requestAdminNavigate("harvest")}
-                      >
-                        Thu hoạch
-                      </button>
-                    )}
-                    {canReadViolations && openViolations > 0 && (
-                      <button
-                        type="button"
-                        className="dash-bento-footer-btn"
-                        onClick={() => requestJournalTab("violations")}
-                      >
-                        Vi phạm
-                      </button>
-                    )}
-                  </footer>
-                )}
+                    <footer className="dash-bento-footer">
+                      {(canReadApprovals || canReadRegistrations) && (
+                        <button
+                          type="button"
+                          className="dash-bento-footer-btn"
+                          onClick={() =>
+                            !canReadApprovals || (pendingRegistrations > 0 && (counts.pendingApprovals ?? 0) === 0)
+                              ? requestApprovalTab("registrations")
+                              : requestAdminNavigate("approval")
+                          }
+                        >
+                          Hồ sơ
+                        </button>
+                      )}
+                      {canReadDeletionRequests && pendingDeletions > 0 && (
+                        <button
+                          type="button"
+                          className="dash-bento-footer-btn"
+                          onClick={() => requestSystemTab("deletions")}
+                        >
+                          Duyệt xóa
+                        </button>
+                      )}
+                      {canReadTraceRequests && pendingTraceRequests > 0 && (
+                        <button
+                          type="button"
+                          className="dash-bento-footer-btn"
+                          onClick={() => requestSystemTab("trace-requests")}
+                        >
+                          Cấp quyền QR
+                        </button>
+                      )}
+                      {canReadDeclarations && canReadHarvest && pendingDeclarations > 0 && (
+                        <button
+                          type="button"
+                          className="dash-bento-footer-btn"
+                          onClick={() => requestAdminNavigate("harvest")}
+                        >
+                          Thu hoạch
+                        </button>
+                      )}
+                      {canReadViolations && openViolations > 0 && (
+                        <button
+                          type="button"
+                          className="dash-bento-footer-btn"
+                          onClick={() => requestJournalTab("violations")}
+                        >
+                          Vi phạm
+                        </button>
+                      )}
+                    </footer>
+                  )}
               </section>
             ) : null;
 
@@ -544,9 +545,8 @@ export default function Dashboard() {
                   <header className="dash-bento-head">
                     <h2 className="dash-bento-title">Chuẩn xuất khẩu</h2>
                     <span
-                      className={`dash-bento-tag${
-                        registeredHouseholds === 0 ? "" : qualifiedPct >= 75 ? " is-ok" : " is-warn"
-                      }`}
+                      className={`dash-bento-tag${registeredHouseholds === 0 ? "" : qualifiedPct >= 75 ? " is-ok" : " is-warn"
+                        }`}
                     >
                       {formatVn(qualifiedHouseholds)}/{formatVn(registeredHouseholds)} hộ
                     </span>
@@ -703,9 +703,9 @@ export default function Dashboard() {
                     </div>
 
                     {upcomingSchedule.length === 0 ? (
-                      <div className="dash-bento-empty">
+                      <ContextualEmptyBox variant="fieldCalendar" compact className="dash-bento-empty">
                         Chưa có đợt kiểm tra thực địa mới trong danh sách sắp tới.
-                      </div>
+                      </ContextualEmptyBox>
                     ) : (
                       <div className="dash-bento-schedule-list">
                         {upcomingSchedule.slice(0, 4).map((s) => {

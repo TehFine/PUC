@@ -332,7 +332,10 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
             </div>
 
             {visibleItems.length === 0 ? (
-              <EmptyState icon="ok">
+              <EmptyState
+                icon="ok"
+                variant={items.length > 0 && filter === "read" ? "inboxRead" : "notify"}
+              >
                 {items.length === 0
                   ? "Chưa có thông báo nào."
                   : filter === "unread"

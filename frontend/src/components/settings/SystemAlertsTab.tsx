@@ -528,7 +528,7 @@ export default function SystemAlertsTab() {
             {!loading && !error && rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="empty-state">
-                  <ContextualEmptyBox variant="notify">
+                  <ContextualEmptyBox variant="megaphone">
                     Chưa có thông báo sự cố hoặc bảo trì nào được phát.
                   </ContextualEmptyBox>
                 </td>

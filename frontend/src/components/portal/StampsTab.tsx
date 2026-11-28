@@ -133,7 +133,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         <div className="pt-harvest-lots-view">
           <StateBlock loading={harvest.loading} error={harvest.error} />
           {harvest.data && harvest.data.data.length === 0 && (
-            <EmptyState icon="harvest">
+            <EmptyState icon="harvest" variant="box">
               Chưa có lô thu hoạch nào được xuất kho.
             </EmptyState>
           )}

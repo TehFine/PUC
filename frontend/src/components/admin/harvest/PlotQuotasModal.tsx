@@ -359,6 +359,8 @@ export default function PlotQuotasModal({
                 loading={quotasApi.loading}
                 error={quotasApi.error}
                 empty={rows.length === 0}
+                emptyText="Chưa có dữ liệu hạn ngạch vùng trồng."
+                variant="pucSignboard"
                 onRetry={quotasApi.refresh}
               />
               {rows.map((r) => {

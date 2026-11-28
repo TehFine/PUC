@@ -59,7 +59,7 @@ export default function AllPlotsCard({ features, zoneCount, onSelectPlot }: AllP
 
       <div className="zones-zone-list">
         {filtered.length === 0 ? (
-          <ContextualEmptyBox variant="folder" compact>
+          <ContextualEmptyBox variant="searchLens" compact>
             Không tìm thấy hộ hoặc thửa đất phù hợp.
           </ContextualEmptyBox>
         ) : (

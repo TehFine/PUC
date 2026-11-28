@@ -63,7 +63,7 @@ export default function InspectionTab() {
         </div>
         <StateBlock loading={tests.loading} error={tests.error} />
         {!tests.loading && !tests.error && tests.data && tests.data.data.length === 0 && (
-          <EmptyState icon="empty">Chưa có kết quả kiểm nghiệm.</EmptyState>
+          <EmptyState icon="lab" variant="labFlask">Chưa có kết quả kiểm nghiệm.</EmptyState>
         )}
         {tests.data && tests.data.data.length > 0 && (
           <ul className="pt-list pt-lab-test-list">
@@ -106,7 +106,7 @@ export default function InspectionTab() {
         </div>
         <StateBlock loading={schedule.loading} error={schedule.error} />
         {!schedule.loading && !schedule.error && schedule.data && scheduleGroups.length === 0 && (
-          <EmptyState icon="calendar">Chưa có lịch kiểm tra sắp tới.</EmptyState>
+          <EmptyState icon="calendar" variant="fieldCalendar">Chưa có lịch kiểm tra sắp tới.</EmptyState>
         )}
         {scheduleGroups.length > 0 && (
           <div className="pt-diary-day-groups">

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { EmptyStateArt } from "@/components/ui/EmptyStateArt";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { toast } from "@/components/ui/Toast";
@@ -3284,6 +3285,9 @@ export default function TraceView() {
           <SkeletonCards count={3} label={getTraceLoadingLabel(activeKind, lang)} />
         ) : errorKind === "blocked" ? (
           <div className="tr-card tr-error-card tr-blocked-card" role="alert">
+            <div className="tr-error-art">
+              <EmptyStateArt variant="qrLocked" />
+            </div>
             <h2 className="tr-error-title">{t.errorState.blockedTitle}</h2>
             <p className="tr-error-desc">{t.errorState.blockedDesc}</p>
             <div className="tr-block-countdown">
@@ -3326,6 +3330,15 @@ export default function TraceView() {
           </div>
         ) : errorMessage ? (
           <div className="tr-card tr-error-card">
+            <div className="tr-error-art">
+              <EmptyStateArt
+                variant={
+                  errorKind === "timeout" || errorKind === "network" || errorKind === "server"
+                    ? "qrOffline"
+                    : "qrNotFound"
+                }
+              />
+            </div>
             <h2 className="tr-error-title">{t.errorState.title}</h2>
             <p className="tr-error-desc">{errorMessage}</p>
             <form onSubmit={handleSearch} className="tr-search-form">

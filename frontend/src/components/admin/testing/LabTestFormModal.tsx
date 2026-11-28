@@ -152,7 +152,7 @@ export default function LabTestFormModal({
             Hủy
           </button>
           <button type="submit" form="testing-form" className="btn btn-primary" disabled={save.pending || uploadingScan}>
-            {save.pending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Lưu phiếu kiểm nghiệm"}
+            {save.pending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Lưu phiếu"}
           </button>
         </>
       }

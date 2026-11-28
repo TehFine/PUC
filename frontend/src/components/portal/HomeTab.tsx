@@ -415,7 +415,7 @@ export default function HomeTab({
         </div>
 
         {reminderGroups.length === 0 ? (
-          <EmptyState icon="empty">Chưa có việc cần làm ngay.</EmptyState>
+          <EmptyState icon="empty" variant="taskCheck">Chưa có việc cần làm ngay.</EmptyState>
         ) : (
           <div className="pt-diary-day-groups">
             {reminderGroups.map((group) => (
@@ -494,7 +494,7 @@ export default function HomeTab({
 
         <StateBlock loading={schedule.loading} error={schedule.error} />
         {!schedule.loading && !schedule.error && scheduleGroups.length === 0 && (
-          <EmptyState icon="calendar">Chưa có lịch kiểm tra sắp tới.</EmptyState>
+          <EmptyState icon="calendar" variant="schedule">Chưa có lịch kiểm tra sắp tới.</EmptyState>
         )}
         {scheduleGroups.length > 0 && (
           <div className="pt-diary-day-groups">

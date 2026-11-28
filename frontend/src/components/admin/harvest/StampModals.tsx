@@ -142,6 +142,7 @@ export function StampListModal({
               error={state.error}
               empty={!state.loading && !state.error && stamps.length === 0}
               emptyText="Không có dữ liệu tem."
+              variant="tickets"
             />
             {!state.loading &&
               !state.error &&

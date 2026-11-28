@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import {
-  ArrowRight,
   BookOpen,
   Camera,
   ClipboardCheck,
@@ -166,7 +165,6 @@ function DrawerCloseCta({ label }: { label: string }) {
       onClick={() => close?.()}
     >
       <span>{label}</span>
-      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
     </button>
   );
 }
@@ -1691,7 +1689,6 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                       onClick={() => void handleMarkAllRead()}
                     >
                       <span>{t("Đánh dấu đọc hết")}</span>
-                      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
                     </BusyButton>
                   ) : (
                     <DrawerCloseCta label={t("Đã nắm thông tin")} />
@@ -1754,7 +1751,10 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
             <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
 
             {!notifications.loading && visibleNotifItems.length === 0 && (
-              <EmptyState icon="none">
+              <EmptyState
+                icon="none"
+                variant={notifItems.length > 0 && notifFilter === "read" ? "inboxRead" : "notify"}
+              >
                 {notifItems.length === 0
                   ? t("Hiện chưa có thông báo mới nào từ HTX.")
                   : notifFilter === "unread"

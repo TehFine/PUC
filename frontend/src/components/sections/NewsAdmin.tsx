@@ -179,6 +179,7 @@ export default function NewsAdmin() {
               error={newsList.error}
               empty={newsList.rows.length === 0}
               emptyText="Không tìm thấy bài viết nào phù hợp."
+              variant="newspaper"
               onRetry={newsList.refresh}
             />
             {newsList.rows.map((article) => {

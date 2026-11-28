@@ -336,7 +336,7 @@ export default function IncidentTraceModal({
                 {lotResult.sourceParcels.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="empty-state">
-                      <ContextualEmptyBox variant="folder" compact>
+                      <ContextualEmptyBox variant="parcelGrid" compact>
                         Lô hàng này chưa ghi nhận chi tiết thửa nguồn đóng góp.
                       </ContextualEmptyBox>
                     </td>

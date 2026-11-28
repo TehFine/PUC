@@ -414,6 +414,7 @@ export default function TraceAccessRequestsTab({
         error={list.error}
         empty={!list.loading && !list.error && list.rows.length === 0}
         emptyText="Chưa có yêu cầu cấp quyền nào."
+        variant="envelope"
         onRetry={list.refresh}
       />
 

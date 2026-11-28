@@ -226,6 +226,7 @@ export default function Households() {
         error={list.error}
         empty={list.rows.length === 0}
         emptyText="Không tìm thấy hộ nông dân phù hợp."
+        variant="folder"
         onRetry={() => void list.refresh()}
       />
 

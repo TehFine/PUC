@@ -94,6 +94,8 @@ export default function TraceAccessLogsModal({
               loading={logsApi.loading}
               error={logsApi.error}
               empty={rows.length === 0}
+              emptyText="Chưa có lượt quét tra cứu nào được ghi nhận."
+              variant="qrNotFound"
               onRetry={logsApi.refresh}
             />
             {rows.map((r) => (

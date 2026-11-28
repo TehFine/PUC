@@ -233,6 +233,7 @@ export default function DeletionRequestsTab({
         error={list.error}
         empty={list.rows.length === 0}
         emptyText="Chưa có yêu cầu xóa thành viên hoặc tài khoản nào."
+        variant="memberRemove"
         onRetry={() => void list.refresh()}
       />
 

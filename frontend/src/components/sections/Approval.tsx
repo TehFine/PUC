@@ -197,50 +197,50 @@ export default function Approval() {
   const tabs: TabItem<Tab>[] = [
     ...(canReadApprovals
       ? [
-          {
-            id: "pending" as const,
-            label: "Hồ sơ chờ duyệt",
-            badge: approvals.total,
-            pendingBadge: getSubBadge("approval", "pending"),
-          },
-        ]
+        {
+          id: "pending" as const,
+          label: "Hồ sơ chờ duyệt",
+          badge: approvals.total,
+          pendingBadge: getSubBadge("approval", "pending"),
+        },
+      ]
       : []),
     ...(canReadRegistrations
       ? [
-          {
-            id: "registrations" as const,
-            label: "Cấp lại mật khẩu",
-            pendingBadge: getSubBadge("approval", "registrations"),
-          },
-        ]
+        {
+          id: "registrations" as const,
+          label: "Cấp lại mật khẩu",
+          pendingBadge: getSubBadge("approval", "registrations"),
+        },
+      ]
       : []),
     ...(canReadSchedule
       ? [
-          {
-            id: "schedule" as const,
-            label: "Lịch kiểm tra",
-            badge: schedules.total,
-            pendingBadge: getSubBadge("approval", "schedule"),
-          },
-        ]
+        {
+          id: "schedule" as const,
+          label: "Lịch kiểm tra",
+          badge: schedules.total,
+          pendingBadge: getSubBadge("approval", "schedule"),
+        },
+      ]
       : []),
     ...(canReadMinutes
       ? [
-          {
-            id: "minutes" as const,
-            label: "Biên bản kiểm tra",
-            badge: minutes.total,
-            pendingBadge: getSubBadge("approval", "minutes"),
-          },
-        ]
+        {
+          id: "minutes" as const,
+          label: "Biên bản kiểm tra",
+          badge: minutes.total,
+          pendingBadge: getSubBadge("approval", "minutes"),
+        },
+      ]
       : []),
   ];
 
   const activeTab: Tab =
     (tab === "pending" && !canReadApprovals) ||
-    (tab === "registrations" && !canReadRegistrations) ||
-    (tab === "schedule" && !canReadSchedule) ||
-    (tab === "minutes" && !canReadMinutes)
+      (tab === "registrations" && !canReadRegistrations) ||
+      (tab === "schedule" && !canReadSchedule) ||
+      (tab === "minutes" && !canReadMinutes)
       ? defaultTab
       : tab;
 
@@ -361,6 +361,7 @@ export default function Approval() {
                   error={approvals.error}
                   empty={approvals.rows.length === 0}
                   emptyText="Không có hồ sơ nào phù hợp"
+                  variant="stampSeal"
                   onRetry={() => void approvals.refresh()}
                 />
                 {approvals.rows.map((p) => {
@@ -472,6 +473,7 @@ export default function Approval() {
             error={schedules.error}
             empty={schedules.rows.length === 0}
             emptyText="Chưa có lịch kiểm tra nào."
+            variant="schedule"
             onRetry={() => void schedules.refresh()}
           />
 
@@ -593,6 +595,7 @@ export default function Approval() {
                   error={minutes.error}
                   empty={minutes.rows.length === 0}
                   emptyText="Chưa có biên bản kiểm tra nào."
+                  variant="clipboard"
                   onRetry={() => void minutes.refresh()}
                 />
                 {minutes.rows.map((m) => {
@@ -714,10 +717,10 @@ export default function Approval() {
           onEdit={
             canUpdateMinute
               ? () => {
-                  const row = viewingMinute;
-                  setViewingMinute(null);
-                  setEditingMinute(row);
-                }
+                const row = viewingMinute;
+                setViewingMinute(null);
+                setEditingMinute(row);
+              }
               : undefined
           }
         />

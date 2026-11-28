@@ -443,6 +443,8 @@ export default function FieldAuditPassesModal({
                   loading={passesApi.loading}
                   error={passesApi.error}
                   empty={passes.length === 0}
+                  emptyText="Chưa có thẻ đoàn thẩm định nào được cấp."
+                  variant="userBadge"
                   onRetry={passesApi.refresh}
                 />
                 {passes.map((p) => (

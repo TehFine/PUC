@@ -398,7 +398,7 @@ export function TrainingList() {
 
         <StateBlock loading={loading} error={error} />
         {!loading && !error && upcoming.length === 0 && (
-          <EmptyState icon="learn">Hiện chưa có lớp tập huấn nào sắp diễn ra.</EmptyState>
+          <EmptyState icon="learn" variant="trainingCap">Hiện chưa có lớp tập huấn nào sắp diễn ra.</EmptyState>
         )}
 
         {!loading && !error && upcoming.length > 0 && (
@@ -1573,7 +1573,7 @@ function PesticideList() {
         />
 
         {shown.length === 0 && (
-          <EmptyState icon="search">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
+          <EmptyState icon="search" variant="pesticide">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
         )}
 
         {/* Popup chi tiết về loại thuốc được chọn */}
@@ -2163,7 +2163,7 @@ function FertilizerList() {
         />
 
         {shown.length === 0 && (
-          <EmptyState icon="search">Không tìm thấy phân bón phù hợp với tiêu chí lọc.</EmptyState>
+          <EmptyState icon="search" variant="fertilizer">Không tìm thấy phân bón phù hợp với tiêu chí lọc.</EmptyState>
         )}
 
         {/* Popup chi tiết về loại phân bón được chọn */}
@@ -2681,7 +2681,7 @@ function VarietyList() {
         />
 
         {shown.length === 0 && (
-          <EmptyState icon="search">Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.</EmptyState>
+          <EmptyState icon="search" variant="seedling">Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.</EmptyState>
         )}
 
         {/* Popup chi tiết về loại giống được chọn */}
@@ -3026,7 +3026,7 @@ export function DiseaseAndIpmList() {
         )}
 
         {kindFilter !== "care" && shown.length === 0 && (
-          <EmptyState icon="search">Không tìm thấy sâu bệnh hại phù hợp với từ khóa.</EmptyState>
+          <EmptyState icon="search" variant="ipmShield">Không tìm thấy sâu bệnh hại phù hợp với từ khóa.</EmptyState>
         )}
 
         {selectedItem && (
@@ -3330,7 +3330,7 @@ export function CareProtocol2026List() {
         />
 
         {shown.length === 0 && (
-          <EmptyState icon="search">
+          <EmptyState icon="search" variant="protocol">
             Không tìm thấy giai đoạn hoặc sản phẩm phù hợp với từ khóa.
           </EmptyState>
         )}

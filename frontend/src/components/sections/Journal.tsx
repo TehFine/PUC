@@ -453,6 +453,7 @@ export default function Journal() {
             error={journalList.error}
             empty={journalList.rows.length === 0}
             emptyText="Chưa có nhật ký canh tác nào phù hợp."
+            variant="journal"
             onRetry={() => void journalList.refresh()}
           />
 
@@ -577,6 +578,7 @@ export default function Journal() {
             error={violationsList.error}
             empty={violationsList.rows.length === 0}
             emptyText="Không có vi phạm nào phù hợp."
+            variant="warningFlag"
             onRetry={() => void violationsList.refresh()}
           />
 
@@ -718,6 +720,7 @@ export default function Journal() {
             error={sprayList.error}
             empty={sprayList.rows.length === 0}
             emptyText="Chưa có nhật ký phun thuốc nào phù hợp."
+            variant="sprayer"
             onRetry={() => void sprayList.refresh()}
           />
 

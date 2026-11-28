@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
-import { Field, Sheet } from "@/components/portal/ui";
+import { EmptyState, Field, Sheet } from "@/components/portal/ui";
 import { ConfirmDialog, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
@@ -549,9 +549,9 @@ export function ActiveSessionsSheet({
             Đang tải danh sách thiết bị đang đăng nhập…
           </div>
         ) : sessions.length === 0 ? (
-          <div style={{ padding: "18px 0", textAlign: "center", fontSize: 13, color: "#64748b" }}>
+          <EmptyState icon="empty" variant="sessionDevices" compact>
             Không có phiên hoạt động nào được ghi nhận.
-          </div>
+          </EmptyState>
         ) : (
           <div className="session-device-list">
             {sessions.map((s) => (

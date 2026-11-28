@@ -238,6 +238,7 @@ export default function LotContributionsModal({
               error={contribState.error}
               empty={!contribState.loading && !contribState.error && rows.length === 0}
               emptyText="Chưa có hộ đóng góp nào trong lô này."
+              variant="folder"
             />
             {!contribState.loading &&
               !contribState.error &&

@@ -304,6 +304,7 @@ export default function Registrations({
                 error={error}
                 empty={filteredResets.length === 0}
                 emptyText="Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt."
+                variant="keyReset"
                 onRetry={() => void load()}
               />
               {filteredResets.map((row) => {
@@ -390,6 +391,7 @@ export default function Registrations({
                   error={error}
                   empty={filteredRows.length === 0}
                   emptyText="Không có yêu cầu đăng ký tài khoản nào đang chờ duyệt."
+                  variant="userBadge"
                   onRetry={() => void load()}
                 />
                 {filteredRows.map((row) => (

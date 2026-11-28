@@ -56,7 +56,7 @@ export default function PlotsTab() {
                 </h2>
               </div>
             </div>
-            <EmptyState icon="map">
+            <EmptyState icon="map" variant="mapCompass">
               Dữ liệu bản đồ thửa đất chưa được bật trên hệ thống. Vui lòng liên hệ cán bộ HTX.
             </EmptyState>
           </>
@@ -70,7 +70,7 @@ export default function PlotsTab() {
                 </h2>
               </div>
             </div>
-            <EmptyState icon="plot">
+            <EmptyState icon="plot" variant="parcelGrid">
               Chưa có thửa đất nào được ghi nhận cho hộ của bạn. Vui lòng liên hệ cán bộ HTX để được hướng dẫn đăng ký thửa đất.
             </EmptyState>
           </>

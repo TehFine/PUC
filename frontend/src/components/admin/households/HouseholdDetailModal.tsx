@@ -194,6 +194,7 @@ export default function HouseholdDetailModal({
                 error={plotsError}
                 empty={householdPlots.length === 0}
                 emptyText="Chưa có thửa đất nào được gán cho hộ này."
+                variant="parcelGrid"
                 onRetry={() => void refreshPlots()}
               />
               {householdPlots.map((f) => {
@@ -274,6 +275,7 @@ export default function HouseholdDetailModal({
                 error={journal.error}
                 empty={journal.rows.length === 0}
                 emptyText="Chưa có nhật ký canh tác nào của hộ này."
+                variant="journal"
                 onRetry={() => void journal.refresh()}
               />
               {journal.rows.map((j) => (
@@ -344,6 +346,7 @@ export default function HouseholdDetailModal({
                 error={violations.error}
                 empty={violations.rows.length === 0}
                 emptyText="Không có vi phạm nào được ghi nhận cho hộ này."
+                variant="warningFlag"
                 onRetry={() => void violations.refresh()}
               />
               {violations.rows.map((v) => {
@@ -416,6 +419,7 @@ export default function HouseholdDetailModal({
                 error={labTests.error}
                 empty={labTests.rows.length === 0}
                 emptyText="Chưa có phiếu kiểm nghiệm nào của hộ này."
+                variant="labFlask"
                 onRetry={() => void labTests.refresh()}
               />
               {labTests.rows.map((t) => {

@@ -486,6 +486,7 @@ export default function Catalog() {
             error={pesticides.error}
             empty={shownPesticides.length === 0}
             emptyText="Không tìm thấy thuốc BVTV phù hợp với tiêu chí lọc."
+            variant="pesticide"
             onRetry={pesticides.refresh}
           />
 
@@ -666,6 +667,7 @@ export default function Catalog() {
             error={fertilizers.error}
             empty={shownFertilizers.length === 0}
             emptyText="Không tìm thấy phân bón phù hợp với tiêu chí lọc."
+            variant="fertilizer"
             onRetry={fertilizers.refresh}
           />
 
@@ -842,6 +844,7 @@ export default function Catalog() {
             error={varieties.error}
             empty={shownVarieties.length === 0}
             emptyText="Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc."
+            variant="seedling"
             onRetry={varieties.refresh}
           />
 
@@ -974,6 +977,7 @@ export default function Catalog() {
             error={villages.error}
             empty={shownVillages.length === 0}
             emptyText="Không tìm thấy thôn / tổ phù hợp."
+            variant="villageMap"
             onRetry={villages.refresh}
           />
 

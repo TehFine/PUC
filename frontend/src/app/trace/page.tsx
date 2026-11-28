@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
 import LandingFooter from "@/components/landing/LandingFooter";
+import { EmptyStateArt } from "@/components/ui/EmptyStateArt";
 import { Search } from "@/components/ui/PublicIcon";
 import { ROLE_LABELS } from "@/constants/roles";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api } from "@/lib/api-client";
@@ -451,21 +452,33 @@ export default function TraceLookupPage() {
                 </form>
 
                 {inputError && (
-                  <p
+                  <div
                     role="alert"
                     style={{
-                      margin: "10px 0 0",
-                      padding: "8px 12px",
+                      margin: "12px 0 0",
+                      padding: "16px 16px 14px",
                       borderRadius: 0,
                       border: "1px solid #d4d4d2",
-                      background: "#fef2f2",
-                      color: "#b91c1c",
-                      fontSize: 13,
-                      lineHeight: 1.45,
+                      background: "#f7f7f5",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      textAlign: "center",
+                      gap: 6,
                     }}
                   >
-                    {inputError}
-                  </p>
+                    <EmptyStateArt variant="qrNotFound" compact />
+                    <span
+                      style={{
+                        color: "#b91c1c",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {inputError}
+                    </span>
+                  </div>
                 )}
 
                 {auditSessionReady && (

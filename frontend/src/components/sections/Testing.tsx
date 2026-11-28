@@ -151,7 +151,7 @@ export default function Testing() {
     <>
       {isCompletelyEmpty ? (
         <section className="admin-empty-stage" aria-label="Trạng thái phiếu kiểm nghiệm">
-          <EmptyStateArt variant="clipboard" />
+          <EmptyStateArt variant="labFlask" />
           <h2 className="admin-empty-stage-title">Chưa có phiếu kiểm nghiệm</h2>
           <p className="admin-empty-stage-desc">
             {canCreate
@@ -360,6 +360,7 @@ export default function Testing() {
                     error={list.error}
                     empty={list.rows.length === 0}
                     emptyText="Không tìm thấy phiếu kiểm nghiệm nào"
+                    variant="labFlask"
                     onRetry={() => void list.refresh()}
                   />
                   {list.rows.map((t) => {

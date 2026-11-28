@@ -1,13 +1,13 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Search } from "@/components/ui/PublicIcon";
+import { Search } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import { RadialPngIcon } from "./RadialIcons";
-import { DrawerSummaryFooter, Sheet, useSheetClose } from "./ui";
+import { DrawerSummaryFooter, EmptyState, Sheet, useSheetClose } from "./ui";
 
 /**
  * Tìm kiếm "chức năng" cho bà con: gõ bất kỳ chữ nào (có dấu hay không dấu đều được) để được gợi ý
@@ -366,7 +366,7 @@ function SearchPanel({
       </label>
 
       {hasQuery && results.length === 0 && (
-        <p className="pt-search-empty-note">
+        <EmptyState icon="search" variant="searchLens" compact>
           {isZh ? (
             <>
               未找到与“<strong>{query.trim()}</strong>”匹配的功能。请尝试其他关键词，或从下方推荐中选择：
@@ -380,7 +380,7 @@ function SearchPanel({
               Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc chọn gợi ý bên dưới:
             </>
           )}
-        </p>
+        </EmptyState>
       )}
 
       <h3 className="pt-search-heading">
@@ -427,7 +427,6 @@ function SearchDrawerFooter({
             onClick={() => trigger(topMatch.target)}
           >
             <span>{t("Mở kết quả đầu")}</span>
-            <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
           </button>
         ) : (
           <button
@@ -436,7 +435,6 @@ function SearchDrawerFooter({
             onClick={() => trigger({ kind: "global", action: "support" })}
           >
             <span>{t("Liên hệ hỗ trợ HTX")}</span>
-            <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
           </button>
         )
       }

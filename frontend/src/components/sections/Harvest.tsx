@@ -582,6 +582,8 @@ export default function Harvest() {
                   loading={lots.loading}
                   error={lots.error}
                   empty={lots.rows.length === 0}
+                  emptyText="Chưa có lô thu hoạch nào phù hợp."
+                  variant="box"
                   onRetry={lots.refresh}
                 />
                 {lots.rows.map((h) => {
@@ -740,6 +742,8 @@ export default function Harvest() {
                   loading={harvestPlans.loading}
                   error={harvestPlans.error}
                   empty={harvestPlans.rows.length === 0}
+                  emptyText="Chưa có dữ liệu tính lịch thu hoạch."
+                  variant="harvestCalendar"
                   onRetry={harvestPlans.refresh}
                 />
                 {harvestPlans.rows.map((p) => {
@@ -849,6 +853,8 @@ export default function Harvest() {
                   loading={stampAllocations.loading}
                   error={stampAllocations.error}
                   empty={stampAllocations.rows.length === 0}
+                  emptyText="Chưa có đợt cấp phát tem nào."
+                  variant="tickets"
                   onRetry={stampAllocations.refresh}
                 />
                 {stampAllocations.rows.map((s) => (
@@ -937,6 +943,8 @@ export default function Harvest() {
                   loading={contracts.loading}
                   error={contracts.error}
                   empty={contracts.rows.length === 0}
+                  emptyText="Chưa có hợp đồng bao tiêu nào."
+                  variant="contractDoc"
                   onRetry={contracts.refresh}
                 />
                 {contracts.rows.map((c) => {
@@ -1022,6 +1030,7 @@ export default function Harvest() {
                     error={growingZones.error}
                     empty={!growingZones.loading && !growingZones.error && zoneRows.length === 0}
                     emptyText="Chưa có dữ liệu mã số vùng trồng."
+                    variant="pucSignboard"
                   />
                   {!growingZones.loading &&
                     !growingZones.error &&
@@ -1128,6 +1137,8 @@ export default function Harvest() {
                     loading={enterprises.loading}
                     error={enterprises.error}
                     empty={enterprises.rows.length === 0}
+                    emptyText="Chưa có hồ sơ doanh nghiệp hoặc cơ sở đóng gói."
+                    variant="packhouse"
                     onRetry={enterprises.refresh}
                   />
                   {enterprises.rows.map((e) => {

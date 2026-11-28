@@ -48,7 +48,7 @@ export default function ZoneDetailCard({ zone, plots, onSelectPlot }: ZoneDetail
 
           <div className="zones-zone-list">
             {plots.length === 0 && (
-              <ContextualEmptyBox variant="folder" compact>
+              <ContextualEmptyBox variant="zonePin" compact>
                 Chưa có thửa trong vùng này
               </ContextualEmptyBox>
             )}

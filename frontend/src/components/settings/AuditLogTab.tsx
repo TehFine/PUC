@@ -152,6 +152,7 @@ export default function AuditLogTab() {
         error={list.error}
         empty={list.rows.length === 0}
         emptyText="Chưa có nhật ký thao tác nào phù hợp."
+        variant="vault"
         onRetry={() => void list.refresh()}
       />
 

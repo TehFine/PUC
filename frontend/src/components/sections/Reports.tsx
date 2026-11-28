@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatVn, todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { isCoopStaffRole } from "@/constants/roles";
@@ -637,16 +638,9 @@ export default function Reports() {
                   Đang tổng hợp dữ liệu báo cáo...
                 </div>
               ) : !previewData || previewData.rows.length === 0 ? (
-                <div
-                  style={{
-                    padding: 20,
-                    textAlign: "center",
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                  }}
-                >
+                <ContextualEmptyBox variant="reportChart" compact>
                   Chưa có bản ghi nào trong khoảng thời gian và phạm vi đã chọn.
-                </div>
+                </ContextualEmptyBox>
               ) : (
                 <table
                   style={{

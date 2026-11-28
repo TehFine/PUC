@@ -91,7 +91,7 @@ export default function PlotsTable({
             {!loading && features.length === 0 && (
               <tr>
                 <td colSpan={11} style={emptyCellStyle}>
-                  <ContextualEmptyBox variant="folder">
+                  <ContextualEmptyBox variant="parcelGrid">
                     Chưa có thửa đất. Dùng nút “Vẽ thửa” trên bản đồ hoặc nhập GeoJSON địa chính.
                   </ContextualEmptyBox>
                 </td>

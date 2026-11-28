@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ContextualEmptyBox } from "@/components/ui/EmptyStateArt";
 import { formatHa } from "@/utils/plot-utils";
 import { SmoothLineChart } from "@/components/ui/charts/KpiCharts";
 import { getZoneColor, type PlotsSummary, type ZoneRowData } from "./zone-data";
@@ -82,6 +83,11 @@ export default function ZonesOverviewCard({
       </div>
 
       <div className="zones-zone-list">
+        {zoneRows.length === 0 && (
+          <ContextualEmptyBox variant="mapCompass" compact>
+            Chưa có dữ liệu vùng trồng.
+          </ContextualEmptyBox>
+        )}
         {zoneRows.map((zone, idx) => {
           const zc = getZoneColor(zone.code);
           return (

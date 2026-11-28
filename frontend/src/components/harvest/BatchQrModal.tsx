@@ -483,7 +483,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               <div className="batch-qr-loading no-print">Đang tải danh sách tem...</div>
             ) : filteredItems.length === 0 ? (
               <div className="batch-qr-empty no-print">
-                <ContextualEmptyBox variant="tickets" compact>
+                <ContextualEmptyBox variant={itemType === "fruit" ? "tickets" : "box"} compact>
                   Chưa có tem {itemType === "fruit" ? "quả" : "thùng"} nào. Chọn thông số ở trên và bấm <strong>Tạo tem</strong>.
                 </ContextualEmptyBox>
               </div>
